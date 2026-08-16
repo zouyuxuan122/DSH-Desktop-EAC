@@ -93,7 +93,9 @@ jobs:
       - uses: actions/download-artifact@v4
         with:
           name: node-pty-linux-x64
-          path: pty-artifact
+          # 下载路径必须含 dsh-desktop：download-artifact 相对仓库根解析，
+          # 而 override 步骤在 working-directory: dsh-desktop 下引用 pty-artifact/。
+          path: dsh-desktop/pty-artifact
 
       - name: Override node-pty with debian:12-built binary (glibc baseline)
         run: |
@@ -192,7 +194,9 @@ jobs:
       - uses: actions/download-artifact@v4
         with:
           name: node-pty-linux-x64
-          path: pty-artifact
+          # 下载路径必须含 dsh-desktop：download-artifact 相对仓库根解析，
+          # 而 override 步骤在 working-directory: dsh-desktop 下引用 pty-artifact/。
+          path: dsh-desktop/pty-artifact
 
       - name: Override node-pty with debian:12-built binary (glibc baseline)
         run: |
