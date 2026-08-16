@@ -104,3 +104,69 @@ test('auditNodePty on win32 throws when win32 pty.node is missing', () => {
     rmSync(root, { recursive: true, force: true });
   }
 });
+
+// glibc 基线审计（2026-08 Debian 事故）：在 Arch / 最新 Ubuntu 上现场编译的
+// pty.node 绑定新 glibc（GLIBC_2.42），Debian 13（2.41）及更老系统加载即崩。
+// after-pack 必须拦截超过支持矩阵基线（GLIBC_2.34）的 pty.node。
+// 用假 objdump 注入 stdout，验证阈值逻辑，无需真实 ELF 文件。
+function fakeObjdumpInPath(binDir, glibcLines) {
+  const fakeObjdump = join(binDir, 'objdump');
+  writeFileSync(fakeObjdump, '#!/bin/sh\nprintf "%s\\n" ' + glibcLines.map((l) => '"' + l + '"').join(' ') + '\n');
+  chmodSync(fakeObjdump, 0o755);
+  const origPath = process.env.PATH;
+  process.env.PATH = binDir + ':' + origPath;
+  return origPath;
+}
+
+function makeLoadableTree() {
+  const root = makeTree();
+  writeFileSync(join(root, 'resources', 'app', 'node_modules', 'node-pty', 'build', 'Release', 'pty.node'), 'x');
+  const fakeNode = join(root, 'resources', 'node', 'node');
+  writeFileSync(fakeNode, '#!/bin/sh\necho "node-pty loadable @ v22.0.0"\nexit 0\n');
+  chmodSync(fakeNode, 0o755);
+  return root;
+}
+
+test('auditNodePty rejects pty.node whose glibc requirement exceeds the 2.34 baseline',
+  { skip: process.platform === 'win32' }, () => {
+    const root = makeLoadableTree();
+    const binDir = mkdtempSync(join(tmpdir(), 'dsh-nodepty-bin-'));
+    const origPath = fakeObjdumpInPath(binDir, ['GLIBC_2.34', 'GLIBC_2.45']);
+    try {
+      assert.throws(() => auditNodePty(root, 'linux'), /GLIBC_2\.45/);
+    } finally {
+      process.env.PATH = origPath;
+      rmSync(root, { recursive: true, force: true });
+      rmSync(binDir, { recursive: true, force: true });
+    }
+  });
+
+test('auditNodePty accepts pty.node within the 2.34 glibc baseline',
+  { skip: process.platform === 'win32' }, () => {
+    const root = makeLoadableTree();
+    const binDir = mkdtempSync(join(tmpdir(), 'dsh-nodepty-bin-'));
+    const origPath = fakeObjdumpInPath(binDir, ['GLIBC_2.17', 'GLIBC_2.31']);
+    try {
+      auditNodePty(root, 'linux');
+    } finally {
+      process.env.PATH = origPath;
+      rmSync(root, { recursive: true, force: true });
+      rmSync(binDir, { recursive: true, force: true });
+    }
+  });
+
+test('auditNodePty skips the glibc check when objdump is unavailable',
+  { skip: process.platform === 'win32' }, () => {
+    const root = makeLoadableTree();
+    const binDir = mkdtempSync(join(tmpdir(), 'dsh-nodepty-bin-'));
+    const origPath = process.env.PATH;
+    try {
+      // 把 PATH 指向空目录，objdump 找不到 → 跳过 glibc 检查，仅存在性 + ABI 检查
+      process.env.PATH = binDir;
+      auditNodePty(root, 'linux');
+    } finally {
+      process.env.PATH = origPath;
+      rmSync(root, { recursive: true, force: true });
+      rmSync(binDir, { recursive: true, force: true });
+    }
+  });

@@ -79,12 +79,19 @@ Before considering a packaging change complete:
 7. Import the memory plugin, Jieba, and sqlite-vec from the packed tree.
 8. Run `ldd` on Electron, bundled Node, and native modules on Linux; no
    dependency may report `not found`.
-9. Inspect the pacman archive for `.PKGINFO`, `.MTREE`, `.INSTALL`, desktop
-   entry, icon, executable, and bundled runtime files.
+9. Run the glibc scan on all bundled native payloads
+   (`objdump -T <file> | grep -o 'GLIBC_[0-9.]*' | sort -V | tail -1`);
+   nothing may exceed `GLIBC_2.34` (the support-matrix baseline, see
+   `docs/support-matrix.md`). In particular `node-pty`'s `pty.node` must be
+   rebuilt in a low-glibc chroot (Debian 12 + official Node), never compiled
+   on the build host, or Debian 13 and older systems crash at launch.
+10. Inspect the pacman archive for `.PKGINFO`, `.MTREE`, `.INSTALL`, desktop
+    entry, icon, executable, and bundled runtime files.
 
 The known-good Arch Linux v3.0.1 artifact is
 `dsh-desktop/dist/Deepseek-Harness-EAC-3.0.1-x64.pacman` (SHA-256 is recorded
-after the first verified v3.0.1 build).
+after the first verified v3.0.1 build; the rebuilt artifact with the glibc-2.34
+`pty.node` supersedes the original).
 
 ## Change Discipline
 

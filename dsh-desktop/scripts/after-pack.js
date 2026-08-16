@@ -159,6 +159,32 @@ function auditNodePty(appOutDir, electronPlatformName, nodeBinOverride) {
     );
   }
   console.log('afterPack: ' + (r.stdout || '').trim());
+
+  // glibc 兼容性审计（2026-08 Debian 事故）：node-pty 在构建机（Arch glibc 2.42
+  // 或最新 Ubuntu runner）上现场编译会绑定新 glibc，Debian 13（2.41）及更老
+  // 系统加载即崩（GLIBC_2.42 not found）。支持矩阵基线 = Debian 12（glibc 2.36）
+  // 编译产物，实测最高引用 GLIBC_2.34，覆盖 docs/support-matrix.md 定义的
+  // 2025-01~2026-08 发布窗口。超标直接 fail 构建，回到低 glibc chroot 重编。
+  const NODE_PTY_GLIBC_FLOOR = [2, 34];
+  const presentBinary = present.find((rel) => rel.endsWith('pty.node'));
+  if (presentBinary) {
+    const objdumpOut = spawnSync('objdump', ['-T', path.join(nodePtyRoot, presentBinary)], { encoding: 'utf8' });
+    if (!objdumpOut.error && objdumpOut.status === 0) {
+      const versions = (objdumpOut.stdout.match(/GLIBC_(\d+\.\d+)/g) || [])
+        .map((s) => s.split('_')[1].split('.').map(Number))
+        .sort((a, b) => a[0] - b[0] || a[1] - b[1]);
+      const max = versions.length ? versions[versions.length - 1] : null;
+      if (max && (max[0] > NODE_PTY_GLIBC_FLOOR[0] || (max[0] === NODE_PTY_GLIBC_FLOOR[0] && max[1] > NODE_PTY_GLIBC_FLOOR[1]))) {
+        throw new Error(
+          'afterPack: pty.node 要求 GLIBC_' + max.join('.') + '，超过支持矩阵基线 GLIBC_' +
+          NODE_PTY_GLIBC_FLOOR.join('.') + '。\n' +
+          '在构建机（Arch / 最新 Ubuntu）上 node-gyp 现场编译会绑定新 glibc，Debian 13 及更老系统无法加载。\n' +
+          '必须回到低 glibc chroot 重编：见 docs/support-matrix.md（debootstrap bookworm + 官方 node）。'
+        );
+      }
+      console.log('afterPack: node-pty glibc 基线检查通过（≤ GLIBC_' + NODE_PTY_GLIBC_FLOOR.join('.') + '）');
+    }
+  }
 }
 
 function auditBundledPluginRuntime(pluginsRoot, platform) {

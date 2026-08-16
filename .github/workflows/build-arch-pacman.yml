@@ -17,9 +17,49 @@ permissions:
   contents: write
 
 jobs:
+  # node-pty@1.1.0 不带 linux-x64 预编译，安装时由 node-gyp 现场编译。在构建机
+  # （Arch glibc 2.42 / Ubuntu runner 2.39+）上编译会绑定新 glibc，Debian 13
+  # （2.41）及更老系统加载即崩（2026-08 Debian 事故）。统一在 debian:12 容器
+  # （glibc 2.36，产物实测 ≤ GLIBC_2.34）里编译，产物作为构建物供两个打包 job 使用。
+  build-node-pty:
+    name: Build node-pty in debian:12 (glibc baseline)
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Rebuild node-pty inside debian:12 container
+        run: |
+          set -euo pipefail
+          mkdir -p pty-artifact
+          docker run --rm -v "$PWD/pty-artifact:/out" debian:12 bash -c '
+            set -euo pipefail
+            apt-get update -qq && apt-get install -y -qq build-essential python3 curl >/dev/null
+            # 官方 node v24.19.0（⚠️ 绝不用 Debian 自带 nodejs：其 node-gyp 会链 libnode.so.108）
+            curl -sL https://nodejs.org/dist/v24.19.0/node-v24.19.0-linux-x64.tar.xz | tar -xJ -C /usr/local --strip-components=1
+            export PATH=/usr/local/bin:$PATH
+            mkdir -p /build && cd /build && npm init -y >/dev/null 2>&1
+            npm install node-pty@1.1.0 --ignore-scripts >/dev/null 2>&1
+            cd node_modules/node-pty
+            node /usr/local/lib/node_modules/npm/node_modules/node-gyp/bin/node-gyp.js rebuild
+            cp build/Release/pty.node /out/pty.node
+          '
+          max_glibc="$(objdump -T pty-artifact/pty.node | grep -o 'GLIBC_2\.[0-9]*' | sort -t. -k2 -n | tail -1 | cut -d. -f2)"
+          test "$max_glibc" -le 34 || { echo "ERROR: pty.node 要求 GLIBC_2.$max_glibc，超过基线 2.34"; exit 1; }
+          echo "OK: pty.node glibc ≤ 2.34（实测 2.$max_glibc）"
+
+      - name: Upload pty.node artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: node-pty-linux-x64
+          path: pty-artifact/pty.node
+          if-no-files-found: error
+          retention-days: 7
+
   build-pacman:
     name: Build pacman package on Arch Linux
     runs-on: ubuntu-latest
+    needs: build-node-pty
     container:
       image: archlinux:base-devel
 
@@ -47,6 +87,22 @@ jobs:
 
       - name: Install npm dependencies
         run: npm ci --allow-remote=all
+        working-directory: dsh-desktop
+
+      # 用 debian:12 容器编译的 pty.node 覆盖现场编译产物，保证 glibc ≤ 2.34
+      - uses: actions/download-artifact@v4
+        with:
+          name: node-pty-linux-x64
+          path: pty-artifact
+
+      - name: Override node-pty with debian:12-built binary (glibc baseline)
+        run: |
+          set -euo pipefail
+          mkdir -p node_modules/node-pty/build/Release
+          cp pty-artifact/pty.node node_modules/node-pty/build/Release/pty.node
+          max_glibc="$(objdump -T node_modules/node-pty/build/Release/pty.node | grep -o 'GLIBC_2\.[0-9]*' | sort -t. -k2 -n | tail -1 | cut -d. -f2)"
+          test "$max_glibc" -le 34 || { echo "ERROR: pty.node 要求 GLIBC_2.$max_glibc"; exit 1; }
+          echo "OK: pty.node glibc 2.$max_glibc ≤ 2.34"
         working-directory: dsh-desktop
 
       # node-pty@1.1.0 的 npm 包只随附 darwin/win32 的 prebuilds，linux-x64 没有，
@@ -97,6 +153,10 @@ jobs:
           node_bin="$(find /tmp/pacman-audit -path '*/resources/node/node' -type f | head -n1)"
           test -n "$node_bin" || { echo "ERROR: bundled node missing from pacman payload"; exit 1; }
           "$node_bin" -e "require(process.argv[1]); console.log('pacman pty.node loadable @', process.version)" "$pty_file"
+          # glibc 兼容性复核：基线 ≤ 2.34（docs/support-matrix.md）
+          max_glibc="$(objdump -T "$pty_file" | grep -o 'GLIBC_2\.[0-9]*' | sort -t. -k2 -n | tail -1 | cut -d. -f2)"
+          test "$max_glibc" -le 34 || { echo "ERROR: pacman 内 pty.node 要求 GLIBC_2.$max_glibc，超过基线 2.34"; exit 1; }
+          echo "OK: pacman pty.node glibc 2.$max_glibc ≤ 2.34"
           echo "OK: node-pty native module present ($pty_file)"
         working-directory: dsh-desktop
 
@@ -115,6 +175,7 @@ jobs:
   build-deb-rpm-appimage:
     name: Build deb / rpm / AppImage on Ubuntu
     runs-on: ubuntu-latest
+    needs: build-node-pty
 
     steps:
       - uses: actions/checkout@v4
@@ -125,6 +186,22 @@ jobs:
 
       - name: Install npm dependencies
         run: npm ci --allow-remote=all
+        working-directory: dsh-desktop
+
+      # 用 debian:12 容器编译的 pty.node 覆盖现场编译产物，保证 glibc ≤ 2.34
+      - uses: actions/download-artifact@v4
+        with:
+          name: node-pty-linux-x64
+          path: pty-artifact
+
+      - name: Override node-pty with debian:12-built binary (glibc baseline)
+        run: |
+          set -euo pipefail
+          mkdir -p node_modules/node-pty/build/Release
+          cp pty-artifact/pty.node node_modules/node-pty/build/Release/pty.node
+          max_glibc="$(objdump -T node_modules/node-pty/build/Release/pty.node | grep -o 'GLIBC_2\.[0-9]*' | sort -t. -k2 -n | tail -1 | cut -d. -f2)"
+          test "$max_glibc" -le 34 || { echo "ERROR: pty.node 要求 GLIBC_2.$max_glibc"; exit 1; }
+          echo "OK: pty.node glibc 2.$max_glibc ≤ 2.34"
         working-directory: dsh-desktop
 
       # 与 pacman 构建相同的 node-pty 加载校验：Linux 安装时 node-pty 必须由
