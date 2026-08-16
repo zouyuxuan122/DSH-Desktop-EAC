@@ -2,7 +2,7 @@
   "name": "dsh-desktop",
   "productName": "Deepseek Harness EAC",
   "desktopName": "deepseek-harness-eac",
-  "version": "3.0.1",
+  "version": "3.0.2",
   "description": "DeepSeek Harness (dsh) 开箱即用的桌面客户端：内置 dsh CLI 与 Node 运行时，一键启动 Web UI",
   "main": "main.js",
   "author": {

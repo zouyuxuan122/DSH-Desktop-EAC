@@ -74,7 +74,7 @@ More versions on the [Releases page](https://github.com/zouyuxuan122/Deepseek-Ha
 Download or build `Deepseek-Harness-EAC-<version>-x64.pacman`, then:
 
 ```bash
-sudo pacman -U ./Deepseek-Harness-EAC-3.0.1-x64.pacman
+sudo pacman -U ./Deepseek-Harness-EAC-3.0.2-x64.pacman
 ```
 
 Launch from the application menu or run `deepseek-harness-eac`. Uninstall:
@@ -88,7 +88,7 @@ sudo pacman -Rns dsh-desktop
 Download `Deepseek-Harness-EAC-<version>-amd64.deb`, then:
 
 ```bash
-sudo apt install ./Deepseek-Harness-EAC-3.0.1-amd64.deb
+sudo apt install ./Deepseek-Harness-EAC-3.0.2-amd64.deb
 ```
 
 Uninstall: `sudo apt remove dsh-desktop`.
@@ -98,7 +98,7 @@ Uninstall: `sudo apt remove dsh-desktop`.
 Download `Deepseek-Harness-EAC-<version>.x86_64.rpm`, then:
 
 ```bash
-sudo dnf install ./Deepseek-Harness-EAC-3.0.1.x86_64.rpm
+sudo dnf install ./Deepseek-Harness-EAC-3.0.2.x86_64.rpm
 ```
 
 Uninstall: `sudo dnf remove dsh-desktop`.
@@ -106,8 +106,8 @@ Uninstall: `sudo dnf remove dsh-desktop`.
 ### AppImage (any of the above, no install)
 
 ```bash
-chmod +x ./Deepseek-Harness-EAC-3.0.1-x86_64.AppImage
-./Deepseek-Harness-EAC-3.0.1-x86_64.AppImage
+chmod +x ./Deepseek-Harness-EAC-3.0.2-x86_64.AppImage
+./Deepseek-Harness-EAC-3.0.2-x86_64.AppImage
 ```
 
 > Ubuntu 24.04+ ships only FUSE3 by default; if the AppImage asks for FUSE2,
