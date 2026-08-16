@@ -6,7 +6,7 @@ const updater = require('../updater');
 
 const ctx = {
   userDataDir: process.argv.includes('--apply') ? process.argv[process.argv.length - 1] : process.cwd(),
-  nodeExe: () => path.resolve(__dirname, '..', 'vendor', 'node', 'node.exe'),
+  nodeExe: () => path.resolve(__dirname, '..', 'vendor', 'node', process.platform === 'win32' ? 'node.exe' : 'node'),
   npmCli: () => path.resolve(__dirname, '..', 'vendor', 'npm', 'bin', 'npm-cli.js'),
   log: (tag, msg) => console.log('[log]', tag, msg),
 };

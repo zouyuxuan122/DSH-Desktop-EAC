@@ -9,8 +9,8 @@
 //   4. Checks for official @deepseek-ai/dsh releases and, with the user's
 //      consent, self-updates the agent (see updater.js).
 //
-// The dsh CLI is spawned with the bundled node.exe (vendor/node/node.exe in
-// dev, resources/node/node.exe when packaged) so that prebuilt native
+// The dsh CLI is spawned with the bundled Node executable (vendor/node/node*
+// in dev, resources/node/node* when packaged) so that prebuilt native
 // modules (sharp, node-pty, koffi, ...) match the Node ABI they were
 // installed for. We deliberately never rebuild them against Electron.
 
@@ -82,6 +82,7 @@ function isUnderFileRoots(p) {
 }
 
 const IS_WIN = process.platform === 'win32';
+const IS_MAC = process.platform === 'darwin';
 const APP_VERSION = app.getVersion();
 const AUTO_UPDATE_INTERVAL_MS = 6 * 60 * 60 * 1000; // every 6 hours
 
@@ -133,8 +134,9 @@ function log(tag, msg) {
 }
 
 function nodeExe() {
-  if (app.isPackaged) return path.join(process.resourcesPath, 'node', 'node.exe');
-  return path.resolve(__dirname, 'vendor', 'node', 'node.exe');
+  const executable = IS_WIN ? 'node.exe' : 'node';
+  if (app.isPackaged) return path.join(process.resourcesPath, 'node', executable);
+  return path.resolve(__dirname, 'vendor', 'node', executable);
 }
 
 function npmCli() {
@@ -180,6 +182,12 @@ function killTree(proc) {
       }, 1500);
     } else {
       try { process.kill(-proc.pid, 'SIGTERM'); } catch { proc.kill('SIGTERM'); }
+      const pid = proc.pid;
+      setTimeout(() => {
+        try { process.kill(-pid, 'SIGKILL'); } catch {
+          try { process.kill(pid, 'SIGKILL'); } catch {}
+        }
+      }, 1500).unref();
     }
   } catch (err) {
     log('killTree', String(err));
@@ -292,19 +300,25 @@ function childEnv() {
   return env;
 }
 
-// 等待一个子进程真正退出（taskkill 先优雅后强杀，锁住的 DLL 要等进程
-// 终止才释放）。轮询 tasklist，超时后放行由调用方自行处理。
+// 等待一个子进程真正退出。Windows 轮询 tasklist，POSIX 用 signal 0
+// 探测进程组；超时后放行由调用方自行处理。
 function waitForProcExit(proc, timeoutMs) {
   return new Promise((resolve) => {
     if (!proc || !proc.pid) return resolve();
     const pid = proc.pid;
     const started = Date.now();
     const check = () => {
-      try {
-        const out = require('node:child_process').execSync(
-          'tasklist /FI "PID eq ' + pid + '" /FO CSV /NH', { encoding: 'utf8', windowsHide: true });
-        if (!out.includes('"' + pid + '"')) return resolve();
-      } catch { return resolve(); }
+      if (IS_WIN) {
+        try {
+          const out = require('node:child_process').execSync(
+            'tasklist /FI "PID eq ' + pid + '" /FO CSV /NH', { encoding: 'utf8', windowsHide: true });
+          if (!out.includes('"' + pid + '"')) return resolve();
+        } catch { return resolve(); }
+      } else {
+        try { process.kill(-pid, 0); } catch {
+          try { process.kill(pid, 0); } catch { return resolve(); }
+        }
+      }
       if (Date.now() - started >= timeoutMs) {
         log('service', '等待旧服务进程退出超时（PID ' + pid + '），继续');
         return resolve();
@@ -362,6 +376,7 @@ async function startServer(unsafePortRetries = 4, overlays = []) {
     const proc = spawn(nodeBin, ['--use-system-ca', bin, 'web', '--host', '127.0.0.1', '--port', String(webPort), ...patchArgs], {
       cwd: userDataDir,
       env: childEnv(),
+      detached: !IS_WIN,
       windowsHide: true,
       stdio: ['ignore', 'pipe', 'pipe'],
     });
@@ -570,6 +585,46 @@ function scheduleClientUpdateRescue() {
 // ---------------------------------------------------------------------------
 // Window
 // ---------------------------------------------------------------------------
+
+// macOS 需要保留原生菜单栏：setApplicationMenu(null) 会连 Cmd+C/V/Q/W 等
+// 系统快捷键一起干掉（macOS 的剪贴板/退出快捷键依赖菜单存在）。这里装一个
+// 最小菜单（App / 文件 / 编辑 / 视图 / 窗口），其余平台维持无菜单栏——
+// Windows/Linux 的全部功能由自绘 chrome 提供。
+function installAppMenu() {
+  if (!IS_MAC) {
+    Menu.setApplicationMenu(null);
+    return;
+  }
+  const template = [
+    { role: 'appMenu' },
+    {
+      label: '文件',
+      submenu: [{ role: 'close' }], // Cmd+W 关窗；应用常驻 Dock，activate 时重开
+    },
+    {
+      label: '编辑',
+      submenu: [
+        { role: 'undo' }, { role: 'redo' }, { type: 'separator' },
+        { role: 'cut' }, { role: 'copy' }, { role: 'paste' }, { role: 'selectAll' },
+      ],
+    },
+    {
+      label: '视图',
+      submenu: [
+        { label: '重新加载', accelerator: 'CmdOrCtrl+R', click: () => reloadMainWindow() },
+        {
+          label: '开发者工具',
+          accelerator: 'CmdOrCtrl+Shift+I',
+          click: () => { if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.toggleDevTools(); },
+        },
+        { type: 'separator' },
+        { role: 'togglefullscreen' },
+      ],
+    },
+    { role: 'windowMenu' },
+  ];
+  Menu.setApplicationMenu(Menu.buildFromTemplate(template));
+}
 
 function createWindow({ startHidden = false } = {}) {
   mainWindow = new BrowserWindow({
@@ -1204,8 +1259,27 @@ function trayHintOnce() {
   } catch {}
 }
 
+// macOS：窗口已关闭（关窗不退出）后从 Dock / 通知回来时重建主窗口。
+// 服务还活着就直接加载已有 webUrl，否则走完整启动链（会 loadURL 到新窗口）。
+function reopenMainWindow() {
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    showMainWindow();
+    return;
+  }
+  createWindow();
+  const serverAlive = serverProc && serverProc.exitCode === null && !serverProc.killed;
+  if (webUrl && serverAlive) {
+    mainWindow.loadURL(webUrl).catch((err) => log('boot', '重开窗口加载失败: ' + err.message));
+  } else {
+    startAndShow().catch((err) => handleBootFailure(err));
+  }
+}
+
 function showMainWindow() {
-  if (!mainWindow || mainWindow.isDestroyed()) return;
+  if (!mainWindow || mainWindow.isDestroyed()) {
+    if (IS_MAC) reopenMainWindow();
+    return;
+  }
   if (mainWindow.isMinimized()) mainWindow.restore();
   mainWindow.show();
   mainWindow.focus();
@@ -1479,7 +1553,7 @@ function processPendingMarketOps() {
         // CI=true 与市场插件 host 侧一致：pnpm v10 无 TTY 时对被忽略的构建
         // 脚本（如 node-llama-cpp）静默放行，而不是 ERR_PNPM_IGNORED_BUILDS 硬失败。
         env: { ...childEnv(), CI: 'true' },
-        windowsHide: true, stdio: ['ignore', 'pipe', 'pipe'],
+        detached: !IS_WIN, windowsHide: true, stdio: ['ignore', 'pipe', 'pipe'],
       });
       let tail = '';
       const onData = (c) => {
@@ -1495,7 +1569,7 @@ function processPendingMarketOps() {
       child.stderr.on('data', onData);
       const timer = setTimeout(() => {
         log('market-pending', '排队任务超时（5 分钟），强制终止');
-        try { spawn('taskkill', ['/pid', String(child.pid), '/T', '/F'], { windowsHide: true, stdio: 'ignore' }); } catch {}
+        killTree(child);
       }, 5 * 60 * 1000);
       child.on('error', (err) => {
         clearTimeout(timer);
@@ -1513,7 +1587,6 @@ function processPendingMarketOps() {
 }
 
 function syncCompanionPlugins() {
-  if (!IS_WIN) return;
   try {
     const home = dshHome || path.join(os.homedir(), '.dsh');
     const profileDirP = path.join(home, 'profiles', 'web');
@@ -1697,6 +1770,18 @@ function warnTempRun() {
 
 async function runClientUpdateFlow(manual) {
   if (quitting) return;
+  if (!IS_WIN) {
+    if (manual) {
+      await showBox({
+        type: 'info',
+        title: '客户端更新',
+        message: 'Linux 版本由系统包管理器更新。',
+        detail: 'Arch Linux 请下载新的 .pacman 包后运行：\n\nsudo pacman -U ./Deepseek-Harness-EAC-*.pacman',
+        buttons: ['确定'],
+      });
+    }
+    return;
+  }
   if (clientUpdateBusy) {
     if (manual) await showBox({ type: 'info', title: '更新', message: '客户端更新正在进行中，请稍候。', buttons: ['确定'] });
     return;
@@ -1812,6 +1897,7 @@ async function runClientUpdateFlow(manual) {
 }
 
 function offerPendingClientUpdate() {
+  if (!IS_WIN) return;
   const ctx = updCtx();
   const settings = updater.loadSettings(ctx);
   const pending = settings.pendingClientUpdate;
@@ -1974,7 +2060,8 @@ function boot() {
   log('boot', `Deepseek Harness EAC（封装 ${APP_VERSION}）  userData=${userDataDir}  dshHome=${dshHome || '(dsh 默认)'}  agent=${dshVersion()}(${dshVersionSource()})`);
 
   // 移除原生菜单栏（文件/视图/帮助），全部功能由自绘 chrome 与托盘提供。
-  Menu.setApplicationMenu(null);
+  // macOS 例外：保留最小原生菜单（否则 Cmd+C/V/Q/W 等系统快捷键失效）。
+  installAppMenu();
   startPreviewStaticServer();
   registerChromeIpc();
   createTray();
@@ -1991,7 +2078,8 @@ function boot() {
   createWindow();
   // koffi FFI 预检（koffi-preflight.js）：失败则注入目录选择器降级 overlay，
   // 由 startAndShow 以 --patch 交给 dsh web。必须在 startAndShow 之前执行。
-  applyKoffiPreflight();
+  // 仅 Windows：探针加载 kernel32.dll，Linux 上必然失败，不应误注入降级 overlay。
+  if (IS_WIN) applyKoffiPreflight();
   // 插件市场排队任务（服务运行中撞文件锁转待重启的安装/卸载）：趁服务
   // 尚未启动、无文件锁时先完成，再拉起 Web 服务。
   processPendingMarketOps()
@@ -2019,14 +2107,14 @@ function boot() {
       maintainShortcuts();
       warnTempRun();
       startBalanceLoop();
-      offerPendingClientUpdate();
+      if (IS_WIN) offerPendingClientUpdate();
 
       if (!process.env.DSH_DESKTOP_SKIP_AUTO_UPDATE) {
         // dsh agent 更新：启动 15 秒后 + 每 6 小时。
         setTimeout(() => runUpdateFlow(false), 15000).unref();
         setInterval(() => runUpdateFlow(false), AUTO_UPDATE_INTERVAL_MS).unref();
       }
-      if (!process.env.DSH_DESKTOP_SKIP_CLIENT_UPDATE) {
+      if (IS_WIN && !process.env.DSH_DESKTOP_SKIP_CLIENT_UPDATE) {
         // 客户端（封装）更新：启动 60 秒后 + 每 12 小时。
         setTimeout(() => runClientUpdateFlow(false), 60000).unref();
         setInterval(() => runClientUpdateFlow(false), 12 * 3600 * 1000).unref();
@@ -2062,9 +2150,15 @@ if (!gotLock) {
     if (balanceTimer) clearInterval(balanceTimer);
     if (tray) { try { tray.destroy(); } catch {} tray = null; }
   });
-  // 关闭窗口后常驻托盘；托盘不存在时才随窗口退出。
+  // macOS 惯例：关闭所有窗口不退出应用（dsh web 服务与会话继续运行，
+  // 点 Dock 图标经 activate 重建窗口）；Windows 有托盘时同样常驻。
   app.on('window-all-closed', () => {
+    if (IS_MAC) return;
     if (!IS_WIN || !tray) app.quit();
+  });
+  // macOS：点击 Dock 图标（无窗口时）重新打开主窗口。
+  app.on('activate', () => {
+    if (IS_MAC) reopenMainWindow();
   });
   app.whenReady().then(boot).catch((err) => fatal('应用初始化失败', err));
 }

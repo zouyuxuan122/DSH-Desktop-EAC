@@ -86,10 +86,13 @@ test('pid gone without marker → relaunches the exe, then stops at the restart 
   const dir = tmp();
   const state = join(dir, 'run-state.json');
   writeFileSync(state, JSON.stringify({ pid: 999999, cleanExit: false }));
-  // Use a harmless real executable as the "app": ping.exe without args
-  // prints usage and exits immediately.
-  const exe = join(process.env.SystemRoot || 'C:\\Windows', 'System32', 'ping.exe');
-  assert.ok(existsSync(exe), 'ping.exe not found; pick another harmless exe');
+  // Use a harmless real executable as the "app":
+  // Windows: ping.exe prints usage and exits immediately;
+  // POSIX: /bin/true exits 0 immediately.
+  const exe = process.platform === 'win32'
+    ? join(process.env.SystemRoot || 'C:\\Windows', 'System32', 'ping.exe')
+    : '/bin/true';
+  assert.ok(existsSync(exe), 'harmless exe not found; pick another one');
   const { log } = await runUntilLog({
     pid: '999999',
     exe,

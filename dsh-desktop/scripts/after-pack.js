@@ -5,15 +5,15 @@
 // electron-builder's file copier strips nested node_modules directories from
 // extraResources, but the bundled npm CLI needs its own bundled deps
 // (graceful-fs, semver, ...). Copy vendor/npm verbatim into the packed app
-// after packaging; both the portable and NSIS targets then archive this copy.
+// after packaging; Windows and Linux targets then archive this copy.
 
 const fs = require('node:fs');
 const path = require('node:path');
+const { spawnSync } = require('node:child_process');
 const { buildBundleManifest } = require('../bundle-integrity.js');
 
-module.exports = async function afterPack(context) {
+async function afterPack(context) {
   const { appOutDir, electronPlatformName } = context;
-  if (electronPlatformName !== 'win32') return;
   const src = path.resolve(__dirname, '..', 'vendor', 'npm');
   const dest = path.join(appOutDir, 'resources', 'npm');
   if (!fs.existsSync(src)) {
@@ -35,14 +35,26 @@ module.exports = async function afterPack(context) {
     fs.rmSync(pluginsDest, { recursive: true, force: true });
     fs.cpSync(pluginsSrc, pluginsDest, { recursive: true });
     console.log('afterPack: bundled plugins copied verbatim');
+    auditBundledPluginRuntime(pluginsDest, electronPlatformName);
   }
 
-  trimLongPathFiles(appOutDir);
-  dedupeNestedModules(appOutDir);
+  if (electronPlatformName === 'win32') {
+    trimLongPathFiles(appOutDir);
+    dedupeNestedModules(appOutDir);
+    auditLongPaths(appOutDir);
+  }
+  // 把只在 app 层声明的依赖补进 bundled dsh 闭包（better-sidebar → schemastery），
+  // 让 dsh-app-boot 的 fallback junction BFS 能发现它们。Linux/Windows 都执行。
   injectDshClosureExtras(appOutDir);
+  // node-pty 原生模块审计：必须在写 bundle manifest 之前执行，否则缺 pty.node
+  // 的坏树会被当成基准记进 manifest，启动完整性校验形同虚设（3.0.1 Arch 事故）。
+  auditNodePty(appOutDir, electronPlatformName);
+  // Linux 包同样生成 bundle manifest，让启动时的完整性校验在 Linux 上也生效。
   writeBundleManifest(appOutDir);
-  auditLongPaths(appOutDir);
-};
+}
+
+module.exports = afterPack;
+module.exports.auditNodePty = auditNodePty;
 
 // The profile fallback closure (profiles/node_modules junctions) is maintained
 // by dsh-app-boot, whose BFS starts at the BUNDLED dsh package's package.json.
@@ -90,6 +102,134 @@ function writeBundleManifest(appOutDir) {
   const out = path.join(appOutDir, 'resources', 'app', 'bundle-manifest.json');
   fs.writeFileSync(out, JSON.stringify(manifest, null, 2));
   console.log(`afterPack: bundle manifest written (${Object.keys(manifest.packages).length} packages)`);
+}
+
+// node-pty 原生模块审计（3.0.1 Arch 事故的直接根因）。
+//
+// node-pty@1.1.0 的 npm 包只随附 darwin/win32 的 prebuilds，linux-x64 没有，
+// 必须在安装时由 node-gyp 现场编译出 build/Release/pty.node。3.0.1 的 Arch 包
+// 三种候选路径（build/Release、build/Debug、prebuilds/linux-x64）全缺，导致
+// dsh-subprocess-local / better-sidebar 加载失败、dsh web 以退出码 1 反复
+// 启动失败。electron-builder 的 afterPack 阶段必须拦截，而不是把坏树交给
+// 用户。node-pty 是 N-API 插件（node-addon-api），ABI 稳定，缺的主要是「文件
+// 有没有被装进去」，所以既要查存在性，也要用捆绑 Node 实际导入一次。
+const NODE_PTY_PLATFORM_CANDIDATES = {
+  linux: ['build/Release/pty.node', 'prebuilds/linux-x64/pty.node'],
+  win32: ['build/Release/pty.node', 'prebuilds/win32-x64/pty.node'],
+  darwin: ['prebuilds/darwin-x64/pty.node', 'prebuilds/darwin-arm64/pty.node'],
+};
+
+function auditNodePty(appOutDir, electronPlatformName, nodeBinOverride) {
+  const nodePtyRoot = path.join(appOutDir, 'resources', 'app', 'node_modules', 'node-pty');
+  if (!fs.existsSync(nodePtyRoot)) {
+    throw new Error(
+      'afterPack: 打包产物缺少 node-pty（' + nodePtyRoot + '）。\n' +
+      'dsh-subprocess-local 与 better-sidebar 都依赖它，缺了 dsh web 启动即失败。'
+    );
+  }
+  const candidates = NODE_PTY_PLATFORM_CANDIDATES[electronPlatformName] || [];
+  const present = candidates.filter((rel) => fs.existsSync(path.join(nodePtyRoot, rel)));
+  if (present.length === 0) {
+    throw new Error(
+      'afterPack: node-pty 缺少 ' + electronPlatformName + ' 原生模块 pty.node。\n' +
+      '已检查: ' + candidates.map((rel) => path.join('node-pty', rel)).join('、') + '（均不存在）\n' +
+      'Linux 安装时 node-pty 须由 node-gyp 编译（需要 python / make / gcc 工具链），\n' +
+      '若 npm ci 阶段脚本被跳过或编译失败，必须先修好依赖树再打包。'
+    );
+  }
+  console.log('afterPack: node-pty 原生模块存在（' + present.join('、') + '）');
+  if (electronPlatformName !== 'linux') return;
+
+  // 用捆绑的 plain Node 实际导入：如果捆绑 Node 与编译时 Node 的 ABI 不一致，
+  // 或 pty.node 损坏，在这里就报错，而不是等用户启动 dsh web 才发现。
+  const nodeBin = nodeBinOverride || path.join(appOutDir, 'resources', 'node', 'node');
+  if (!fs.existsSync(nodeBin)) {
+    throw new Error('afterPack: 打包产物缺少捆绑 Node（' + nodeBin + '），无法验证 node-pty 可加载性。');
+  }
+  const r = spawnSync(nodeBin, ['-e',
+    'const pty = require(process.argv[1]);' +
+    'if (typeof pty.spawn !== "function") { console.error("node-pty API 异常"); process.exit(2); }' +
+    'console.log("node-pty loadable @ " + process.version);',
+    nodePtyRoot], { encoding: 'utf8' });
+  if (r.error || r.status !== 0) {
+    throw new Error(
+      'afterPack: 捆绑 Node 无法加载 node-pty（exit ' + r.status + '）。\n' +
+      (r.stderr || r.stdout || (r.error && r.error.message) || '').trim() + '\n' +
+      '检查 pty.node 是否按捆绑 Node 的 ABI 编译，或重新 npm ci 后再打包。'
+    );
+  }
+  console.log('afterPack: ' + (r.stdout || '').trim());
+
+  // glibc 兼容性审计（2026-08 Debian 事故）：node-pty 在构建机（Arch glibc 2.42
+  // 或最新 Ubuntu runner）上现场编译会绑定新 glibc，Debian 13（2.41）及更老
+  // 系统加载即崩（GLIBC_2.42 not found）。支持矩阵基线 = Debian 12（glibc 2.36）
+  // 编译产物，实测最高引用 GLIBC_2.34，覆盖 docs/support-matrix.md 定义的
+  // 2025-01~2026-08 发布窗口。超标直接 fail 构建，回到低 glibc chroot 重编。
+  const NODE_PTY_GLIBC_FLOOR = [2, 34];
+  const presentBinary = present.find((rel) => rel.endsWith('pty.node'));
+  if (presentBinary) {
+    const objdumpOut = spawnSync('objdump', ['-T', path.join(nodePtyRoot, presentBinary)], { encoding: 'utf8' });
+    if (!objdumpOut.error && objdumpOut.status === 0) {
+      const versions = (objdumpOut.stdout.match(/GLIBC_(\d+\.\d+)/g) || [])
+        .map((s) => s.split('_')[1].split('.').map(Number))
+        .sort((a, b) => a[0] - b[0] || a[1] - b[1]);
+      const max = versions.length ? versions[versions.length - 1] : null;
+      if (max && (max[0] > NODE_PTY_GLIBC_FLOOR[0] || (max[0] === NODE_PTY_GLIBC_FLOOR[0] && max[1] > NODE_PTY_GLIBC_FLOOR[1]))) {
+        throw new Error(
+          'afterPack: pty.node 要求 GLIBC_' + max.join('.') + '，超过支持矩阵基线 GLIBC_' +
+          NODE_PTY_GLIBC_FLOOR.join('.') + '。\n' +
+          '在构建机（Arch / 最新 Ubuntu）上 node-gyp 现场编译会绑定新 glibc，Debian 13 及更老系统无法加载。\n' +
+          '必须回到低 glibc chroot 重编：见 docs/support-matrix.md（debootstrap bookworm + 官方 node）。'
+        );
+      }
+      console.log('afterPack: node-pty glibc 基线检查通过（≤ GLIBC_' + NODE_PTY_GLIBC_FLOOR.join('.') + '）');
+    }
+  }
+}
+
+function auditBundledPluginRuntime(pluginsRoot, platform) {
+  const tdai = path.join(pluginsRoot, 'dsh-tdai-memory', 'node_modules');
+  const required = [
+    path.join(tdai, '@tencentdb-agent-memory', 'tcvdb-text', 'dist', 'index.js'),
+    path.join(tdai, '@ai-sdk', 'gateway', 'dist', 'index.mjs'),
+    path.join(tdai, '@ai-sdk', 'openai', 'dist', 'index.mjs'),
+    path.join(tdai, '@ai-sdk', 'provider', 'dist', 'index.mjs'),
+    path.join(tdai, '@ai-sdk', 'provider-utils', 'dist', 'index.mjs'),
+    path.join(tdai, '@standard-schema', 'spec', 'dist', 'index.js'),
+    path.join(tdai, '@vercel', 'oidc', 'dist', 'index.js'),
+    path.join(tdai, 'ai', 'dist', 'index.mjs'),
+    path.join(tdai, 'eventsource-parser', 'dist', 'index.js'),
+    path.join(tdai, 'json5', 'dist', 'index.mjs'),
+  ];
+  if (platform === 'linux') {
+    required.push(
+      path.join(tdai, '@node-rs', 'jieba-linux-x64-gnu', 'jieba.linux-x64-gnu.node'),
+      path.join(tdai, 'sqlite-vec-linux-x64', 'vec0.so')
+    );
+  } else if (platform === 'win32') {
+    required.push(
+      path.join(tdai, '@node-rs', 'jieba-win32-x64-msvc', 'jieba.win32-x64-msvc.node'),
+      path.join(tdai, 'sqlite-vec-windows-x64', 'vec0.dll')
+    );
+  } else if (platform === 'darwin') {
+    // darwin 负载由 scripts/fetch-darwin-natives.js 在 dist:mac 前注入；
+    // x64/arm64 同时打包进同一个包（与 linux/win 只带本平台相反，两个
+    // mac 产物都带双架构负载，便于以后做 universal 或互换）。
+    required.push(
+      path.join(tdai, '@node-rs', 'jieba-darwin-x64', 'jieba.darwin-x64.node'),
+      path.join(tdai, '@node-rs', 'jieba-darwin-arm64', 'jieba.darwin-arm64.node'),
+      path.join(tdai, 'sqlite-vec-darwin-x64', 'vec0.dylib'),
+      path.join(tdai, 'sqlite-vec-darwin-arm64', 'vec0.dylib')
+    );
+  }
+  const missing = required.filter((file) => !fs.existsSync(file));
+  if (missing.length) {
+    throw new Error(
+      `afterPack: bundled tdai-memory runtime is incomplete for ${platform}:\n` +
+      missing.map((file) => `  ${path.relative(pluginsRoot, file)}`).join('\n')
+    );
+  }
+  console.log(`afterPack: bundled tdai-memory runtime audit passed (${platform})`);
 }
 
 // electron-builder's dependency collector needlessly nests some deps under

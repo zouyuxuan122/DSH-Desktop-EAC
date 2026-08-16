@@ -9,11 +9,12 @@
 <p>
 <a href="https://github.com/zouyuxuan122/Deepseek-Harness-EAC"><img src="https://img.shields.io/github/stars/zouyuxuan122/Deepseek-Harness-EAC?style=flat&label=%E2%AD%90&color=08C" alt="GitHub stars"></a>
 <a href="https://github.com/zouyuxuan122/Deepseek-Harness-EAC/releases"><img src="https://img.shields.io/badge/Windows-10%2F11-4493F8?style=flat" alt="Windows"></a>
+<a href="https://github.com/zouyuxuan122/Deepseek-Harness-EAC/releases"><img src="https://img.shields.io/badge/Linux-x86__64-1793D1?style=flat&logo=linux&logoColor=white" alt="Linux"></a>
 <a href="https://github.com/zouyuxuan122/Deepseek-Harness-EAC"><img src="https://img.shields.io/badge/Desktop-App-47848F?style=flat" alt="Desktop App"></a>
 <a href="https://github.com/zouyuxuan122/Deepseek-Harness-EAC/blob/main/LICENSE"><img src="https://img.shields.io/badge/license-MIT-2EA44F?style=flat" alt="MIT License"></a>
 </p>
 
-<p>A ready-to-use <strong>Windows desktop client</strong> wrapping the official <a href="https://github.com/deepseek-ai/deepseek-harness">deepseek-ai/deepseek-harness</a> (<code>@deepseek-ai/dsh</code>, the everything-is-a-plugin agent harness).
+<p>A ready-to-use <strong>Windows / Linux desktop client</strong> wrapping the official <a href="https://github.com/deepseek-ai/deepseek-harness">deepseek-ai/deepseek-harness</a> (<code>@deepseek-ai/dsh</code>, the everything-is-a-plugin agent harness).
 On top of the original, EAC embraces the community's creations — skins, plugins, tools, memories — everything installable with one click.</p>
 
 <p><a href="docs/screenshot-preview.jpg"><img src="docs/screenshot-preview.jpg" alt="Deepseek Harness EAC UI preview"></a></p>
@@ -37,7 +38,7 @@ On top of the original, EAC embraces the community's creations — skins, plugin
 | Plugin install | Manual npm | Built-in **plugin marketplace** in Settings: search / one-click install / uninstall |
 | Updates | Manual `npm update` | **Dual auto-update**: official agent updates (npm overlay, rollback on failure) + client self-update — both user-consented |
 | Notifications | N/A | **Windows system notification** when an agent task completes, click to bring the window back |
-| Requirements | Node.js environment | Windows 10/11 (x64), **no runtime required** |
+| Requirements | Node.js environment | Windows 10/11 (x64) or Linux x86_64 (Arch / Ubuntu / Debian / Fedora), **no runtime required** |
 
 > Zero kernel modification: EAC runs the official `dsh web` as-is, keeping the full "everything is a plugin" architecture,
 > and shares the `DSH_HOME` configuration with the CLI — existing sessions/API keys just work.
@@ -67,6 +68,53 @@ More versions on the [Releases page](https://github.com/zouyuxuan122/Deepseek-Ha
 
 > Portable data lives next to the exe in `data\`; the installer uses `%APPDATA%\Deepseek Harness EAC\`.
 > To override the DSH config directory, set the `DSH_HOME` environment variable before launch (same as the dsh CLI).
+
+### Arch Linux (x86_64)
+
+Download or build `Deepseek-Harness-EAC-<version>-x64.pacman`, then:
+
+```bash
+sudo pacman -U ./Deepseek-Harness-EAC-3.0.2-x64.pacman
+```
+
+Launch from the application menu or run `deepseek-harness-eac`. Uninstall:
+
+```bash
+sudo pacman -Rns dsh-desktop
+```
+
+### Ubuntu / Debian (x86_64)
+
+Download `Deepseek-Harness-EAC-<version>-amd64.deb`, then:
+
+```bash
+sudo apt install ./Deepseek-Harness-EAC-3.0.2-amd64.deb
+```
+
+Uninstall: `sudo apt remove dsh-desktop`.
+
+### Fedora (x86_64)
+
+Download `Deepseek-Harness-EAC-<version>.x86_64.rpm`, then:
+
+```bash
+sudo dnf install ./Deepseek-Harness-EAC-3.0.2.x86_64.rpm
+```
+
+Uninstall: `sudo dnf remove dsh-desktop`.
+
+### AppImage (any of the above, no install)
+
+```bash
+chmod +x ./Deepseek-Harness-EAC-3.0.2-x86_64.AppImage
+./Deepseek-Harness-EAC-3.0.2-x86_64.AppImage
+```
+
+> Ubuntu 24.04+ ships only FUSE3 by default; if the AppImage asks for FUSE2,
+> install `libfuse2` (Fedora: `fuse-libs`) or launch with `--appimage-extract-and-run`.
+
+Linux upgrades stay with each distribution's package manager (or AppImage replacement);
+the Windows in-place self-update flow does not apply to Linux packages.
 
 ### Upgrading
 
@@ -132,10 +180,12 @@ More versions on the [Releases page](https://github.com/zouyuxuan122/Deepseek-Ha
 
 ## Requirements
 
-- Windows 10/11 (x64)
+- Windows 10/11 (x64), or Linux x86_64 (Arch / Ubuntu / Debian / Fedora)
 - No pre-installed Node.js or any other runtime
 
 ## Build from source
+
+### Windows
 
 ```powershell
 cd dsh-desktop
@@ -146,9 +196,29 @@ npm run dist             # build portable + NSIS installer -> dist/
 
 > Behind a firewall? Electron mirror: `$env:ELECTRON_MIRROR='https://npmmirror.com/mirrors/electron/'`; builder toolchain mirror: `$env:ELECTRON_BUILDER_BINARIES_MIRROR='https://npmmirror.com/mirrors/electron-builder-binaries/'`.
 
+### Linux (Arch / Ubuntu / Debian / Fedora)
+
+On Arch Linux:
+
+```bash
+# Pin Node to 22 LTS (nodejs-lts-jod, Provides: nodejs=22.x); do NOT use the
+# rolling nodejs package: native modules (node-pty) are compiled against the
+# bundled Node ABI, so a version drift yields an unstartable package (3.0.1
+# Arch incident). python is needed for node-pty's node-gyp build.
+sudo pacman -S --needed base-devel nodejs-lts-jod npm python
+cd dsh-desktop
+npm install
+npm run fetch-runtime    # bundle Linux x64 Node runtime + npm CLI
+npm test
+npm run dist:arch        # pacman package -> dist/
+npm run dist:deb         # Ubuntu / Debian .deb -> dist/
+npm run dist:rpm         # Fedora .rpm -> dist/
+npm run dist:appimage    # distro-agnostic AppImage -> dist/
+```
+
 Run tests:
 
-```powershell
+```bash
 npm test                 # node --test test/*.test.mjs
 ```
 
@@ -161,11 +231,11 @@ npm test                 # node --test test/*.test.mjs
 │  · Session watcher (session-watcher.js) → notifications  │
 │  · Official updater (updater.js) → user-consented overlay│
 │  · Client updater (client-updater.js) → download/replace │
-│  · spawn node.exe from vendor|resources                  │
+│  · spawn node(.exe) from vendor|resources                │
 └──────────────┬───────────────────────────────────────────┘
                │  dsh web --host 127.0.0.1 --port 0
                ▼
-       Bundled node.exe + @deepseek-ai/dsh
+       Bundled Node.js + @deepseek-ai/dsh
        Path resolution: user overlay > bundled package
        Prints "dsh web: http://127.0.0.1:<port>"
                │  Parse URL, poll HTTP 200

@@ -1,0 +1,276 @@
+name: Build Linux packages
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+      - codex/arch-linux
+    tags:
+      - "v*"
+    # 纯文档提交不触发构建（README / docs 等）
+    paths-ignore:
+      - "**/*.md"
+      - "docs/**"
+
+permissions:
+  contents: write
+
+jobs:
+  # node-pty@1.1.0 不带 linux-x64 预编译，安装时由 node-gyp 现场编译。在构建机
+  # （Arch glibc 2.42 / Ubuntu runner 2.39+）上编译会绑定新 glibc，Debian 13
+  # （2.41）及更老系统加载即崩（2026-08 Debian 事故）。统一在 debian:12 容器
+  # （glibc 2.36，产物实测 ≤ GLIBC_2.34）里编译，产物作为构建物供两个打包 job 使用。
+  build-node-pty:
+    name: Build node-pty in debian:12 (glibc baseline)
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Rebuild node-pty inside debian:12 container
+        run: |
+          set -euo pipefail
+          mkdir -p pty-artifact
+          docker run --rm -v "$PWD/pty-artifact:/out" debian:12 bash -c '
+            set -euo pipefail
+            apt-get update -qq && apt-get install -y -qq build-essential python3 curl >/dev/null
+            # 官方 node v24.19.0（⚠️ 绝不用 Debian 自带 nodejs：其 node-gyp 会链 libnode.so.108）
+            curl -sL https://nodejs.org/dist/v24.19.0/node-v24.19.0-linux-x64.tar.xz | tar -xJ -C /usr/local --strip-components=1
+            export PATH=/usr/local/bin:$PATH
+            mkdir -p /build && cd /build && npm init -y >/dev/null 2>&1
+            npm install node-pty@1.1.0 --ignore-scripts >/dev/null 2>&1
+            cd node_modules/node-pty
+            node /usr/local/lib/node_modules/npm/node_modules/node-gyp/bin/node-gyp.js rebuild
+            cp build/Release/pty.node /out/pty.node
+          '
+          max_glibc="$(objdump -T pty-artifact/pty.node | grep -o 'GLIBC_2\.[0-9]*' | sort -t. -k2 -n | tail -1 | cut -d. -f2)"
+          test "$max_glibc" -le 34 || { echo "ERROR: pty.node 要求 GLIBC_2.$max_glibc，超过基线 2.34"; exit 1; }
+          echo "OK: pty.node glibc ≤ 2.34（实测 2.$max_glibc）"
+
+      - name: Upload pty.node artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: node-pty-linux-x64
+          path: pty-artifact/pty.node
+          if-no-files-found: error
+          retention-days: 7
+
+  build-pacman:
+    name: Build pacman package on Arch Linux
+    runs-on: ubuntu-latest
+    needs: build-node-pty
+    container:
+      image: archlinux:base-devel
+
+    steps:
+      - name: Install toolchain
+        run: |
+          pacman -Syu --noconfirm
+          # 使用系统 Ruby + fpm 而不是 electron-builder 下载的预编译 fpm：
+          # 后者自带的 ruby 依赖 libcrypt.so.1，Arch 官方仓库没有该 ABI。
+          # Node 固定到 22 LTS（nodejs-lts-jod，Provides: nodejs=22.x），与
+          # deb/rpm/AppImage CI 的 node-version: 22 保持一致——不再跟随滚动版
+          # nodejs（3.0.1 事故：Arch 包捆绑 Node 26 而其余 Linux 包是 Node 22）。
+          # python 用于 node-pty 的 node-gyp 编译：该包 1.1.0 不带 linux-x64
+          # 预编译产物，Linux 安装时必须现场编译出 build/Release/pty.node。
+          pacman -S --needed --noconfirm nodejs-lts-jod npm git ruby ruby-erb python
+          node --version
+          npm --version
+
+      - name: Install fpm gem
+        run: |
+          gem install fpm --no-document --bindir /usr/local/bin
+          /usr/local/bin/fpm --version
+
+      - uses: actions/checkout@v4
+
+      - name: Install npm dependencies
+        run: npm ci --allow-remote=all
+        working-directory: dsh-desktop
+
+      # 用 debian:12 容器编译的 pty.node 覆盖现场编译产物，保证 glibc ≤ 2.34
+      - uses: actions/download-artifact@v4
+        with:
+          name: node-pty-linux-x64
+          # 下载路径必须含 dsh-desktop：download-artifact 相对仓库根解析，
+          # 而 override 步骤在 working-directory: dsh-desktop 下引用 pty-artifact/。
+          path: dsh-desktop/pty-artifact
+
+      - name: Override node-pty with debian:12-built binary (glibc baseline)
+        run: |
+          set -euo pipefail
+          mkdir -p node_modules/node-pty/build/Release
+          cp pty-artifact/pty.node node_modules/node-pty/build/Release/pty.node
+          max_glibc="$(objdump -T node_modules/node-pty/build/Release/pty.node | grep -o 'GLIBC_2\.[0-9]*' | sort -t. -k2 -n | tail -1 | cut -d. -f2)"
+          test "$max_glibc" -le 34 || { echo "ERROR: pty.node 要求 GLIBC_2.$max_glibc"; exit 1; }
+          echo "OK: pty.node glibc 2.$max_glibc ≤ 2.34"
+        working-directory: dsh-desktop
+
+      # node-pty@1.1.0 的 npm 包只随附 darwin/win32 的 prebuilds，linux-x64 没有，
+      # 必须在安装阶段由 node-gyp 现场编译出 build/Release/pty.node。若这里没
+      # 生成（脚本被跳过 / 工具链缺失），装出来的包启动即报
+      # "Cannot find module './prebuilds/linux-x64//pty.node'"（3.0.1 Arch 事故）。
+      # 用与打包完全相同的 Node 立即加载一次，让失败发生在 CI 而不是用户机器上。
+      - name: Verify node-pty native module compiles and loads
+        run: node -e "const pty = require('node-pty'); if (typeof pty.spawn !== 'function') throw new Error('node-pty API 异常'); console.log('node-pty OK @', process.version, process.platform + '-' + process.arch)"
+        working-directory: dsh-desktop
+
+      - name: Fetch bundled Node runtime and npm CLI
+        run: npm run fetch-runtime
+        working-directory: dsh-desktop
+
+      - name: Report bundled runtime versions
+        run: |
+          ./vendor/node/node --version
+          ./vendor/node/node vendor/npm/bin/npm-cli.js --version
+        working-directory: dsh-desktop
+
+      - name: Run tests
+        run: npm test
+        working-directory: dsh-desktop
+
+      # 国内网络不佳的 fork 可以打开下面两行镜像：
+      # env:
+      #   ELECTRON_MIRROR: https://npmmirror.com/mirrors/electron/
+      #   ELECTRON_BUILDER_BINARIES_MIRROR: https://npmmirror.com/mirrors/electron-builder-binaries/
+      - name: Build pacman package
+        run: npm run dist:arch
+        working-directory: dsh-desktop
+        env:
+          USE_SYSTEM_FPM: "true"
+
+      # 打包后的最后一道防线：从 pacman 归档里检查 node-pty 原生模块是否真的
+      # 进去了，并用归档内捆绑的 Node 实际导入一次。3.0.1 Arch 事故就是缺这层
+      # 校验——afterPack 审计只覆盖展开目录，归档阶段仍可能丢文件。
+      - name: Verify pacman payload contains a loadable node-pty
+        run: |
+          set -euo pipefail
+          pkg="$(ls dist/*.pacman)"
+          rm -rf /tmp/pacman-audit
+          mkdir -p /tmp/pacman-audit
+          bsdtar -xf "$pkg" -C /tmp/pacman-audit
+          pty_file="$(find /tmp/pacman-audit \( -path '*/node-pty/build/Release/pty.node' -o -path '*/node-pty/prebuilds/linux-x64/pty.node' \) -type f | head -n1)"
+          test -n "$pty_file" || { echo "ERROR: node-pty native module missing from pacman payload"; exit 1; }
+          node_bin="$(find /tmp/pacman-audit -path '*/resources/node/node' -type f | head -n1)"
+          test -n "$node_bin" || { echo "ERROR: bundled node missing from pacman payload"; exit 1; }
+          "$node_bin" -e "require(process.argv[1]); console.log('pacman pty.node loadable @', process.version)" "$pty_file"
+          # glibc 兼容性复核：基线 ≤ 2.34（docs/support-matrix.md）
+          max_glibc="$(objdump -T "$pty_file" | grep -o 'GLIBC_2\.[0-9]*' | sort -t. -k2 -n | tail -1 | cut -d. -f2)"
+          test "$max_glibc" -le 34 || { echo "ERROR: pacman 内 pty.node 要求 GLIBC_2.$max_glibc，超过基线 2.34"; exit 1; }
+          echo "OK: pacman pty.node glibc 2.$max_glibc ≤ 2.34"
+          echo "OK: node-pty native module present ($pty_file)"
+        working-directory: dsh-desktop
+
+      - name: Show built artifacts
+        run: ls -lh dist/
+        working-directory: dsh-desktop
+
+      - name: Upload pacman artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: dsh-desktop-pacman-${{ github.run_id }}
+          path: dsh-desktop/dist/*.pacman
+          if-no-files-found: error
+          retention-days: 30
+
+  build-deb-rpm-appimage:
+    name: Build deb / rpm / AppImage on Ubuntu
+    runs-on: ubuntu-latest
+    needs: build-node-pty
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Install npm dependencies
+        run: npm ci --allow-remote=all
+        working-directory: dsh-desktop
+
+      # 用 debian:12 容器编译的 pty.node 覆盖现场编译产物，保证 glibc ≤ 2.34
+      - uses: actions/download-artifact@v4
+        with:
+          name: node-pty-linux-x64
+          # 下载路径必须含 dsh-desktop：download-artifact 相对仓库根解析，
+          # 而 override 步骤在 working-directory: dsh-desktop 下引用 pty-artifact/。
+          path: dsh-desktop/pty-artifact
+
+      - name: Override node-pty with debian:12-built binary (glibc baseline)
+        run: |
+          set -euo pipefail
+          mkdir -p node_modules/node-pty/build/Release
+          cp pty-artifact/pty.node node_modules/node-pty/build/Release/pty.node
+          max_glibc="$(objdump -T node_modules/node-pty/build/Release/pty.node | grep -o 'GLIBC_2\.[0-9]*' | sort -t. -k2 -n | tail -1 | cut -d. -f2)"
+          test "$max_glibc" -le 34 || { echo "ERROR: pty.node 要求 GLIBC_2.$max_glibc"; exit 1; }
+          echo "OK: pty.node glibc 2.$max_glibc ≤ 2.34"
+        working-directory: dsh-desktop
+
+      # 与 pacman 构建相同的 node-pty 加载校验：Linux 安装时 node-pty 必须由
+      # node-gyp 现场编译（npm 包不带 linux-x64 prebuilds），缺了安装包即废。
+      - name: Verify node-pty native module compiles and loads
+        run: node -e "const pty = require('node-pty'); if (typeof pty.spawn !== 'function') throw new Error('node-pty API 异常'); console.log('node-pty OK @', process.version, process.platform + '-' + process.arch)"
+        working-directory: dsh-desktop
+
+      - name: Fetch bundled Node runtime and npm CLI
+        run: npm run fetch-runtime
+        working-directory: dsh-desktop
+
+      - name: Report bundled runtime versions
+        run: |
+          ./vendor/node/node --version
+          ./vendor/node/node vendor/npm/bin/npm-cli.js --version
+        working-directory: dsh-desktop
+
+      - name: Run tests
+        run: npm test
+        working-directory: dsh-desktop
+
+      # 国内网络不佳的 fork 可以打开下面两行镜像：
+      # env:
+      #   ELECTRON_MIRROR: https://npmmirror.com/mirrors/electron/
+      #   ELECTRON_BUILDER_BINARIES_MIRROR: https://npmmirror.com/mirrors/electron-builder-binaries/
+      - name: Build deb / rpm / AppImage
+        run: npm run dist:deb && npm run dist:rpm && npm run dist:appimage
+        working-directory: dsh-desktop
+
+      - name: Show built artifacts
+        run: ls -lh dist/
+        working-directory: dsh-desktop
+
+      - name: Upload deb / rpm / AppImage artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: dsh-desktop-linux-packages-${{ github.run_id }}
+          path: |
+            dsh-desktop/dist/*.deb
+            dsh-desktop/dist/*.rpm
+            dsh-desktop/dist/*.AppImage
+          if-no-files-found: error
+          retention-days: 30
+
+  release:
+    name: Attach Linux packages to GitHub Release
+    if: startsWith(github.ref, 'refs/tags/')
+    needs: [build-pacman, build-deb-rpm-appimage]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: dsh-desktop-*
+          merge-multiple: true
+          path: release-artifacts
+
+      - name: Publish release assets
+        uses: softprops/action-gh-release@v2
+        with:
+          files: release-artifacts/**/*
+          draft: false
+          generate_release_notes: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

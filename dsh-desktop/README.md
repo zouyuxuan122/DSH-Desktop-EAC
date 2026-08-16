@@ -1,6 +1,6 @@
 # Deepseek Harness EAC（揽尽万象 · Embracing All Creation）
 
-把 [@deepseek-ai/dsh](https://www.npmjs.com/package/@deepseek-ai/dsh)（DeepSeek Harness）封装成开箱即用的 Windows 桌面客户端。
+把 [@deepseek-ai/dsh](https://www.npmjs.com/package/@deepseek-ai/dsh)（DeepSeek Harness）封装成开箱即用的 Windows / Linux 桌面客户端（Arch / Ubuntu / Debian / Fedora）。
 
 - ✅ **免安装 Node**：内置独立的 Node 运行时与 npm CLI，目标机器无需安装 Node.js
 - ✅ **内置 dsh CLI**：完整打包 `@deepseek-ai/dsh` 及其全部插件，离线可用
@@ -22,6 +22,8 @@
 
 ## 快速开始（成品用户）
 
+### Windows
+
 1. 打开 [Releases](https://github.com/zouyuxuan122/Deepseek-Harness-EAC/releases/latest) 页面，选其一（链接永久有效，始终指向最新版）：
    - [Deepseek-Harness-EAC-Portable-x64.exe](https://github.com/zouyuxuan122/Deepseek-Harness-EAC/releases/latest/download/Deepseek-Harness-EAC-Portable-x64.exe) —— 免安装便携版，双击运行
    - [Deepseek-Harness-EAC-Setup-x64.exe](https://github.com/zouyuxuan122/Deepseek-Harness-EAC/releases/latest/download/Deepseek-Harness-EAC-Setup-x64.exe) —— 安装版，创建桌面/开始菜单快捷方式
@@ -32,6 +34,53 @@
 >
 > 便携版的数据目录是 exe 旁的 `data\`；安装版在 `%APPDATA%\Deepseek Harness EAC\`。
 > 若想强制指定 DSH 配置目录，启动前设置环境变量 `DSH_HOME` 即可（与 dsh CLI 行为一致）。
+
+### Arch Linux（x86_64）
+
+下载或构建 pacman 包后安装：
+
+```bash
+sudo pacman -U ./Deepseek-Harness-EAC-3.0.1-x64.pacman
+```
+
+安装完成后从桌面应用菜单启动，或运行 `deepseek-harness-eac`。卸载命令：
+
+```bash
+sudo pacman -Rns dsh-desktop
+```
+
+应用内置 Node.js 与 npm，目标机器无需预装 Node.js。Linux 客户端升级应安装
+新的 pacman 包；Windows 便携版/NSIS 的原地自更新流程不适用于 pacman 安装。
+
+### Ubuntu / Debian（x86_64）
+
+下载 `Deepseek-Harness-EAC-<版本>-amd64.deb` 后安装：
+
+```bash
+sudo apt install ./Deepseek-Harness-EAC-3.0.1-amd64.deb
+```
+
+卸载：`sudo apt remove dsh-desktop`。
+
+### Fedora（x86_64）
+
+下载 `Deepseek-Harness-EAC-<版本>.x86_64.rpm` 后安装：
+
+```bash
+sudo dnf install ./Deepseek-Harness-EAC-3.0.1.x86_64.rpm
+```
+
+卸载：`sudo dnf remove dsh-desktop`。
+
+### AppImage（免安装，通用）
+
+```bash
+chmod +x ./Deepseek-Harness-EAC-3.0.1-x86_64.AppImage
+./Deepseek-Harness-EAC-3.0.1-x86_64.AppImage
+```
+
+> Ubuntu 24.04 等只有 FUSE3 的发行版，若提示缺少 FUSE2，先安装 `libfuse2`
+> （Fedora 为 `fuse-libs`），或使用 `--appimage-extract-and-run` 启动。
 
 ## 跟随官方更新（用户同意后自动更新）
 
@@ -135,6 +184,8 @@
 
 ## 从源码构建
 
+### Windows
+
 要求：Windows + Node.js（仅构建机需要）+ npm。
 
 ```powershell
@@ -148,6 +199,33 @@ npm run dist                   # 构建 portable + NSIS 安装包，输出到 di
 >
 > 开发辅助脚本：`node scripts/check-latest.js`（检查/试装更新）、`node scripts/test-watcher.js`（通知检测单测）、`node scripts/inspect-session.js <file>`（会话日志事件词表）。
 
+### Arch Linux
+
+要求：Arch Linux x86_64 + Node.js + npm + `base-devel`（仅构建机需要）。
+
+```bash
+sudo pacman -S --needed base-devel nodejs npm
+npm install
+npm run fetch-runtime          # 内置 Linux x64 Node.js + npm CLI
+npm test
+npm run dist:arch              # 构建 pacman 包，输出到 dist/
+npm run dist:deb               # 构建 Ubuntu / Debian 的 .deb
+npm run dist:rpm               # 构建 Fedora 的 .rpm
+npm run dist:appimage          # 构建免安装 AppImage
+```
+
+生成的包名分别为 `Deepseek-Harness-EAC-<版本>-x64.pacman`、
+`Deepseek-Harness-EAC-<版本>-amd64.deb`、`Deepseek-Harness-EAC-<版本>.x86_64.rpm`
+与 `Deepseek-Harness-EAC-<版本>-x86_64.AppImage`。`afterPack` 会审核长期记忆
+插件的 JavaScript 产物、Jieba 和 sqlite-vec 等平台原生运行时，关键文件
+不完整时构建会失败。
+
+> **免本地编译**：仓库根目录的 `.github/workflows/build-arch-pacman.yml`
+> 可在 GitHub Actions 的 Arch Linux 容器中自动构建 pacman 包，并在 Ubuntu
+> runner 上构建 deb / rpm / AppImage。推送 `main` / `codex/arch-linux` 分支
+> 或 `v*` 标签即触发；到 Actions 里下载 Artifact（打 tag 时自动发布为
+> Release 资产），本地用各发行版包管理器安装即可。
+
 ## 架构
 
 ```
@@ -156,11 +234,11 @@ npm run dist                   # 构建 portable + NSIS 安装包，输出到 di
 │  · 单实例锁 / 窗口 / 菜单 / 生命周期                       │
 │  · 会话完成监听 (session-watcher.js) → 系统通知            │
 │  · 官方更新 (updater.js) → 用户同意后安装 overlay          │
-│  · spawn vendor|resources 里的 node.exe                   │
+│  · spawn vendor|resources 里的平台专用 Node 运行时          │
 └──────────────┬───────────────────────────────────────────┘
                │  dsh web --host 127.0.0.1 --port 0
                ▼
-       内置 node.exe + @deepseek-ai/dsh
+       内置 Node.js + @deepseek-ai/dsh
        路径解析：用户目录 overlay > 内置包
        输出 "dsh web: http://127.0.0.1:<port>"
                │  解析 URL，轮询 HTTP 200
@@ -173,10 +251,10 @@ npm run dist                   # 构建 portable + NSIS 安装包，输出到 di
 | 决策 | 原因 |
 | --- | --- |
 | `asar: false` | dsh 依赖 sharp / node-pty / koffi 等原生模块，必须以真实文件落盘 |
-| 内置独立 node.exe + npm | 预编译原生模块 ABI 与安装时的 Node 版本绑定；Electron 内嵌 Node ABI 不同。内置同版本 node.exe 零配置保证一致，npm 用于官方更新。注意：electron-builder 复制 extraResources 时会剥掉嵌套 node_modules，npm 自己的依赖由 \`afterPack\` 钩子原样补拷（scripts/after-pack.js） |
-| `npmRebuild: false` | 绝不为 Electron 重编译原生模块，否则内置 node.exe 反而加载不了 |
+| 内置独立 Node.js + npm | 预编译原生模块 ABI 与安装时的 Node 版本绑定；Electron 内嵌 Node ABI 不同。内置同版本平台运行时保证一致，npm 用于官方更新。注意：electron-builder 复制 extraResources 时会剥掉嵌套 node_modules，npm 自己的依赖由 `afterPack` 钩子原样补拷（scripts/after-pack.js） |
+| `npmRebuild: false` | 绝不为 Electron 重编译原生模块，否则内置平台 Node runtime 反而加载不了 |
 | `--port 0` + 解析 stdout | 由 OS 分配空闲端口，避免端口冲突；本机回环绑定不对外暴露 |
-| 退出时 `taskkill /T /F` | dsh 会派生 pwsh 等子进程，按进程树整体回收 |
+| 按平台结束进程树 | Windows 使用 `taskkill /T /F`；Linux 使用进程组信号，确保 dsh 派生进程一并回收 |
 | 更新走 overlay + staging 原子切换 | 更新失败零风险；便携版（资源每次从 exe 解压）也能持久更新 |
 | 通知读会话日志而非 UI 协议 | 持久化格式是官方稳定接口；UI 的私有 RPC/SSE 协议随版本变化，容易失效 |
 
@@ -214,7 +292,7 @@ dsh-desktop/
 │                         # dsh-soul-md、dsh-web-mobile-fix，含 vendor 与自包含依赖）
 │                         # 全部自动同步进 web profile
 ├── scripts/
-│   ├── fetch-node.js     # 内置 node.exe 复制脚本
+│   ├── fetch-node.js     # 下载/准备平台专用 Node.js
 │   ├── fetch-npm.js      # 内置 npm CLI 复制脚本
 │   ├── build-icon.ps1    # 生成应用图标（透明圆角蒙版）+ 托盘图标
 │   ├── check-latest.js   # agent 更新链路测试工具
@@ -222,7 +300,7 @@ dsh-desktop/
 │   ├── test-watcher.js   # 通知检测单测
 │   └── inspect-session.js# 会话日志解析工具
 ├── build/icon.png        # electron-builder 图标源
-├── vendor/               # 内置 node.exe / npm CLI（fetch-runtime 生成，不入库）
+├── vendor/               # 内置平台专用 Node.js / npm CLI（fetch-runtime 生成，不入库）
 ├── electron-builder.yml  # 打包配置
 └── dist/                 # 构建产物
 ```
