@@ -73,6 +73,12 @@ Linux 打包由社区开发者 [@Luoye-hb](https://github.com/Luoye-hb) 贡献�
 > - 与 Windows 版一致：内置 Node.js 与 npm CLI，目标机器无需预装 Node.js；数据目录沿用 `~/.dsh`（`DSH_HOME`）
 > - Linux 版由系统包管理器管理升级，不走应用内自更新；安装到仓库根 `linux` 分支源码可自行构建
 
+**Linux 支持窗口**：官方支持 **2025-01-01 至 2026-08-15 之间发布**的主流发行版
+（Debian 13、Ubuntu 25.04/25.10/26.04、Fedora 42/43/44、RHEL 10 系、
+openSUSE Leap 16、Arch 滚动版等），并兼容仍在维护的旧 LTS（Debian 12、
+Ubuntu 22.04/24.04）。全部原生模块按 **glibc ≥ 2.34** 基线构建，同一安装包
+在整个窗口内可用。详见 [docs/support-matrix.md](docs/support-matrix.md)。
+
 > ⚠️ **务必安装/放置到纯英文路径**（默认 `C:\Users\<你>\AppData\Local\Programs\` 即可）：中文路径（如 `D:\迅雷下载\`）会触发 Chromium 渲染进程原生崩溃，窗口弹出数十秒后自动退出。
 
 **首次使用**：

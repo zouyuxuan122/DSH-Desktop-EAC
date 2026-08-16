@@ -66,6 +66,29 @@ For Arch Linux x86_64, required memory-plugin payloads include:
 - `@node-rs/jieba-linux-x64-gnu`
 - `sqlite-vec-linux-x64/vec0.so`
 
+### Linux support window and glibc baseline
+
+The official Linux support window is **distributions released between
+2025-01-01 and 2026-08-15** (see `docs/support-matrix.md` for the per-distro
+table). Every bundled native payload must keep its maximum referenced glibc
+symbol at or below `GLIBC_2.34` — the empirical floor of a Debian 12 build —
+so the whole window (glibc 2.41+) plus still-maintained older LTS releases
+work from one artifact.
+
+`node-pty`'s `pty.node` is the only payload compiled at install time
+(node-pty@1.1.0 ships no linux-x64 prebuild), so it is the one that must be
+rebuilt deliberately:
+
+- Rebuild it in the Debian 12 chroot (`/var/lib/dsh-pty-build` on the dev
+  host) with the official Node v24.19.0 tarball — never with a distro's
+  `nodejs` package (its node-gyp links `libnode.so.*`) and never on the
+  build host itself.
+- Verify before packaging: `objdump -T` max ≤ `GLIBC_2.34`, no `libnode`
+  NEEDED entry, and the bundled Node imports it.
+- CI enforces this: `build-node-pty` compiles in a `debian:12` container and
+  both Linux package jobs override `node_modules` with that artifact;
+  `after-pack.js` rejects any `pty.node` exceeding the baseline.
+
 ## Verification
 
 Before considering a packaging change complete:
