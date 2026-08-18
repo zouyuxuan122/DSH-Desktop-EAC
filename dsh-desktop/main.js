@@ -25,6 +25,7 @@ const { pathToFileURL } = require('node:url');
 
 const updater = require('./updater');
 const clientUpdater = require('./client-updater');
+const pluginUpdater = require('./plugin-updater');
 const balance = require('./balance');
 const { healProfileModuleShadowing } = require('./profile-module-heal');
 const { createGuard } = require('./plugin-guard');
@@ -1595,6 +1596,74 @@ async function runUpdateFlow(manual) {
 }
 
 // ---------------------------------------------------------------------------
+// 内置插件更新检查（V4.3）：启动后静默执行。
+//   · settings.pluginAutoUpdate = false（默认）→ 发现更新仅系统通知，不下载
+//   · true → 自动下载到覆盖层（服务运行中不写 profile），弹窗提示重启
+// 24h 节流（settings.pluginUpdateCheckedAt）+ 单插件失败不阻塞。
+// ---------------------------------------------------------------------------
+
+function notifyPluginUpdates(updatable) {
+  try {
+    const names = updatable.slice(0, 5).map((x) => x.name).join('、');
+    const n = new Notification({
+      title: '有 ' + updatable.length + ' 个内置插件可更新',
+      body: names + (updatable.length > 5 ? ' 等' : '') + ' 已发布新版本。打开「设置 → 插件 → 更新」查看并更新（自动更新默认关闭，仅提示）。',
+      icon: path.join(__dirname, 'assets', 'icon.png'),
+    });
+    n.on('click', () => showMainWindow());
+    n.show();
+  } catch (err) {
+    log('plugin-update', '更新通知发送失败: ' + (err && err.message));
+  }
+}
+
+async function runPluginUpdateCheck(manual) {
+  if (quitting) return;
+  const ctx = updCtx();
+  const sources = pluginUpdateSources();
+  if (sources.length === 0) return;
+  if (!manual && !pluginUpdater.dueForCheck(ctx, Date.now())) return;
+  let list;
+  try {
+    list = await pluginUpdater.checkPluginUpdates(ctx, sources, { force: !!manual, profileDirP: desktopProfileDir() });
+    if (!manual) pluginUpdater.markChecked(ctx);
+  } catch (err) {
+    log('plugin-update', '内置插件更新检查失败: ' + String((err && err.message) || err));
+    return;
+  }
+  const updatable = list.filter((x) => x.hasUpdate && !x.skipped);
+  if (updatable.length === 0) return;
+  if (!pluginUpdater.isAutoUpdateEnabled(ctx)) {
+    // 默认行为：只检测并提示，下载交给用户在「更新」标签页手动完成。
+    notifyPluginUpdates(updatable);
+    return;
+  }
+  const { done, failed } = await pluginUpdater.autoApplyUpdates(ctx, sources, {
+    profileDirP: desktopProfileDir(),
+    guard: ensureGuard(),
+    copyIntoProfile: (overlayDir, name) => copyPluginPackage(desktopProfileDir(), overlayDir, name),
+  });
+  log('plugin-update', '自动更新完成: ' + (done.map((d) => d.name).join('、') || '无') + (failed.length ? '；失败 ' + failed.length + ' 个' : ''));
+  if (done.length) {
+    const names = done.map((d) => d.name).join('、');
+    const { response } = await showBox({
+      type: 'info',
+      title: '内置插件已更新',
+      message: '已更新内置插件：' + names,
+      detail: '更新已写入用户目录，重启 Web 服务后生效（无需重启应用）。' + (failed.length ? '\n\n失败 ' + failed.length + ' 个：' + failed.map((f) => f.name).join('、') + '（可在「设置 → 插件 → 更新」重试）' : ''),
+      buttons: ['立即重启服务', '稍后'],
+      defaultId: 0,
+      cancelId: 1,
+    });
+    if (response === 0) {
+      try { await restartWebServiceCore(); } catch (err) {
+        log('plugin-update', '重启服务失败: ' + String((err && err.message) || err));
+      }
+    }
+  }
+}
+
+// ---------------------------------------------------------------------------
 // Session-completion notifications
 // ---------------------------------------------------------------------------
 
@@ -1964,6 +2033,62 @@ function registerChromeIpc() {
       return res.ok ? { ok: true, restartRequired: true } : res;
     } catch (err) {
       log('plugin-manager', '移除/恢复插件 ' + id + ' 失败: ' + ((err && err.message) || err));
+      return { ok: false, error: String((err && err.message) || err) };
+    }
+  });
+
+  // 插件更新（V4.3，设置页「插件 → 更新」标签，dsh-plugin-marketplace 插件
+  // 消费）：内置插件上游更新 —— 检测清单 / 手动更新单个 / 自动更新开关。
+  // 数据与动作都在主进程完成（npm 镜像链 + 覆盖层），Web 端只做展示。
+  ipcMain.handle('dsh:plugin-updates', async (event, { force = false } = {}) => {
+    if (!mainWindow || event.sender !== mainWindow.webContents) return null;
+    try {
+      const ctx = updCtx();
+      const list = await pluginUpdater.checkPluginUpdates(ctx, pluginUpdateSources(), {
+        force: !!force,
+        profileDirP: desktopProfileDir(),
+      });
+      return {
+        list,
+        autoUpdate: pluginUpdater.isAutoUpdateEnabled(ctx),
+        checkedAt: updater.loadSettings(ctx).pluginUpdateCheckedAt || null,
+      };
+    } catch (err) {
+      log('plugin-update', '插件更新清单加载失败: ' + String((err && err.message) || err));
+      return { list: [], autoUpdate: false, error: String((err && err.message) || err) };
+    }
+  });
+
+  ipcMain.handle('dsh:plugin-update', async (event, { id } = {}) => {
+    if (!mainWindow || event.sender !== mainWindow.webContents) return { ok: false, error: 'unauthorized' };
+    const source = pluginUpdateSources().find((s) => s.id === String(id));
+    if (!source) return { ok: false, error: '未知或不可更新的内置插件: ' + String(id) };
+    try {
+      const res = await pluginUpdater.applyBuiltinPluginUpdate(updCtx(), source, {
+        profileDirP: desktopProfileDir(),
+        guard: ensureGuard(),
+        copyIntoProfile: (overlayDir, name) => copyPluginPackage(desktopProfileDir(), overlayDir, name),
+      });
+      if (!res.ok) return res;
+      if (res.noop) return { ok: true, noop: true, current: res.current, latest: res.latest };
+      log('plugin-update', '手动更新内置插件 ' + id + ' → ' + res.latest + (res.restartRequired ? '（重启服务生效）' : ''));
+      return { ok: true, version: res.latest, restartRequired: res.restartRequired };
+    } catch (err) {
+      log('plugin-update', '更新插件 ' + id + ' 失败: ' + String((err && err.message) || err));
+      return { ok: false, error: String((err && err.message) || err) };
+    }
+  });
+
+  ipcMain.handle('dsh:plugin-auto-update', async (event, { enabled } = {}) => {
+    if (!mainWindow || event.sender !== mainWindow.webContents) return { ok: false, error: 'unauthorized' };
+    try {
+      const ctx = updCtx();
+      const s = updater.loadSettings(ctx);
+      s.pluginAutoUpdate = !!enabled;
+      updater.saveSettings(ctx, s);
+      log('plugin-update', '内置插件自动更新已' + (enabled ? '开启' : '关闭'));
+      return { ok: true };
+    } catch (err) {
       return { ok: false, error: String((err && err.message) || err) };
     }
   });
@@ -2454,6 +2579,58 @@ const COMPANION_PLUGINS = [
   // 实现（host 半边 no-op，仅用受控 IPC dsh:image-paste-save）。
   { id: 'image-paste', name: 'dsh-image-paste', dir: 'dsh-image-paste' },
 ];
+
+// ---------------------------------------------------------------------------
+// 内置插件上游更新源（V4.3，plugin-updater.js 消费）：
+//
+// 只登记「上游仍在 npm / GitHub 发布」的社区插件 —— 内置分发的副本可以
+// 跟随上游修复而更新。EAC 独占插件（package.json 标记 private，如
+// dsh-balance / dsh-terminal）绝不登记；zat-market 自带 selfupdate 不登记。
+// 运行时 npm 404（未上架/改名）优雅降级为「无上游」，绝不阻塞。
+// ---------------------------------------------------------------------------
+const PLUGIN_UPDATE_SOURCES = {
+  'tool-vision': { npm: 'dsh-tool-vision' },
+  'soul-md': { npm: 'dsh-soul-md' },
+  'tdai-memory': { npm: 'dsh-tdai-memory' },
+  'dsh-pet': { npm: 'dsh-pet' },
+  'better-sidebar': { npm: 'dsh-better-sidebar' },
+  'dsh-navbar': { npm: '@vlln/dsh-navbar' },
+  'mobile-fix': { npm: 'dsh-web-mobile-fix' },
+  'offpeak': { npm: 'dsh-offpeak' },
+  'dsh-market-plugin': { npm: '@sanqi-normal/dsh-webui-market-plugin' },
+  'dsh-session-manager': { npm: 'dsh-session-manager' },
+  // GitHub 分发（npm 未发布）：dsh-undo-savepoint。
+  'dsh-undo': { github: 'lire1131/dsh-undo-savepoint' },
+};
+
+/** 把内置插件表 + 更新源注册表合并成 plugin-updater 的 sources 输入。 */
+function pluginUpdateSources() {
+  const removed = removedPluginIds();
+  const out = [];
+  for (const p of COMPANION_PLUGINS) {
+    const update = PLUGIN_UPDATE_SOURCES[p.id];
+    if (!update) continue;
+    if (removed.has(p.id)) continue;
+    const dirName = p.dir || (p.name.includes('/') ? p.name.split('/').pop() : p.name);
+    const assetsDir = path.join(__dirname, 'assets', 'plugins', dirName);
+    if (!fs.existsSync(path.join(assetsDir, 'package.json'))) continue;
+    out.push({ id: p.id, name: p.name, assetsDir, update });
+  }
+  return out;
+}
+
+/** 内置插件当前生效的源目录：覆盖层（已更新版本）优先，资产版本回退。 */
+function builtinPluginSourceDir(dirName) {
+  const assets = path.join(__dirname, 'assets', 'plugins', dirName);
+  const overlay = path.join(userDataDir, 'builtin-plugin-updates', dirName);
+  if (!fs.existsSync(path.join(overlay, 'package.json'))) return assets;
+  if (!fs.existsSync(path.join(assets, 'package.json'))) return overlay;
+  // 覆盖层版本 >= 资产版本才优先：应用自身升级后，新资产自动接管覆盖层。
+  const vOverlay = pluginUpdater.versionOfDir(overlay);
+  const vAssets = pluginUpdater.versionOfDir(assets);
+  if (vOverlay && vAssets && updater.compareVersions(vOverlay, vAssets) < 0) return assets;
+  return overlay;
+}
 
 // 皮肤包目录：assets/skins/<id>/。每个皮肤是一个完整的 dsh client 插件包
 // （package.json + lib/ + skin.json + LICENSE/NOTICE），随桌面端分发；
@@ -3053,11 +3230,12 @@ function saveRemovedPluginIds(ids) {
 }
 
 // 恢复单个配套插件：立即复制包 + 补写 patch 行（与 syncCompanionPlugins
-// 的写入规则一致），重启服务后生效。
+// 的写入规则一致），重启服务后生效。源目录走「覆盖层优先」（V4.3）：
+// 被恢复的内置插件若是已更新版本，恢复回来的就是更新版。
 function restoreCompanionPlugin(p) {
   const profileDirP = desktopProfileDir();
   const dirName = p.dir || (p.name.includes('/') ? p.name.split('/').pop() : p.name);
-  const src = path.join(__dirname, 'assets', 'plugins', dirName);
+  const src = builtinPluginSourceDir(dirName);
   if (!fs.existsSync(path.join(src, 'package.json'))) {
     return { ok: false, error: '配套插件源目录无效: ' + src };
   }
@@ -3230,7 +3408,9 @@ function syncCompanionPlugins() {
       // 长包名会截出错误目录（dsh-session-manager → 'manager'），该插件被
       // 静默跳过（行与包都不落盘）。
       const dirName = p.dir || (p.name.includes('/') ? p.name.split('/').pop() : p.name);
-      const src = path.join(__dirname, 'assets', 'plugins', dirName);
+      // V4.3：覆盖层优先 —— 用户更新过的内置插件从 <userData>/builtin-plugin-updates
+      // 拷贝（不被资产版本还原）；应用升级后资产版本更新则自动接管。
+      const src = builtinPluginSourceDir(dirName);
       if (!fs.existsSync(path.join(src, 'package.json'))) {
         log('boot', `配套插件源目录无效，跳过: ${p.id} → ${src}`);
         continue;
@@ -4132,6 +4312,12 @@ async function boot() {
         // 客户端（封装）更新：启动 60 秒后 + 每 12 小时。
         setTimeout(() => runClientUpdateFlow(false), 60000).unref();
         setInterval(() => runClientUpdateFlow(false), 12 * 3600 * 1000).unref();
+      }
+      if (!process.env.DSH_DESKTOP_SKIP_PLUGIN_UPDATE) {
+        // 内置插件上游更新检查：启动 20 秒后 + 每 6 小时（24h 落盘节流
+        // 在 runPluginUpdateCheck 内；默认仅提示，见 plugin-updater.js）。
+        setTimeout(() => runPluginUpdateCheck(false), 20000).unref();
+        setInterval(() => runPluginUpdateCheck(false), 6 * 3600 * 1000).unref();
       }
     })
     .catch((err) => handleBootFailure(err));

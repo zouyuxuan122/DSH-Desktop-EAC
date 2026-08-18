@@ -55,7 +55,29 @@ window.__ModuleLoader__.load({
 			restartConfirm: "重启会中断当前正在运行的会话（历史记录保留）。确定现在重启服务吗？",
 			restartNow: "立即重启服务",
 			openNpm: "npm",
-			loadingInstalled: "正在读取已安装插件…"
+			loadingInstalled: "正在读取已安装插件…",
+			updateTab: "更新",
+			update: "更新",
+			updating: "更新中…",
+			updateDone: "已更新：",
+			updateFailed: "更新失败：",
+			updateAll: "全部更新",
+			upToDate: "已是最新",
+			updateAvailableBadge: "可更新",
+			updatesEmpty: "没有可更新的插件",
+			updatesBuiltin: "内置插件",
+			updatesMarket: "市场插件",
+			updatesHint: "内置插件随应用分发（版本固定），可从 npm / GitHub 上游直接更新；市场插件由 npm 安装。更新后重启服务生效。",
+			checkUpdates: "检查更新",
+			checkingUpdates: "正在检查更新…",
+			autoUpdateLabel: "内置插件自动更新",
+			autoUpdateHint: "默认关闭：只检测并提示；开启后自动下载新版本，重启服务生效。",
+			updateAllDone: "已全部更新",
+			updatePartDone: "部分更新完成",
+			noAutoUpdateBridge: "自动更新开关不可用（桌面桥接缺失）",
+			autoUpdateOn: "内置插件自动更新已开启",
+			autoUpdateOff: "内置插件自动更新已关闭",
+			updateSkipped: "已跳过此版本"
 		};
 		const en = {
 			tab: "Marketplace",
@@ -83,7 +105,29 @@ window.__ModuleLoader__.load({
 			restartConfirm: "Restarting interrupts the running session (history is kept). Restart the service now?",
 			restartNow: "Restart service now",
 			openNpm: "npm",
-			loadingInstalled: "Reading installed plugins…"
+			loadingInstalled: "Reading installed plugins…",
+			updateTab: "Updates",
+			update: "Update",
+			updating: "Updating…",
+			updateDone: "Updated: ",
+			updateFailed: "Update failed: ",
+			updateAll: "Update all",
+			upToDate: "Up to date",
+			updateAvailableBadge: "update available",
+			updatesEmpty: "No plugins with updates.",
+			updatesBuiltin: "Built-in plugins",
+			updatesMarket: "Marketplace plugins",
+			updatesHint: "Built-in plugins ship with the app (pinned versions) and can be updated straight from their npm / GitHub upstream; marketplace plugins are npm-installed. Updates take effect after a service restart.",
+			checkUpdates: "Check for updates",
+			checkingUpdates: "Checking for updates…",
+			autoUpdateLabel: "Auto-update built-in plugins",
+			autoUpdateHint: "Off by default: only detect and notify; when enabled, new versions download automatically and apply after a service restart.",
+			updateAllDone: "All plugins updated",
+			updatePartDone: "Some plugins updated",
+			noAutoUpdateBridge: "Auto-update toggle unavailable (desktop bridge missing)",
+			autoUpdateOn: "Auto-update of built-in plugins enabled",
+			autoUpdateOff: "Auto-update of built-in plugins disabled",
+			updateSkipped: "version skipped"
 		};
 		const NS = "settings.pluginMarketplace";
 		//#endregion
@@ -108,7 +152,8 @@ window.__ModuleLoader__.load({
 				descriptor("search", ["query"]),
 				descriptor("installed", []),
 				descriptor("installPlugin", ["packageName"]),
-				descriptor("uninstallPlugin", ["packageName"])
+				descriptor("uninstallPlugin", ["packageName"]),
+				descriptor("updatePlugin", ["packageName"])
 			]
 		};
 		const failureText = (result) => result.error?.message ?? String(result.error ?? "remote failed");
@@ -154,16 +199,32 @@ window.__ModuleLoader__.load({
 									}),
 									installedVersion !== null ? (0, react_jsx_runtime.jsxs)("span", {
 										className: s.installedBadge,
-										children: [t("installedTag"), " v", installedVersion]
+										children: item.installed && item.installed.hasUpdate
+											? [t("updateAvailableBadge"), " v", installedVersion, " → v", item.installed.latest ?? ""]
+											: [t("installedTag"), " v", installedVersion]
 									}) : null
 								]
 							}),
-							installedVersion !== null ? (0, react_jsx_runtime.jsx)("button", {
-								type: "button",
-								className: s.dangerBtn,
-								disabled: props.busy !== undefined,
-								onClick: props.onUninstall,
-								children: props.busy === "uninstalling" ? t("uninstalling") : t("uninstall")
+							installedVersion !== null ? (0, react_jsx_runtime.jsxs)("div", {
+								style: { display: "flex", alignItems: "center", gap: 8, flex: "none" },
+								children: [
+									item.installed && item.installed.hasUpdate ? (0, react_jsx_runtime.jsx)("button", {
+										type: "button",
+										className: s.installBtn,
+										disabled: props.busy !== undefined,
+										onClick: props.onUpdate,
+										children: props.busy === "updating" ? t("updating") : (0, react_jsx_runtime.jsxs)(react_jsx_runtime.Fragment, {
+											children: [t("update"), " v", item.installed.latest ?? ""]
+										})
+									}) : null,
+									(0, react_jsx_runtime.jsx)("button", {
+										type: "button",
+										className: s.dangerBtn,
+										disabled: props.busy !== undefined,
+										onClick: props.onUninstall,
+										children: props.busy === "uninstalling" ? t("uninstalling") : t("uninstall")
+									})
+								]
 							}) : (0, react_jsx_runtime.jsx)("button", {
 								type: "button",
 								className: s.installBtn,
@@ -227,7 +288,10 @@ window.__ModuleLoader__.load({
 					setBusy((current) => { const next = { ...current }; delete next[name]; return next; });
 					if (!result.ok) { setNotice({ kind: "error", text: failPrefix + failureText(result) }); return; }
 					setNotice({ kind: "success", text: successPrefix + name + (result.value.version ? " v" + result.value.version : "") });
-					setRestart((current) => ({ ...current, needed: true }));
+					// 只有需要重启的变更才亮起重启提示条（noop 更新不打扰）。
+					if (result.value && (result.value.restartRequired || result.value.needsRestart)) {
+						setRestart((current) => ({ ...current, needed: true }));
+					}
 					installed.refresh();
 					search(query);
 				}, (error) => {
@@ -237,6 +301,7 @@ window.__ModuleLoader__.load({
 			};
 			const doInstall = (name) => run(name, "installing", props.install, t("installDone"), t("installFailed"));
 			const doUninstall = (name) => run(name, "uninstalling", props.uninstall, t("uninstallDone"), t("uninstallFailed"));
+			const doUpdate = (name) => run(name, "updating", props.update, t("updateDone"), t("updateFailed"));
 			const requestRestart = () => {
 				if (typeof window !== "undefined" && window.confirm(t("restartConfirm"))) props.restartService().catch(() => {});
 			};
@@ -319,7 +384,8 @@ window.__ModuleLoader__.load({
 							item,
 							busy: busy[item.name],
 							onInstall: () => doInstall(item.name),
-							onUninstall: () => doUninstall(item.name)
+							onUninstall: () => doUninstall(item.name),
+							onUpdate: () => doUpdate(item.name)
 						}, item.name))
 					}) : null,
 					(0, react_jsx_runtime.jsxs)("div", {
@@ -351,10 +417,19 @@ window.__ModuleLoader__.load({
 										}),
 										(0, react_jsx_runtime.jsx)("span", {
 											className: s.installedMeta,
-											children: "v" + plugin.version + (plugin.isBundle ? " · bundle" : "") + (plugin.isClient ? " · client" : "") + (plugin.inBundles ? " · " + t("active") : "")
+											children: "v" + plugin.version + (plugin.hasUpdate ? " → v" + (plugin.latest ?? "") : "") + (plugin.isBundle ? " · bundle" : "") + (plugin.isClient ? " · client" : "") + (plugin.inBundles ? " · " + t("active") : "")
 										})
 									]
 								}),
+								plugin.hasUpdate ? (0, react_jsx_runtime.jsx)("button", {
+									type: "button",
+									className: s.installBtn,
+									disabled: busy[plugin.name] !== undefined,
+									onClick: () => doUpdate(plugin.name),
+									children: busy[plugin.name] === "updating" ? t("updating") : (0, react_jsx_runtime.jsxs)(react_jsx_runtime.Fragment, {
+										children: [t("update"), " v", plugin.latest ?? ""]
+									})
+								}) : null,
 								(0, react_jsx_runtime.jsx)("button", {
 									type: "button",
 									className: s.dangerBtn,
@@ -369,6 +444,268 @@ window.__ModuleLoader__.load({
 			});
 		}
 		//#endregion
+		/**
+		 * 「更新」标签（V4.3）：聚合两类插件的上游更新 ——
+		 *   内置插件：桌面端 IPC（dshDesktop.pluginUpdates，npm/GitHub 上游）；
+		 *   市场插件：npm registry 最新版（Remote installed() 已带 hasUpdate）。
+		 * 更新动作全在主进程/Remote 完成，这里只负责展示与触发。
+		 */
+		function UpdatesTab(props) {
+			const t = props.t;
+			const bridge = typeof window !== "undefined" ? window.dshDesktop : undefined;
+			const [builtin, setBuiltin] = react.useState({ status: "idle", list: [], autoUpdate: false, checkedAt: null, error: "" });
+			const [market, setMarket] = react.useState({ status: "idle", list: [], error: "" });
+			const [busy, setBusy] = react.useState({});
+			const [notice, setNotice] = react.useState(null);
+			const [restart, setRestart] = react.useState({ needed: false, available: false });
+			const runRef = react.useRef(0);
+			react.useEffect(() => {
+				setRestart((current) => ({ ...current, available: bridge !== undefined && typeof bridge.restartService === "function" }));
+			}, []);
+			const refresh = react.useCallback((force) => {
+				const run = ++runRef.current;
+				if (bridge !== undefined && typeof bridge.pluginUpdates === "object") {
+					setBuiltin((current) => ({ ...current, status: "loading", error: "" }));
+					bridge.pluginUpdates.list(!!force).then((res) => {
+						if (run !== runRef.current) return;
+						if (res === null || res === undefined) {
+							setBuiltin({ status: "error", list: [], autoUpdate: false, checkedAt: null, error: t("noAutoUpdateBridge") });
+							return;
+						}
+						setBuiltin({ status: "ready", list: res.list ?? [], autoUpdate: !!res.autoUpdate, checkedAt: res.checkedAt ?? null, error: res.error ?? "" });
+					}, (error) => {
+						if (run === runRef.current) setBuiltin({ status: "error", list: [], autoUpdate: false, checkedAt: null, error: String(error?.message ?? error) });
+					});
+				} else {
+					setBuiltin({ status: "unavailable", list: [], autoUpdate: false, checkedAt: null, error: "" });
+				}
+				setMarket((current) => ({ ...current, status: "loading", error: "" }));
+				props.installed().then((result) => {
+					if (run !== runRef.current) return;
+					if (!result.ok) { setMarket({ status: "error", list: [], error: failureText(result) }); return; }
+					setMarket({ status: "ready", list: (result.value.plugins ?? []).filter((p) => p.hasUpdate), error: "" });
+				}, (error) => {
+					if (run === runRef.current) setMarket({ status: "error", list: [], error: String(error?.message ?? error) });
+				});
+			}, [props]);
+			react.useEffect(() => { refresh(false); }, [refresh]);
+			const run = (key, verb, call, successPrefix, failPrefix) => {
+				setBusy((current) => ({ ...current, [key]: verb }));
+				setNotice(null);
+				call().then((result) => {
+					setBusy((current) => { const next = { ...current }; delete next[key]; return next; });
+					if (!result.ok) { setNotice({ kind: "error", text: failPrefix + failureText(result) }); return; }
+					setNotice({ kind: "success", text: successPrefix + (result.version ? " v" + result.version : "") });
+					if (result.restartRequired) setRestart((current) => ({ ...current, needed: true }));
+					refresh(false);
+				}, (error) => {
+					setBusy((current) => { const next = { ...current }; delete next[key]; return next; });
+					setNotice({ kind: "error", text: failPrefix + String(error?.message ?? error) });
+				});
+			};
+			const updatable = [
+				...builtin.list.filter((x) => x.hasUpdate).map((x) => ({
+					kind: "builtin",
+					key: "builtin:" + x.id,
+					name: x.name,
+					current: x.current,
+					latest: x.latest,
+					skipped: !!x.skipped,
+					call: () => props.updateBuiltin(x.id)
+				})),
+				...market.list.map((p) => ({
+					kind: "market",
+					key: "market:" + p.name,
+					name: p.name,
+					current: p.version,
+					latest: p.latest,
+					skipped: false,
+					call: () => props.update(p.name)
+				}))
+			];
+			const updateAll = () => {
+				for (const item of updatable) if (!item.skipped) run(item.key, "updating", item.call, t("updateDone"), t("updateFailed"));
+			};
+			const toggleAuto = (enabled) => {
+				if (bridge === undefined || typeof bridge.pluginUpdates !== "object") { setNotice({ kind: "error", text: t("noAutoUpdateBridge") }); return; }
+				bridge.pluginUpdates.setAutoUpdate(enabled).then((res) => {
+					if (res && res.ok) {
+						setBuiltin((current) => ({ ...current, autoUpdate: enabled }));
+						setNotice({ kind: "success", text: enabled ? t("autoUpdateOn") : t("autoUpdateOff") });
+					} else {
+						setNotice({ kind: "error", text: t("noAutoUpdateBridge") });
+					}
+				}, () => setNotice({ kind: "error", text: t("noAutoUpdateBridge") }));
+			};
+			const requestRestart = () => {
+				if (typeof window !== "undefined" && window.confirm(t("restartConfirm"))) props.restartService().catch(() => {});
+			};
+			const checking = builtin.status === "loading" || market.status === "loading";
+			return (0, react_jsx_runtime.jsxs)("div", {
+				className: s.section,
+				children: [
+					notice !== null ? (0, react_jsx_runtime.jsxs)("div", {
+						className: notice.kind === "success" ? s.success : s.failure,
+						role: "status",
+						children: [notice.text, (0, react_jsx_runtime.jsx)("button", {
+							type: "button",
+							className: s.dangerBtn,
+							onClick: () => setNotice(null),
+							children: "×"
+						})]
+					}) : null,
+					restart.needed ? (0, react_jsx_runtime.jsxs)("div", {
+						className: s.restart,
+						role: "status",
+						children: [
+							(0, react_jsx_runtime.jsx)("span", { children: t("restartHint") }),
+							restart.available ? (0, react_jsx_runtime.jsx)("button", {
+								type: "button",
+								onClick: requestRestart,
+								children: t("restartNow")
+							}) : null
+						]
+					}) : null,
+					(0, react_jsx_runtime.jsx)("p", { className: s.installedMeta, children: t("updatesHint") }),
+					(0, react_jsx_runtime.jsxs)("div", {
+						className: s.catalogHeading,
+						children: [
+							(0, react_jsx_runtime.jsx)("h3", { children: t("updateTab") }),
+							(0, react_jsx_runtime.jsxs)("div", {
+								style: { display: "flex", gap: 8, alignItems: "center", flex: "none" },
+								children: [
+									(0, react_jsx_runtime.jsx)("button", {
+										type: "button",
+										className: s.installBtn,
+										disabled: checking,
+										onClick: () => refresh(true),
+										children: checking ? t("checkingUpdates") : t("checkUpdates")
+									}),
+									updatable.length > 0 ? (0, react_jsx_runtime.jsx)("button", {
+										type: "button",
+										className: s.installBtn,
+										disabled: checking || updatable.every((x) => x.skipped),
+										onClick: updateAll,
+										children: t("updateAll")
+									}) : null
+								]
+							})
+						]
+					}),
+					bridge !== undefined && typeof bridge.pluginUpdates === "object" ? (0, react_jsx_runtime.jsxs)("label", {
+						className: s.search,
+						style: { display: "flex", alignItems: "center", gap: 8 },
+						children: [
+							(0, react_jsx_runtime.jsx)("input", {
+								type: "checkbox",
+								checked: builtin.autoUpdate,
+								onChange: (event) => toggleAuto(event.target.checked)
+							}),
+							(0, react_jsx_runtime.jsx)("span", { children: t("autoUpdateLabel") }),
+							(0, react_jsx_runtime.jsx)("span", { className: s.installedMeta, children: t("autoUpdateHint") })
+						]
+					}) : null,
+					builtin.status === "error" ? (0, react_jsx_runtime.jsxs)("div", {
+						className: s.failure,
+						role: "alert",
+						children: [
+							(0, react_jsx_runtime.jsx)("p", { children: t("updateFailed") + builtin.error }),
+							(0, react_jsx_runtime.jsx)("button", {
+								type: "button",
+								onClick: () => refresh(true),
+								children: t("retry")
+							})
+						]
+					}) : null,
+					market.status === "error" ? (0, react_jsx_runtime.jsx)("p", {
+						className: s.status,
+						children: t("updateFailed") + market.error
+					}) : null,
+					builtin.list.length > 0 ? (0, react_jsx_runtime.jsxs)("div", {
+						className: s.catalogHeading,
+						children: [
+							(0, react_jsx_runtime.jsx)("h3", { children: t("updatesBuiltin") }),
+							(0, react_jsx_runtime.jsx)("span", { children: builtin.list.length })
+						]
+					}) : null,
+					builtin.list.length > 0 ? (0, react_jsx_runtime.jsx)("ul", {
+						className: s.installedList,
+						children: builtin.list.map((plugin) => (0, react_jsx_runtime.jsxs)("li", {
+							className: s.installedRow,
+							children: [
+								(0, react_jsx_runtime.jsxs)("div", {
+									className: s.installedInfo,
+									children: [
+										(0, react_jsx_runtime.jsx)("span", {
+											className: s.installedName,
+											children: plugin.name
+										}),
+										(0, react_jsx_runtime.jsxs)("span", {
+											className: s.installedMeta,
+											children: ["v", plugin.current ?? "?", " → v", plugin.latest ?? "?", plugin.skipped ? " · " + t("updateSkipped") : ""]
+										})
+									]
+								}),
+								plugin.skipped ? null : (0, react_jsx_runtime.jsx)("button", {
+									type: "button",
+									className: s.installBtn,
+									disabled: busy["builtin:" + plugin.id] !== undefined,
+									onClick: () => run("builtin:" + plugin.id, "updating", () => props.updateBuiltin(plugin.id), t("updateDone"), t("updateFailed")),
+									children: busy["builtin:" + plugin.id] === "updating" ? t("updating") : (0, react_jsx_runtime.jsxs)(react_jsx_runtime.Fragment, {
+										children: [t("update"), " v", plugin.latest ?? ""]
+									})
+								})
+							]
+						}, plugin.id))
+					}) : null,
+					market.list.length > 0 ? (0, react_jsx_runtime.jsxs)("div", {
+						className: s.catalogHeading,
+						children: [
+							(0, react_jsx_runtime.jsx)("h3", { children: t("updatesMarket") }),
+							(0, react_jsx_runtime.jsx)("span", { children: market.list.length })
+						]
+					}) : null,
+					market.list.length > 0 ? (0, react_jsx_runtime.jsx)("ul", {
+						className: s.installedList,
+						children: market.list.map((plugin) => (0, react_jsx_runtime.jsxs)("li", {
+							className: s.installedRow,
+							children: [
+								(0, react_jsx_runtime.jsxs)("div", {
+									className: s.installedInfo,
+									children: [
+										(0, react_jsx_runtime.jsx)("span", {
+											className: s.installedName,
+											children: plugin.name
+										}),
+										(0, react_jsx_runtime.jsxs)("span", {
+											className: s.installedMeta,
+											children: ["v", plugin.version, " → v", plugin.latest ?? ""]
+										})
+									]
+								}),
+								(0, react_jsx_runtime.jsx)("button", {
+									type: "button",
+									className: s.installBtn,
+									disabled: busy[plugin.name] !== undefined,
+									onClick: () => run("market:" + plugin.name, "updating", () => props.update(plugin.name), t("updateDone"), t("updateFailed")),
+									children: busy[plugin.name] === "updating" ? t("updating") : (0, react_jsx_runtime.jsxs)(react_jsx_runtime.Fragment, {
+										children: [t("update"), " v", plugin.latest ?? ""]
+									})
+								})
+							]
+						}, plugin.name))
+					}) : null,
+					checking ? (0, react_jsx_runtime.jsx)("p", {
+						className: s.status,
+						children: t("checkingUpdates")
+					}) : null,
+					!checking && updatable.length === 0 && builtin.status !== "error" && builtin.status !== "unavailable" ? (0, react_jsx_runtime.jsx)("p", {
+						className: s.status,
+						children: t("updatesEmpty")
+					}) : null
+				]
+			});
+		}
 		//#region client index
 		/** Required browser services. */
 		const inject = ["slots", "locale", "remote"];
@@ -411,6 +748,14 @@ window.__ModuleLoader__.load({
 				installed: async () => (await remote()).installed(),
 				install: async (name) => (await remote()).installPlugin(name),
 				uninstall: async (name) => (await remote()).uninstallPlugin(name),
+				update: async (name) => (await remote()).updatePlugin(name),
+				updateBuiltin: (id) => {
+					const bridge = typeof window !== "undefined" ? window.dshDesktop : undefined;
+					if (bridge === undefined || typeof bridge.pluginUpdates !== "object") {
+						return Promise.resolve({ ok: false, error: "desktop bridge missing (pluginUpdates)" });
+					}
+					return bridge.pluginUpdates.update(String(id));
+				},
 				restartService: () => {
 					const bridge = typeof window !== "undefined" ? window.dshDesktop : undefined;
 					if (bridge !== undefined && typeof bridge.restartService === "function") return bridge.restartService();
@@ -425,6 +770,15 @@ window.__ModuleLoader__.load({
 				locale: NS,
 				inject: injected
 			}, MarketplaceTab));
+			// 「更新」标签（V4.3）：内置插件 + 市场插件更新聚合。
+			ctx.slots.inject("settings.plugins.tab", () => ctx.slots.register({
+				name: "settings.plugins.tab",
+				id: "updates",
+				order: 21,
+				label: () => t("updateTab"),
+				locale: NS,
+				inject: injected
+			}, UpdatesTab));
 		}
 		//#endregion
 		exports.apply = apply;
