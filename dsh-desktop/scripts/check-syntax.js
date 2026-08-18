@@ -32,6 +32,7 @@ const entryFiles = [
   'web-service-supervisor.js',
   'shutdown-coordinator.js',
   'platform/process-tree.js',
+  'platform/shortcuts.js',
   'ipc/contracts.js',
   'ipc/register-ipc.js',
   'profile/runtime-patches.js',
