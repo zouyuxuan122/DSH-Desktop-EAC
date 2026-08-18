@@ -45,6 +45,7 @@ files:
   - renderer-recovery.js
   - web-service-supervisor.js
   - shutdown-coordinator.js
+  - platform/process-tree.js
   - watchdog.js
   - builtin-plugin-state.js
   - preload.js
