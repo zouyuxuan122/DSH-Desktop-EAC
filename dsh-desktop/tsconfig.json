@@ -1,0 +1,31 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "lib": ["ES2022"],
+    "module": "nodenext",
+    "moduleResolution": "nodenext",
+    "allowJs": true,
+    "checkJs": true,
+    "noEmit": true,
+    "strict": true,
+    "useUnknownInCatchVariables": true,
+    "noUncheckedIndexedAccess": true,
+    "skipLibCheck": true,
+    "esModuleInterop": true,
+    "types": ["node"]
+  },
+  "include": [
+    "types/js-yaml.d.ts",
+    "platform/process-tree.js",
+    "platform/shortcuts.js",
+    "ipc/contracts.js",
+    "settings.js",
+    "web-service-supervisor.js",
+    "shutdown-coordinator.js",
+    "profile/runtime-patches.js",
+    "profile/companion-sync.js",
+    "profile/plugin-manager.js",
+    "profile/profile-guard.js",
+    "client-update-flow.js"
+  ]
+}

@@ -110,7 +110,7 @@ jobs:
           node scripts/check-glibc.cjs node_modules/node-pty/build/Release/pty.node
         working-directory: dsh-desktop
 
-      # node-pty@1.1.0 的 npm 包只随附 darwin/win32 的 prebuilds，linux-x64 没有，
+          # node-pty@1.1.0 不提供 linux-x64 预编译包，
       # 必须在安装阶段由 node-gyp 现场编译出 build/Release/pty.node。若这里没
       # 生成（脚本被跳过 / 工具链缺失），装出来的包启动即报
       # "Cannot find module './prebuilds/linux-x64//pty.node'"（3.0.1 Arch 事故）。

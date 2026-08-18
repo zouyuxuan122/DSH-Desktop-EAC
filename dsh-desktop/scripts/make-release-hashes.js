@@ -8,8 +8,7 @@
 // 上传（保持原文件名）。
 //
 // Linux fork 扩展：除 Windows exe/blockmap 外也覆盖 Linux 包格式
-// （.pacman / .deb / .rpm / .AppImage）与 macOS 产物（.dmg / .zip / mac
-// blockmap），dist:linux 链路同样产出校验清单。
+// （.pacman / .deb / .rpm / .AppImage），dist:linux 链路同样产出校验清单。
 //
 // 用法：node scripts/make-release-hashes.js [distDir]
 
@@ -17,7 +16,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 const crypto = require('node:crypto');
 
-const ARTIFACT_RE = /\.(exe|blockmap|pacman|deb|rpm|AppImage|dmg|zip)$/i;
+const ARTIFACT_RE = /\.(exe|blockmap|pacman|deb|rpm|AppImage)$/i;
 
 const distDir = path.resolve(process.argv[2] || path.join(__dirname, '..', 'dist'));
 

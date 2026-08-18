@@ -50,21 +50,36 @@
       : '正在更新 @deepseek-ai/dsh → ' + version;
     document.getElementById('note').textContent = kind === 'client'
       ? '从上游仓库下载新版本客户端，完成后自动替换并重启应用。'
-      : '正在从 npm 官方源下载新版本及其依赖。首次更新约需下载 250MB，请耐心等待；详细进度见日志目录中的 update.log。';
+      : '正在下载新版本及其依赖。首次更新约需下载 250MB，请耐心等待；详细进度见日志目录中的 update.log。';
   };
-  window.__setProgress = function (pct, receivedMB, totalMB) {
+  function fmtDur(sec) {
+    sec = Math.max(0, Math.round(sec || 0));
+    if (!isFinite(sec)) return '--:--';
+    const h = Math.floor(sec / 3600);
+    const m = Math.floor((sec % 3600) / 60);
+    const s = sec % 60;
+    const mm = String(m).padStart(2, '0');
+    const ss = String(s).padStart(2, '0');
+    return h > 0 ? h + ':' + mm + ':' + ss : mm + ':' + ss;
+  }
+  window.__setProgress = function (pct, receivedMB, totalMB, meta) {
     document.getElementById('spinner').style.display = 'none';
     document.getElementById('progress').style.display = 'block';
     const bar = document.getElementById('bar');
     const pctEl = document.getElementById('pct');
+    const m = meta || {};
     if (pct < 0) {
       bar.className = 'bar indeterminate';
-      pctEl.textContent = '正在下载…';
+      pctEl.textContent = m.stage || '正在下载…';
     } else {
       bar.className = 'bar';
       const p = Math.max(2, Math.min(100, pct));
       bar.style.width = p + '%';
-      pctEl.textContent = (receivedMB || 0) + ' / ' + (totalMB || '?') + ' MB · ' + p + '%';
+      let t = (receivedMB || 0) + ' / ' + (totalMB || '?') + ' MB · ' + p + '%';
+      if (typeof m.speedMBps === 'number') t += ' · ' + m.speedMBps.toFixed(1) + ' MB/s';
+      if (typeof m.etaSec === 'number') t += ' · 剩余 ' + fmtDur(m.etaSec);
+      if (m.stage) t += ' · ' + m.stage;
+      pctEl.textContent = t;
     }
   };
 </script>

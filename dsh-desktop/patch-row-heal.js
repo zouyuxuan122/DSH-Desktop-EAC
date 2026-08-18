@@ -20,13 +20,69 @@ const path = require('path');
 // heal pass fixes ALREADY-BROKEN rows living in existing user profiles, so
 // upgrading to the fixed build repairs them without any manual edit.
 
-/** Serialize a config object as patch-row YAML lines (2-space step from `name:`). */
-function configLinesFor(config) {
-  let out = '      config:\n';
+/**
+ * Serialize a config object as patch-row YAML lines. `baseIndent` is the
+ * indentation of the row's `- id:` line: insert-block rows sit at 4 spaces
+ * (config at 6, keys at 8 — the legacy default), while top-level rows
+ * written by the plugin manager / onboarding wizard sit at 0 (config at 2,
+ * keys at 4). A config block at the wrong step is a YAML parse error that
+ * takes down the whole plugin tree (`dsh web` exits 1), so the step must
+ * always mirror the row it belongs to.
+ */
+function configLinesFor(config, baseIndent = 4) {
+  const step = ' '.repeat(baseIndent + 2);
+  const step2 = ' '.repeat(baseIndent + 4);
+  let out = `${step}config:\n`;
   for (const [k, v] of Object.entries(config || {})) {
-    out += `        ${k}: ${JSON.stringify(v)}\n`;
+    out += `${step2}${k}: ${JSON.stringify(v)}\n`;
   }
   return out;
+}
+
+/**
+ * Rewrite a row's config block to the indentation matching its own `- id:`
+ * line (config must sit at id-indent + 2, keys at + 4 — the same level as
+ * `name:`). Heals rows that a pre-wizard build broke by appending a 6-space
+ * config block to a TOP-LEVEL row (`- id: x` at column 0): that mix is a
+ * YAML mapping-entry indentation error, and since the row already carries a
+ * config key the "missing config" healers leave it untouched forever.
+ * Idempotent; returns the patch unchanged when nothing needs fixing.
+ */
+function normalizeRowConfigIndent(patch, id) {
+  if (typeof patch !== 'string' || patch === '' || !id) return patch;
+  const esc = String(id).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const rowRe = new RegExp(`^([\\t ]*)- id: ${esc}(?![A-Za-z0-9_.-])`);
+  const lines = patch.split(/\r?\n/);
+  let changed = false;
+  for (let i = 0; i < lines.length; i++) {
+    const m = rowRe.exec(lines[i]);
+    if (!m) continue;
+    const idIndent = m[1].replace(/\t/g, '  ').length;
+    const wantConfig = ' '.repeat(idIndent + 2) + 'config:';
+    for (let j = i + 1; j < lines.length; j++) {
+      const cur = lines[j];
+      const t = cur.trim();
+      if (t === '' || /^#/.test(t)) continue;
+      if (/^[\t ]*- id:/.test(cur) || t === 'insert:') break;
+      const curIndent = (cur.match(/^[\t ]*/) || [''])[0].replace(/\t/g, '  ').length;
+      if (curIndent <= idIndent) break;
+      if (!/^[\t ]*config:/.test(cur) || t !== 'config:') continue;
+      if (cur !== wantConfig) {
+        const diff = curIndent - (idIndent + 2);
+        lines[j] = wantConfig;
+        for (let k = j + 1; k < lines.length; k++) {
+          const kl = lines[k];
+          if (kl.trim() === '' || /^#/.test(kl)) continue;
+          const ki = (kl.match(/^[\t ]*/) || [''])[0].replace(/\t/g, '  ').length;
+          if (ki <= idIndent + 2) break;
+          lines[k] = ' '.repeat(ki - diff) + kl.trimStart();
+        }
+        changed = true;
+      }
+      break;
+    }
+  }
+  return changed ? lines.join('\n') : patch;
 }
 
 /**
@@ -37,15 +93,20 @@ function configLinesFor(config) {
 function healSoulMdPatchRow(patch, config = { path: 'soul.md' }) {
   const healed = [];
   if (typeof patch !== 'string' || patch === '') return { patch, healed };
+  const normalized = normalizeRowConfigIndent(patch, 'soul-md');
+  if (normalized !== patch) healed.push('soul-md');
+  patch = normalized;
   // A row looks like:
   //   - insert:
   //       - id: soul-md
   //         name: 'dsh-soul-md'
   //         (config: ... optional)
+  // or a top-level row (plugin manager / onboarding wizard, id at column 0).
   // Match the `id:` + `name:` lines; only rewrite when the NEXT non-blank
   // line is not a `config:` key (negative lookahead keeps healed rows stable).
+  // The config block mirrors the row's own indent (id indent + 2 / + 4).
   const rowRe = /(^[\t ]*- id: soul-md\b[^\n]*\n[\t ]*name: ['"]?[^'"\n]+['"]?\n)(?![\t ]*config:)/gm;
-  let out = patch.replace(rowRe, (m) => m + configLinesFor(config));
+  let out = patch.replace(rowRe, (m) => m + configLinesFor(config, (m.match(/^[\t ]*/) || [''])[0].replace(/\t/g, '  ').length));
   if (out !== patch) healed.push('soul-md');
   return { patch: out, healed };
 }
@@ -60,11 +121,14 @@ function healSoulMdPatchRow(patch, config = { path: 'soul.md' }) {
 function healRowConfig(patch, id, config) {
   const healed = [];
   if (typeof patch !== 'string' || patch === '' || !id || !config) return { patch, healed };
+  const normalized = normalizeRowConfigIndent(patch, id);
+  if (normalized !== patch) healed.push(id);
+  patch = normalized;
   const rowRe = new RegExp(
-    `(^[\t ]*- id: ${String(id).replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b[^\\n]*\\n[\\t ]*name: ['"]?[^'"\\n]+['"]?\\n)(?![\\t ]*config:)`,
+    `(^[\\t ]*- id: ${String(id).replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}(?![A-Za-z0-9_.-])[^\\n]*\\n[\\t ]*name: ['"]?[^'"\\n]+['"]?\\n)(?![\\t ]*config:)`,
     'gm'
   );
-  const out = patch.replace(rowRe, (m) => m + configLinesFor(config));
+  const out = patch.replace(rowRe, (m) => m + configLinesFor(config, (m.match(/^[\t ]*/) || [''])[0].replace(/\t/g, '  ').length));
   if (out !== patch) healed.push(id);
   return { patch: out, healed };
 }
@@ -197,4 +261,4 @@ function healRowDisabled(patch, id) {
   return { patch: out, healed };
 }
 
-module.exports = { configLinesFor, healSoulMdPatchRow, healRowConfig, healRowDisabled, removeBundledRowDuplicates, bundlePatchEntryIds, collectBundleEntryIds };
+module.exports = { configLinesFor, normalizeRowConfigIndent, healSoulMdPatchRow, healRowConfig, healRowDisabled, removeBundledRowDuplicates, bundlePatchEntryIds, collectBundleEntryIds };

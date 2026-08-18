@@ -143,6 +143,15 @@
 ; Force-kill was already attempted in customInit; if something survives
 ; (elevated instance), proceeding still lets the silent path work and never
 ; traps the user in a retry MessageBox loop.
+; V4.2（用户反馈问题 1）：原先每轮开 3 个隐藏 cmd 跑 `tasklist | find` 管道，
+; nsExec 在无控制台上下文中管道读取偶发永不返回 —— 安装界面黑窗挂死、
+; 关掉又弹新窗。现改用无管道的单进程探测：
+;   nsExec 直接 CreateProcess 起 tasklist（不经 cmd.exe、无 `|`、无 find），
+;   /FI 按映像名精确过滤 + /FO CSV /NH 输出 —— 进程存在时首字符必为 `"`
+;   （"映像名",...），不存在时是本地化的 "INFO: No tasks..."（或空），
+;   首字符判断与系统语言无关。等待循环有界（20 次 × 500ms），超时放行。
+; （不用 nsProcess 插件：electron-builder 自带 NSIS 加载不了其函数，
+;  编译即报 "Plugin function not found"。）
 !macro customCheckAppRunning
   StrCpy $1 0
   dshWaitLoop:
@@ -154,21 +163,27 @@
 
     StrCpy $2 0
 
-    nsExec::Exec 'cmd /C tasklist /FI "IMAGENAME eq Deepseek Harness EAC.exe" /NH | find /I "Deepseek Harness EAC.exe"'
+    nsExec::ExecToStack 'tasklist /FI "IMAGENAME eq Deepseek Harness EAC.exe" /FO CSV /NH'
+    Pop $3
     Pop $0
-    ${If} $0 == 0
+    StrCpy $4 $0 1
+    ${If} $4 == '"'
       StrCpy $2 1
     ${EndIf}
 
-    nsExec::Exec 'cmd /C tasklist /FI "IMAGENAME eq Deepseek Harness EAC v2.0.exe" /NH | find /I "Deepseek Harness EAC v2.0.exe"'
+    nsExec::ExecToStack 'tasklist /FI "IMAGENAME eq Deepseek Harness EAC v2.0.exe" /FO CSV /NH'
+    Pop $3
     Pop $0
-    ${If} $0 == 0
+    StrCpy $4 $0 1
+    ${If} $4 == '"'
       StrCpy $2 1
     ${EndIf}
 
-    nsExec::Exec 'cmd /C tasklist /FI "IMAGENAME eq Deepseek Harness EAC v1.0.exe" /NH | find /I "Deepseek Harness EAC v1.0.exe"'
+    nsExec::ExecToStack 'tasklist /FI "IMAGENAME eq Deepseek Harness EAC v1.0.exe" /FO CSV /NH'
+    Pop $3
     Pop $0
-    ${If} $0 == 0
+    StrCpy $4 $0 1
+    ${If} $4 == '"'
       StrCpy $2 1
     ${EndIf}
 
@@ -177,4 +192,39 @@
       Goto dshWaitLoop
     ${EndIf}
   dshWaitDone:
+!macroend
+
+; ---------------------------------------------------------------------------
+; 卸载清理选项（V4.2，用户建议）：卸载完成前询问是否同时删除用户数据。
+; 删除范围：
+;   · %APPDATA%\Deepseek Harness EAC  —— 设置/日志/更新缓存/登录状态
+;   · %USERPROFILE%\.dsh               —— web profile 与全部对话记录
+; 默认「否」（保留）——与 electron-builder 默认不删 appdata 的行为一致，
+; 重装后设置与历史会话原样恢复。
+; ---------------------------------------------------------------------------
+
+; 尽力删除一个目录；深层 node_modules 超过 MAX_PATH 时用 robocopy 镜像
+; 空目录兜底（与 customInit 的 long-path wipe 同一手法）。
+!macro dshWipeDir target
+  ClearErrors
+  RMDir /r "${target}"
+  ${If} ${FileExists} "${target}"
+    CreateDirectory "$TEMP\dsh-empty-wipe"
+    nsExec::Exec 'robocopy "$TEMP\dsh-empty-wipe" "${target}" /MIR /NFL /NDL /NJH /NJS /NP /R:1 /W:1'
+    RMDir /r "${target}"
+    RMDir "$TEMP\dsh-empty-wipe"
+  ${EndIf}
+!macroend
+
+!macro customUnInstall
+  ; 先确保没有残留进程占用用户数据文件（静默卸载时应用可能还在跑）
+  nsExec::Exec 'taskkill /F /T /IM "Deepseek Harness EAC.exe"'
+  MessageBox MB_YESNO|MB_ICONQUESTION|MB_DEFBUTTON2 \
+    "是否同时删除用户数据？$\r$\n$\r$\n将删除：$\r$\n  · 设置与登录状态（%APPDATA%\Deepseek Harness EAC）$\r$\n  · Web 工作目录与全部对话记录（%USERPROFILE%\.dsh）$\r$\n$\r$\n选择「否」（推荐）则保留数据，重装后原样恢复。" \
+    IDYES dshUnWipe IDNO dshUnKeep
+  Goto dshUnKeep
+  dshUnWipe:
+    !insertmacro dshWipeDir "$APPDATA\Deepseek Harness EAC"
+    !insertmacro dshWipeDir "$PROFILE\.dsh"
+  dshUnKeep:
 !macroend

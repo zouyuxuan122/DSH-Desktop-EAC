@@ -1,0 +1,21 @@
+{
+  "name": "dsh-file-drop",
+  "description": "拖入文件到对话（DSH Desktop 配套插件）：把本地文件直接拖进对话输入框 —— 文本/代码文件内容自动注入输入框（体积上限内），图片/二进制/超大文件注入路径提示文本，配合 inspect_image 与文件工具让 agent 直接处理。",
+  "version": "0.1.0",
+  "type": "module",
+  "main": "lib/index.js",
+  "exports": {
+    ".": "./lib/index.js",
+    "./client": "./lib/client.js",
+    "./package.json": "./package.json"
+  },
+  "dsh": {
+    "client": {
+      "platform": "web",
+      "inject": [
+        "@deepseek-ai/dsh-client-runtime"
+      ]
+    }
+  },
+  "license": "MIT"
+}

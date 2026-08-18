@@ -11,6 +11,7 @@ import { join } from 'node:path';
 
 const ROOT = join(fileURLToPath(import.meta.url), '..', '..');
 const mainSrc = readFileSync(join(ROOT, 'main.js'), 'utf8');
+const registerIpcSrc = readFileSync(join(ROOT, 'ipc', 'register-ipc.js'), 'utf8');
 const preloadSrc = readFileSync(join(ROOT, 'preload.js'), 'utf8');
 
 test('main.js requires the renderer-recovery module', () => {
@@ -30,13 +31,15 @@ test('main.js runs the watchdog lifecycle: run-state write, spawn, clean-exit ma
 });
 
 test('main.js registers the heartbeat IPC and polls heartbeats', () => {
-  assert.ok(mainSrc.includes("'dsh:renderer-heartbeat'"), 'heartbeat IPC channel missing');
+  // IPC 注册已迁到 ipc/register-ipc.js，main.js 通过 registerAppIpc() 接线。
+  assert.ok(registerIpcSrc.includes("'dsh:renderer-heartbeat'"), 'heartbeat IPC channel missing');
+  assert.ok(mainSrc.includes('registerAppIpc()'), 'registerAppIpc() is never called');
   assert.ok(/checkHeartbeats\(\)/.test(mainSrc), 'checkHeartbeats() loop missing');
 });
 
 test('main.js serves the local recovery page IPC endpoints', () => {
   for (const ch of ['chrome:recovery-state', 'chrome:recovery-reload', 'chrome:recovery-restart', 'chrome:recovery-open-logs']) {
-    assert.ok(mainSrc.includes(`'${ch}'`), `IPC handler ${ch} missing`);
+    assert.ok(registerIpcSrc.includes(`'${ch}'`), `IPC handler ${ch} missing`);
   }
   assert.ok(existsSync(join(ROOT, 'assets', 'recovery.html')), 'assets/recovery.html missing');
 });

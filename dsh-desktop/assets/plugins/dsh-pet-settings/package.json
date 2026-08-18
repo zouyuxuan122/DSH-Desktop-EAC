@@ -1,0 +1,22 @@
+{
+  "name": "dsh-pet-settings",
+  "description": "桌宠设置分区（DSH Desktop 配套插件）：在设置页新增「桌宠」分区，集中管理页面桌宠（dsh-pet 开关，大小/位置在桌宠齿轮面板调整）与大肥鱼桌面伴侣（启用、角色大小、空闲微动作频率、减少动态，走 dsh-dafeiyu config 端点，即时生效）。",
+  "version": "0.1.0",
+  "type": "module",
+  "main": "lib/index.js",
+  "exports": {
+    ".": "./lib/index.js",
+    "./client": "./lib/client.js",
+    "./package.json": "./package.json"
+  },
+  "dsh": {
+    "client": {
+      "platform": "web",
+      "inject": [
+        "@deepseek-ai/dsh-client-runtime",
+        "@deepseek-ai/dsh-client-ui-slots"
+      ]
+    }
+  },
+  "license": "MIT"
+}

@@ -51,7 +51,8 @@ const REMOTE_INVOCATIONS = [
 	descriptor("search", ["query"]),
 	descriptor("installed", []),
 	descriptor("installPlugin", ["packageName"]),
-	descriptor("uninstallPlugin", ["packageName"])
+	descriptor("uninstallPlugin", ["packageName"]),
+	descriptor("updatePlugin", ["packageName"])
 ];
 
 /** The harness home the host booted with (same rule dsh itself uses). */
@@ -138,6 +139,40 @@ function readJson(path) {
 	return JSON.parse(readFileSync(path, "utf8"));
 }
 
+// ---------------------------------------------------------------------------
+// 更新检测（V4.3）：npm view <name> version 批量查最新版，TTL 缓存
+// （与 dsh-webui-market 的 checkUpdates 同思路，10 分钟）；单包失败记 null，
+// 不拖垮整个清单。
+// ---------------------------------------------------------------------------
+const UPDATES_TTL_MS = 10 * 60 * 1000;
+let latestCache = { at: 0, byName: {} };
+
+async function latestVersions(names) {
+	const now = Date.now();
+	const fresh = latestCache.byName && now - latestCache.at < UPDATES_TTL_MS;
+	const need = fresh ? names.filter((n) => !(n in latestCache.byName)) : [...new Set(names)];
+	if (need.length > 0) {
+		const results = await Promise.all(need.map(async (n) => {
+			try {
+				const run = await runNpm(["view", n, "version"], 45 * 1000);
+				const lines = (run.stdout || "").trim().split(/\r?\n/).filter(Boolean);
+				const v = lines[lines.length - 1].trim();
+				return [n, /^\d+\.\d+\.\d+/.test(v) ? v : null];
+			} catch {
+				return [n, null];
+			}
+		}));
+		latestCache = { at: now, byName: { ...(fresh ? latestCache.byName : {}), ...Object.fromEntries(results) } };
+	}
+	const out = {};
+	for (const n of names) out[n] = latestCache.byName[n] ?? null;
+	return out;
+}
+
+function hasUpdateOf(version, latest) {
+	return !!version && !!latest && version !== latest;
+}
+
 /** Snapshot of what the web profile currently has installed (user-managed). */
 function snapshot() {
 	const dir = profileDir();
@@ -219,7 +254,7 @@ class PluginMarketplaceGateway extends TypertRemoteService {
 		// Apply the @Remote markers without decorator syntax (the host runs
 		// plain ESM on Node 22). Marker state lives on the prototype and
 		// re-marking is an idempotent no-op, so this is safe per instance.
-		for (const name of ["search", "installed", "installPlugin", "uninstallPlugin"]) {
+		for (const name of ["search", "installed", "installPlugin", "uninstallPlugin", "updatePlugin"]) {
 			const decorator = Remote(name);
 			decorator(PluginMarketplaceGateway.prototype[name], {
 				name,
@@ -263,7 +298,7 @@ class PluginMarketplaceGateway extends TypertRemoteService {
 			throw new Error("npm search 返回了无法解析的结果");
 		}
 		const rows = Array.isArray(parsed) ? parsed : [];
-		const installed = snapshot();
+		const installed = await this.installed();
 		const byName = new Map(installed.plugins.map((plugin) => [plugin.name, plugin]));
 		return {
 			query: text,
@@ -276,15 +311,21 @@ class PluginMarketplaceGateway extends TypertRemoteService {
 					date: typeof row.date === "string" ? row.date : null,
 					license: typeof row.license === "string" ? row.license : "",
 					links: row.links !== null && typeof row.links === "object" ? row.links : {},
-					installed: hit === undefined ? null : { version: hit.version, isBundle: hit.isBundle, isClient: hit.isClient }
+					installed: hit === undefined ? null : { version: hit.version, latest: hit.latest, hasUpdate: hit.hasUpdate, isBundle: hit.isBundle, isClient: hit.isClient }
 				};
 			})
 		};
 	}
 
-	/** The profile's currently installed user plugins. */
-	installed() {
-		return snapshot();
+	/** The profile's currently installed user plugins (with update status). */
+	async installed() {
+		const snap = snapshot();
+		const latest = await latestVersions(snap.plugins.map((p) => p.name));
+		const plugins = snap.plugins.map((p) => {
+			const lv = latest[p.name] ?? null;
+			return { ...p, latest: lv, hasUpdate: hasUpdateOf(p.version, lv) };
+		});
+		return { profileDir: snap.profileDir, bundles: snap.bundles, plugins };
 	}
 
 	/**
@@ -313,6 +354,37 @@ class PluginMarketplaceGateway extends TypertRemoteService {
 			rowsAdded = ensureRow(name);
 		}
 		return { ok: true, name, version: entry.version, isBundle: entry.isBundle, isClient: entry.isClient, rowsAdded, needsRestart: true };
+	}
+
+	/**
+	 * Update one npm package in the web profile to its latest registry
+	 * version. The activation state is untouched (the package name does not
+	 * change: bundles stay in dsh.profile.bundles, patch rows stay put).
+	 * On failure the previous version is reinstalled (best-effort rollback).
+	 * @param packageName - exact npm package name.
+	 */
+	async updatePlugin(packageName) {
+		const name = validName(packageName);
+		const before = snapshot();
+		const entry = before.plugins.find((p) => p.name === name);
+		if (entry === undefined) return { ok: false, name, error: "该插件不在本 profile 的依赖里" };
+		const latest = (await latestVersions([name]))[name] ?? null;
+		if (!latest) return { ok: false, name, error: "无法获取最新版本（registry 不可达或包未上架）" };
+		if (!hasUpdateOf(entry.version, latest)) {
+			return { ok: true, name, version: entry.version, latest, needsRestart: false };
+		}
+		const run = await runNpm(["install", "--save", "--no-fund", "--no-audit", name + "@" + latest], INSTALL_TIMEOUT_MS);
+		if (run.code !== 0) return { ok: false, name, error: npmFailure(run, "install") };
+		const after = snapshot();
+		const updated = after.plugins.find((p) => p.name === name);
+		if (updated === undefined || !updated.version || updated.version === entry.version) {
+			// 更新未生效：尽力装回原版本，避免「半更新」状态。
+			if (entry.version) {
+				await runNpm(["install", "--save", "--no-fund", "--no-audit", name + "@" + entry.version], INSTALL_TIMEOUT_MS);
+			}
+			return { ok: false, name, error: "更新命令成功但版本未变化，已尝试回滚到原版本" };
+		}
+		return { ok: true, name, version: updated.version, latest, needsRestart: true };
 	}
 
 	/**

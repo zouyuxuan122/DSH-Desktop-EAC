@@ -2,7 +2,7 @@
   "name": "@deepseek-ai/dsh-plugin-manager",
   "version": "0.1.0",
   "private": true,
-  "description": "DSH Desktop 配套插件：设置页「插件」栏——列出全部内置插件及其作用（含核心组件），配套插件可一键关闭（写入 web profile 的 cordis.patch.yml disabled 条目，重启生效）",
+  "description": "DSH Desktop 配套插件：设置页「插件」栏——列出全部内置插件及其作用（含核心组件），可选配套插件支持关闭、卸载和恢复（按桌面 profile 保存，重启 Web 服务生效）",
   "type": "module",
   "main": "lib/index.js",
   "exports": {

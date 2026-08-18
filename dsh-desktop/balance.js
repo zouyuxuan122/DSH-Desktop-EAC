@@ -169,6 +169,39 @@ function fetchJson(url, apiKey, timeoutMs = 15000) {
   });
 }
 
+// 单档价格合并：回退档 <- 模型默认档 <- 用户覆盖（双档 {peak,offpeak} 或旧
+// 扁平覆盖），供 refreshBalance 与自定义价格 UI 共用。
+function tierPrices(base, override, tier) {
+  const ovDual = override && typeof override.peak === 'object' && override.peak !== null &&
+    typeof override.offpeak === 'object' && override.offpeak !== null;
+  const src = ovDual ? (override[tier] || {}) : (override || {});
+  return {
+    ...(FALLBACK_PRICES[tier] || FALLBACK_PRICES),
+    ...(base && base[tier] ? base[tier] : (base || {})),
+    ...(src || {}),
+  };
+}
+
+// 自定义价格清洗（dsh:balance-prices-set）：prices 形如
+// { peak: { cacheMiss, cacheHit, output }, offpeak: {...} }，三字段必须全部
+// 是 0~1000 的有限数字，档位必须存在；否则抛错（防 NaN/负数/超大值/畸形
+// 结构写进 settings.json）。
+function sanitizePrices(prices) {
+  const tier = (src, label) => {
+    if (!src || typeof src !== 'object') throw new Error(label + ' 档位缺失');
+    const out = {};
+    for (const key of ['cacheMiss', 'cacheHit', 'output']) {
+      const v = Number(src[key]);
+      if (!Number.isFinite(v) || v < 0 || v > 1000) {
+        throw new Error(label + ' 的 ' + key + ' 必须是 0~1000 的数字');
+      }
+      out[key] = v;
+    }
+    return out;
+  };
+  return { peak: tier(prices && prices.peak, '高峰'), offpeak: tier(prices && prices.offpeak, '空闲') };
+}
+
 // 返回 { ok, isAvailable?, balances: [{currency,total,granted,toppedUp}], error?, prices }
 async function queryBalance(dshHome) {
   const key = readApiKey(dshHome);
@@ -197,4 +230,6 @@ module.exports = {
   DEFAULT_PEAK_WINDOWS,
   normalizePeakWindows,
   computePricingState,
+  tierPrices,
+  sanitizePrices,
 };

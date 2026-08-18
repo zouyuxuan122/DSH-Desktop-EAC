@@ -3,7 +3,14 @@ dist/
 vendor/
 *.log
 data/
+.playwright-mcp/
 .DS_Store
+# 临时调试 / 备份产物不入库
+debug-session-dump.cjs
+e2e-base.txt
+package.json.bak-*
+scripts/tmp-dbg*.cjs
+scripts/tmp-instrument.cjs
 # build/ 只保留图标与 NSIS 安装脚本，其余构建产物不入库
 build/*
 !build/icon.ico

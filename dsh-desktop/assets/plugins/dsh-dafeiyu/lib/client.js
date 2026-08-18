@@ -105,7 +105,7 @@ window.__ModuleLoader__.load({ id: 'dsh-dafeiyu', factory: (require) => {
 
   function apply(ctx) {
     ctx.slots.inject('settings.plugin.item', () => ctx.slots.register({
-      name: 'settings.plugin.item', id: 'dsh-dafeiyu', order: 30,
+      name: 'settings.plugin.item', id: 'dsh-dafeiyu', key: 'dsh-dafeiyu', order: 30,
       inject: () => ({}),
     }, BigFishCard))
   }

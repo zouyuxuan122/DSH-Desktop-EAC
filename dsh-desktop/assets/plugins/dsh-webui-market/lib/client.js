@@ -126,6 +126,8 @@ window.__ModuleLoader__.load({ id: '@sanqi-normal/dsh-webui-market-plugin', fact
       site: '插件目录来源',
       sortDefault: '默认', sortHot: '最热', sortNew: '最新',
       builtin: '已内置', builtinHint: '该插件已随客户端内置分发，每次启动自动同步，无需安装', stBuiltin: '内置插件',
+      scanTitle: '安装前冲突预检', scanRun: '预检中…', scanWarn: '注意', scanRefuse: '已拒绝',
+      scanForce: '勾选"跳过安全检查"可强制安装（风险自负）。',
       marketBanner: '两个插件市场并存：本页为精选目录（awesome-dsh-plugin.com）；另一个「Zat 可视化市场」（GitHub dsh-plugin 检索 + 中文简介）已内置，见 设置 → 插件 中的 Zat 标签页。',
     },
     en: {
@@ -151,6 +153,8 @@ window.__ModuleLoader__.load({ id: '@sanqi-normal/dsh-webui-market-plugin', fact
       site: 'Plugin directory source',
       sortDefault: 'Default', sortHot: 'Top', sortNew: 'New',
       builtin: 'Built-in', builtinHint: 'Shipped with the client and re-synced on every launch — no install needed', stBuiltin: 'Built-in plugin',
+      scanTitle: 'Pre-install conflict check', scanRun: 'Checking…', scanWarn: 'Note', scanRefuse: 'Refused',
+      scanForce: 'Tick "skip safety checks" to force-install (at your own risk).',
       marketBanner: 'Two plugin markets coexist: this page is the curated catalog (awesome-dsh-plugin.com); the bundled "Zat" market (GitHub dsh-plugin search + bilingual intros) has its own tab under Settings → Plugins.',
     },
   }
@@ -323,11 +327,35 @@ window.__ModuleLoader__.load({ id: '@sanqi-normal/dsh-webui-market-plugin', fact
     }
 
     const runOp = (kind, target, label, profile) => {
-      setOp({ kind, target, label, profile: profile || 'web', phase: 'confirm', minimized: false })
+      setOp({ kind, target, label, profile: profile || 'web', phase: 'confirm', minimized: false, skipCheck: false, issues: null, scanDone: false, refuse: false })
     }
+
+    // V4.2：打开安装确认弹窗时跑一次轻量冲突预检（只读），refuse 直接
+    // 禁止执行（勾选 skipCheck 可强制），warn 红字列出提醒。预检失败
+    // （网络/解析）不阻塞 —— 试装验证与后端门卫仍然兜底。
+    useEffect(() => {
+      if (!op || op.kind !== 'install' || op.phase !== 'confirm' || op.scanDone) return
+      api('scan', { source: op.target, profile: op.profile }).then((r) => {
+        setOp((prev) => prev ? {
+          ...prev, scanDone: true,
+          issues: (r && r.ok) ? (Array.isArray(r.issues) ? r.issues : []) : [],
+          refuse: !!(r && r.ok && r.level === 'refuse'),
+        } : prev)
+      }).catch(() => setOp((prev) => prev ? { ...prev, scanDone: true, issues: [], refuse: false } : prev))
+    }, [op])
 
     const executeOp = () => {
       if (!op) return
+      // V4.2：冲突预检 refuse 且未勾选跳过 → 不发起安装，直接展示问题。
+      if (op.refuse && !op.skipCheck) {
+        setOp({
+          ...op, phase: 'done', status: 'refused',
+          output: t('scanTitle') + '：\n\n' + (op.issues || []).map((i) => '• ' + i.message).join('\n')
+            + '\n\n' + t('scanForce'),
+          ok: false,
+        })
+        return
+      }
       setOp({ ...op, phase: 'starting', output: '' })
       const params = op.kind === 'install'
         ? { source: op.target, profile: op.profile, binPath, label: op.label, skipCheck: !!op.skipCheck }
@@ -421,14 +449,24 @@ window.__ModuleLoader__.load({ id: '@sanqi-normal/dsh-webui-market-plugin', fact
               ? 'dsh plugin --profile ' + op.profile + ' add <latest ' + op.target + '>'
               : 'dsh plugin --profile ' + op.profile + ' add ' + op.target),
         op.phase === 'confirm' ? h('div', null,
+          op.issues && op.issues.length ? h('div', null,
+            h('div', { style: { fontSize: 12, fontWeight: 600, margin: '10px 0 4px', color: op.refuse ? 'var(--dsw-alias-label-error)' : 'var(--dsw-static-deepseek-500)' } },
+              t('scanTitle') + (op.refuse ? '（' + t('scanRefuse') + '）' : '')),
+            h('div', { className: 'mkts-err', style: { margin: '4px 0 0' } },
+              op.issues.map((i, n) => h('div', { key: n, style: { color: i.severity === 'refuse' ? 'var(--dsw-alias-label-error)' : 'var(--dsw-alias-label-secondary)' } },
+                (i.severity === 'refuse' ? '✗ ' : '△ ') + i.message))),
+            op.refuse ? h('div', { className: 'mkts-hint' }, t('scanForce')) : null,
+          ) : null,
+          op.issues === null ? h('div', { className: 'mkts-hint', style: { marginTop: 8 } },
+            h('span', { className: 'mkts-spin' }), t('scanRun')) : null,
           h('div', { className: 'mkts-cmdrow' },
             h('span', { style: { fontSize: 12, color: 'var(--dsw-alias-label-secondary)' } }, '✓ ' + t('cmdLabel').replace(':', '') + ''),
-            h('button', { className: 'mkts-cmdbtn mkts-cmdbtn-primary', onClick: executeOp }, t('execute')),
+            h('button', { className: 'mkts-cmdbtn mkts-cmdbtn-primary', disabled: !!(op.refuse && !op.skipCheck), onClick: executeOp }, t('execute')),
             h('button', { className: 'mkts-cmdbtn', onClick: closeOp }, t('cancel')),
           ),
           op.kind === 'install' ? h('label', { className: 'mkts-skipcheck' },
             h('input', { type: 'checkbox', checked: !!op.skipCheck, onChange: (e) => setOp((prev) => prev ? { ...prev, skipCheck: e.target.checked } : prev) }),
-            h('span', null, LOCALE === 'zh' ? '跳过安全检查（来源白名单 + 试装验证，风险自负：可能装坏 web 启动）' : 'Skip safety checks (source whitelist + trial boot; risky: may break web boot)'),
+            h('span', null, LOCALE === 'zh' ? '跳过安全检查（冲突预检 + 来源白名单 + 试装验证，风险自负：可能装坏 web 启动）' : 'Skip safety checks (conflict preflight + source whitelist + trial boot; risky: may break web boot)'),
           ) : null,
         ) : null,
         op.phase === 'starting' ? h('div', { className: 'mkts-cmdrow' },

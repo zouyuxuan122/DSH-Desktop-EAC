@@ -28,18 +28,34 @@ files:
   - updater.js
   - settings.js
   - client-updater.js
+  - plugin-updater.js
   - balance.js
   - dsh-home.js
   - session-watcher.js
   - profile-module-heal.js
   - patch-row-heal.js
+  - builtin-collision.js
+  - plugin-manager-state.js
   - plugin-guard.js
   - preset-sync.js
+  - error-detail.js
   - bundle-integrity.js
   - stable-port.js
   - koffi-preflight.js
   - renderer-recovery.js
+  - web-service-supervisor.js
+  - shutdown-coordinator.js
+  - platform/process-tree.js
+  - platform/shortcuts.js
+  - ipc/contracts.js
+  - ipc/register-ipc.js
+  - profile/runtime-patches.js
+  - profile/companion-sync.js
+  - profile/plugin-manager.js
+  - profile/profile-guard.js
+  - client-update-flow.js
   - watchdog.js
+  - builtin-plugin-state.js
   - preload.js
   - assets/**/*
   # 运行时脚本：koffi 预检探针（scripts/koffi-preflight.cjs）、会话删除补丁与
@@ -47,6 +63,7 @@ files:
   - scripts/koffi-preflight.cjs
   - scripts/patch-session-manage.js
   - scripts/plugin-manager-patch.js
+  - scripts/onboarding.js
   - scripts/make-release-hashes.js
   - package.json
   - "!**/*.md"
@@ -135,17 +152,6 @@ rpm:
     - alsa-lib
 
 appImage:
-  artifactName: Deepseek-Harness-EAC-${version}-${arch}.${ext}
-
-# macOS（仅在 macOS 主机上构建，见 .github/workflows/build-macos.yml）。
-# 架构由 CLI 传入（--x64 / --arm64），不在这里写死；
-# 无签名证书时产出未签名包，后续可用 CSC_LINK / notarytool 补签名公证。
-mac:
-  icon: build/icon.png
-  category: public.app-category.developer-tools
-  target:
-    - dmg
-    - zip
   artifactName: Deepseek-Harness-EAC-${version}-${arch}.${ext}
 
 # No ${version} in artifact names: the README links to

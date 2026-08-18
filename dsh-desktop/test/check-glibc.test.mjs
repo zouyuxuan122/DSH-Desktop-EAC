@@ -126,7 +126,7 @@ test('CLI: exits 0 on pass, 1 on violation, 2 on usage error', () => {
   writeFileSync(bad, 'x');
   try {
     const env = { ...process.env, PATH: join(dir, 'bin') + ':' + process.env.PATH };
-    const run = (args) => execFileSync('node', [join(here, '..', 'scripts', 'check-glibc.cjs'), ...args],
+    const run = (args) => execFileSync(process.execPath, [join(here, '..', 'scripts', 'check-glibc.cjs'), ...args],
       { env, encoding: 'utf8' });
 
     // bad.node 超基线 → 退出码 1

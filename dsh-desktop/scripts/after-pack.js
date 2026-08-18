@@ -108,7 +108,7 @@ function writeBundleManifest(appOutDir) {
 
 // node-pty 原生模块审计（3.0.1 Arch 事故的直接根因）。
 //
-// node-pty@1.1.0 的 npm 包只随附 darwin/win32 的 prebuilds，linux-x64 没有，
+// node-pty@1.1.0 不提供 linux-x64 预编译包，
 // 必须在安装时由 node-gyp 现场编译出 build/Release/pty.node。3.0.1 的 Arch 包
 // 三种候选路径（build/Release、build/Debug、prebuilds/linux-x64）全缺，导致
 // dsh-subprocess-local / better-sidebar 加载失败、dsh web 以退出码 1 反复
@@ -118,7 +118,6 @@ function writeBundleManifest(appOutDir) {
 const NODE_PTY_PLATFORM_CANDIDATES = {
   linux: ['build/Release/pty.node', 'prebuilds/linux-x64/pty.node'],
   win32: ['build/Release/pty.node', 'prebuilds/win32-x64/pty.node'],
-  darwin: ['prebuilds/darwin-x64/pty.node', 'prebuilds/darwin-arm64/pty.node'],
 };
 
 function auditNodePty(appOutDir, electronPlatformName, nodeBinOverride) {
@@ -182,9 +181,9 @@ function auditNodePty(appOutDir, electronPlatformName, nodeBinOverride) {
 }
 
 // dsh-dafeiyu（V4 桌宠）随包携带 win32-x64 的 PyInstaller helper（约 50MB），
-// 且只在 process.platform === 'win32' 时被 helper-process.js 引用；Linux/mac
+// 且只在 process.platform === 'win32' 时被 helper-process.js 引用；Linux
 // 上桌面端走 python3 + runtime/helper.py。整树 verbatim 拷贝后按平台剔除，
-// 每个 Linux/mac 包省 50MB 死重。删除只针对列明的目录，未来插件新增其它
+// Linux 包省 50MB 死重。删除只针对列明的目录，未来插件新增其它
 // 平台负载需在这里补条目。
 function trimPlatformForeignPlugins(pluginsRoot, platform) {
   const kill = [
@@ -220,16 +219,6 @@ function auditBundledPluginRuntime(pluginsRoot, platform) {  const tdai = path.j
     required.push(
       path.join(tdai, '@node-rs', 'jieba-win32-x64-msvc', 'jieba.win32-x64-msvc.node'),
       path.join(tdai, 'sqlite-vec-windows-x64', 'vec0.dll')
-    );
-  } else if (platform === 'darwin') {
-    // darwin 负载由 scripts/fetch-darwin-natives.js 在 dist:mac 前注入；
-    // x64/arm64 同时打包进同一个包（与 linux/win 只带本平台相反，两个
-    // mac 产物都带双架构负载，便于以后做 universal 或互换）。
-    required.push(
-      path.join(tdai, '@node-rs', 'jieba-darwin-x64', 'jieba.darwin-x64.node'),
-      path.join(tdai, '@node-rs', 'jieba-darwin-arm64', 'jieba.darwin-arm64.node'),
-      path.join(tdai, 'sqlite-vec-darwin-x64', 'vec0.dylib'),
-      path.join(tdai, 'sqlite-vec-darwin-arm64', 'vec0.dylib')
     );
   }
   const missing = required.filter((file) => !fs.existsSync(file));

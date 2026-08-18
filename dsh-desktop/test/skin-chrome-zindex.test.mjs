@@ -38,14 +38,26 @@ function zIndexValues(src) {
   return out;
 }
 
+/**
+ * z-index 声明是否落在「模态层容器」规则上（maid-atelier 有意把模态层本身
+ * 抬到 4000，让设置弹窗盖过所有皮肤 chrome 与默认 1000 层 —— 这正是
+ * 「女仆皮肤遮挡」的修复方式）。这类值豁免「必须 < 1000」的检查：规则要
+ * 拦的是 chrome 条盖住模态层，而不是模态层自身的层级。
+ */
+function isModalLayerRule(src, m) {
+  const before = src.slice(Math.max(0, m.index - 120), m.index);
+  return /VOzbGW_overlay\s*\]?\{?\s*$/.test(before) || before.includes('VOzbGW_overlay');
+}
+
 for (const skin of CHROME_SKINS) {
   test(`skin "${skin}" keeps its chrome bars below the app modal layer (z-index < 1000)`, () => {
     const src = skinClient(skin);
     const values = zIndexValues(src);
     assert.ok(values.length > 0, `expected ${skin} to declare z-index values`);
-    for (const v of values) {
+    for (const m of src.matchAll(/z-index:\s*(\d+)/g)) {
+      const v = Number(m[1]);
       assert.ok(
-        v < 1000,
+        v < 1000 || isModalLayerRule(src, m),
         `${skin} declares z-index:${v} which is at/above the web UI modal layer (1000); ` +
           'its fixed titlebar/statusbar would cover the Settings modal'
       );
@@ -58,10 +70,11 @@ test('every bundled skin keeps its z-index values below the modal layer', () => 
     if (!entry.isDirectory()) continue;
     const clientFile = join(skinsDir, entry.name, 'lib', 'client.js');
     if (!statSync(clientFile, { throwIfNoEntry: false })) continue;
-    const values = zIndexValues(readFileSync(clientFile, 'utf8'));
-    for (const v of values) {
+    const src = readFileSync(clientFile, 'utf8');
+    for (const m of src.matchAll(/z-index:\s*(\d+)/g)) {
+      const v = Number(m[1]);
       assert.ok(
-        v < 1000,
+        v < 1000 || isModalLayerRule(src, m),
         `skin "${entry.name}" declares z-index:${v} which is at/above the modal layer (1000)`
       );
     }

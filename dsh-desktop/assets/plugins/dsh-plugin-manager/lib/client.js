@@ -10,7 +10,7 @@ window.__ModuleLoader__.load({
 
 		const L = {
 			tab: "管理",
-			tabHint: "搜索插件、点击分类标签过滤；配套/其他插件可一键关闭，完全退出并重启 DSH Desktop 后生效。",
+			tabHint: "搜索插件、点击分类标签过滤；配套插件可关闭、移除/卸载或恢复。关闭需完全重启 DSH Desktop，移除/卸载/恢复会重启 Web 服务；核心组件不可卸载。",
 			searchPlaceholder: "搜索插件（名称 / id / 描述）…",
 			viewCompact: "简洁",
 			viewDetail: "详情",
@@ -23,13 +23,22 @@ window.__ModuleLoader__.load({
 			descFallback: "（无描述）",
 			badgeEnabled: "已启用",
 			badgeDisabled: "已关闭",
+			badgeRemoved: "已移除",
+			badgeUninstalled: "已卸载",
+			badgeRequired: "系统必需",
 			badgePending: "重启后生效",
 			badgeFailed: "挂载失败",
 			badgePendingLoad: "加载中",
+			remove: "移除",
+			restore: "恢复",
+			removeHint: "移除后不再随启动同步（下次启动不还原）",
 			loading: "加载中…",
 			errorPrefix: "插件清单加载失败：",
 			noBridge: "插件管理桥接不可用（请确认已更新到最新版 DSH Desktop）",
 			toastFailed: "操作失败：",
+			uninstall: "卸载",
+			restore: "恢复内置",
+			confirmUninstall: "确定卸载这个内置插件吗？它只会从当前桌面 profile 移除，安装包源文件不会删除，之后可以恢复。卸载会重启 Web 服务。",
 			refresh: "刷新",
 			noMatch: "没有匹配的插件",
 			localOnlyHint: "（清单来自本地文件，实时注册表暂不可用）",
@@ -158,14 +167,21 @@ window.__ModuleLoader__.load({
 						// live 可用时：本地推导的占位核心行（manifest 包名 ≠ 真实 loader 条目 id，
 						// 如 dsh-web-app → web-runtime）不展示，避免与「全部」标签对不上；
 						// 可开关行即使当前未加载（如已禁用的 balance）也必须展示，否则无法重新打开。
-						if (liveOk && !r.toggleable && !liveIds.has(r.id)) continue;
+						if (liveOk && !r.toggleable && !r.restorable && !r.removed && !r.uninstallable && !liveIds.has(r.id)) continue;
 						if (!byId.has(r.id)) byId.set(r.id, {
 							id: r.id,
 							title: r.name || r.id,
-							enabled: !!r.enabled,
+							enabled: !!r.enabled && !r.removed && r.state !== "uninstalled",
+							state: r.state || (r.removed || !r.enabled ? (r.removed ? "uninstalled" : "disabled") : "installed"),
 							phase: "",
 							description: r.description || "",
 							toggleable: !!r.toggleable,
+							removable: !!r.removable,
+							removed: !!r.removed,
+							uninstallable: !!r.uninstallable,
+							restorable: !!r.restorable || !!r.removed,
+							required: !!r.required,
+							group: r.group || "other",
 							from: "local"
 						});
 					}
@@ -173,17 +189,18 @@ window.__ModuleLoader__.load({
 						if (!e || typeof e !== "object" || e.entryId === void 0) continue;
 						const row = byId.get(e.entryId);
 						if (row) {
-							row.enabled = !!e.enabled;
+							if (!row.removed && row.state !== "uninstalled") row.enabled = !!e.enabled;
 							row.phase = e.fiberPhase || row.phase;
 						} else {
 							byId.set(e.entryId, {
 								id: e.entryId,
 								title: e.moduleName || e.entryId,
 								enabled: !!e.enabled,
-								phase: e.fiberPhase || "",
-								description: descById.get(e.entryId) || "",
-								toggleable: toggleableById.has(e.entryId),
-								from: "live"
+									phase: e.fiberPhase || "",
+									description: descById.get(e.entryId) || "",
+									toggleable: toggleableById.has(e.entryId),
+									group: "core",
+									from: "live"
 							});
 						}
 					}
@@ -229,10 +246,79 @@ window.__ModuleLoader__.load({
 				});
 			};
 
+			const onUninstall = (row) => {
+				const b = bridge();
+				if (!b || !row || !row.uninstallable || typeof b.uninstall !== "function") return;
+				if (typeof window !== "undefined" && typeof window.confirm === "function" && !window.confirm(L.confirmUninstall)) return;
+				setPendingId(row.id);
+				b.uninstall(row.id).then((res) => {
+					setPendingId(null);
+					if (res && res.ok) {
+						setPendingMap((prev) => { const next = { ...prev }; delete next[row.id]; return next; });
+						setRefreshTick((v) => v + 1);
+					} else setError(L.toastFailed + String((res && res.error) || "未知错误"));
+				}).catch((err) => {
+					setPendingId(null);
+					setError(L.toastFailed + String((err && err.message) || err));
+				});
+			};
+
+			const onRestore = (row) => {
+				const b = bridge();
+				if (!b || !row || !row.restorable || typeof b.restore !== "function") return;
+				setPendingId(row.id);
+				b.restore(row.id).then((res) => {
+					setPendingId(null);
+					if (res && res.ok) setRefreshTick((v) => v + 1);
+					else setError(L.toastFailed + String((res && res.error) || "未知错误"));
+				}).catch((err) => {
+					setPendingId(null);
+					setError(L.toastFailed + String((err && err.message) || err));
+				});
+			};
+
 			/** 行当前显示值：有未生效的点击 → 新值；否则实际状态。 */
 			const rowValue = (row) => (row.id in pendingMap ? pendingMap[row.id] : row.enabled);
 			const rowDirty = (row) => row.id in pendingMap;
-			const rowCat = (row) => (row.toggleable ? (row.id === "llm-deepseek" ? "other" : "companion") : "core");
+			const rowCat = (row) => row.group || (row.removed || row.removable || row.uninstallable ? "companion" : row.toggleable ? (row.id === "llm-deepseek" ? "other" : "companion") : "core");
+
+			/** 移除/恢复（卸载语义）：成功后重拉清单刷新状态。 */
+			const onSetRemoved = (row, removed) => {
+				const b = bridge();
+				if (!b || !row) return;
+				setPendingId(row.id);
+				b.setRemoved(row.id, removed).then((res) => {
+					setPendingId(null);
+					if (res && res.ok) {
+						setRefreshTick((v) => v + 1);
+					} else {
+						setError(L.toastFailed + String((res && res.error) || "未知错误"));
+					}
+				}).catch((err) => {
+					setPendingId(null);
+					setError(L.toastFailed + String((err && err.message) || err));
+				});
+			};
+
+			/** 小号文字按钮（移除/恢复用）。 */
+			const textBtn = (label, color, onClick, disabled) => jsx("button", {
+				type: "button",
+				disabled,
+				title: L.removeHint,
+				onClick,
+				style: {
+					fontSize: 11,
+					padding: "2px 10px",
+					borderRadius: 8,
+					cursor: disabled ? "not-allowed" : "pointer",
+					border: "1px solid " + color,
+					color,
+					background: "transparent",
+					flex: "none",
+					opacity: disabled ? 0.55 : 1
+				},
+				children: label
+			});
 
 			const matches = (row) => {
 				if (!query) return true;
@@ -286,8 +372,19 @@ window.__ModuleLoader__.load({
 						}),
 						jsxs("div", { style: { display: "flex", alignItems: "center", gap: 8, flex: "none" }, children: [
 							rowDirty(row) ? badge(L.badgePending, "var(--dsw-alias-state-info-primary, #5b9bd5)") : null,
+							row.removed ? badge(L.badgeRemoved, "var(--dsw-alias-state-warning-primary, #d99a3d)") : null,
+							row.state === "uninstalled" ? badge(L.badgeUninstalled, "var(--dsw-alias-state-warning-primary, #d99a3d)") : null,
+							row.required ? badge(L.badgeRequired, "var(--dsw-alias-label-tertiary, rgba(128,128,128,0.6))") : null,
 							jsx("span", { style: { width: 7, height: 7, borderRadius: 999, background: dotColor, flex: "none" } }),
-							switchControl(row, on, onToggle, pendingId === row.id)
+							row.removed
+								? textBtn(L.restore, "var(--dsw-alias-state-info-primary, #5b9bd5)", () => onSetRemoved(row, false), pendingId === row.id)
+								: row.state === "uninstalled"
+									? jsx("button", { type: "button", disabled: pendingId === row.id, onClick: () => onRestore(row), style: { fontSize: 11, cursor: "pointer", whiteSpace: "nowrap" }, children: L.restore })
+									: jsxs("span", { style: { display: "inline-flex", alignItems: "center", gap: 6 }, children: [
+										row.removable ? textBtn(L.remove, "var(--dsw-alias-state-warning-primary, #d99a3d)", () => onSetRemoved(row, true), pendingId === row.id) : null,
+										row.uninstallable ? jsx("button", { type: "button", disabled: pendingId === row.id, onClick: () => onUninstall(row), style: { fontSize: 11, cursor: "pointer", whiteSpace: "nowrap", color: "var(--dsw-alias-state-error-primary, #d66)" }, children: L.uninstall }) : null,
+										switchControl(row, on, onToggle, pendingId === row.id)
+									] })
 						] })
 					]
 				});
@@ -304,20 +401,39 @@ window.__ModuleLoader__.load({
 							jsxs("div", { children: [
 								jsx("span", { style: { fontWeight: 600 }, children: rowName(row) || rowPkg(row) }),
 								jsx("span", { style: { fontSize: 12, opacity: 0.55, marginLeft: 8 }, children: rowPkg(row) }),
-								rowValue(row) ? badge(L.badgeEnabled, "var(--dsw-alias-state-success-primary, #4caf7d)") : badge(L.badgeDisabled, "var(--dsw-alias-state-warning-primary, #d99a3d)"),
+								row.removed
+									? badge(L.badgeRemoved, "var(--dsw-alias-state-warning-primary, #d99a3d)")
+									: row.state === "uninstalled"
+										? badge(L.badgeUninstalled, "var(--dsw-alias-state-warning-primary, #d99a3d)")
+										: rowValue(row)
+											? badge(L.badgeEnabled, "var(--dsw-alias-state-success-primary, #4caf7d)")
+											: badge(L.badgeDisabled, "var(--dsw-alias-state-warning-primary, #d99a3d)"),
+								row.required ? badge(L.badgeRequired, "var(--dsw-alias-label-tertiary, rgba(128,128,128,0.6))") : null,
 								phaseBadge(row),
 								rowDirty(row) ? badge(L.badgePending, "var(--dsw-alias-state-info-primary, #5b9bd5)") : null
 							] }),
 							jsx("span", { style: { fontSize: 12, opacity: 0.65, lineHeight: 1.5 }, children: row.description || L.descFallback })
 						]
 					}),
-					jsx("input", {
-						type: "checkbox",
-						checked: rowValue(row),
-						disabled: !row.toggleable || pendingId === row.id,
-						onChange: () => onToggle(row, !rowValue(row)),
-						style: { marginTop: 2, cursor: row.toggleable ? "pointer" : "not-allowed" }
-					})
+					row.removed
+						? textBtn(L.restore, "var(--dsw-alias-state-info-primary, #5b9bd5)", () => onSetRemoved(row, false), pendingId === row.id)
+						: row.state === "uninstalled"
+							? jsx("button", { type: "button", disabled: pendingId === row.id, onClick: () => onRestore(row), style: { fontSize: 11, cursor: "pointer", whiteSpace: "nowrap" }, children: L.restore })
+							: jsxs("div", { style: { display: "flex", alignItems: "center", gap: 8, flex: "none" }, children: [
+							row.removable
+								? textBtn(L.remove, "var(--dsw-alias-state-warning-primary, #d99a3d)", () => onSetRemoved(row, true), pendingId === row.id)
+								: null,
+							row.uninstallable
+								? jsx("button", { type: "button", disabled: pendingId === row.id, onClick: () => onUninstall(row), style: { fontSize: 11, cursor: "pointer", whiteSpace: "nowrap", color: "var(--dsw-alias-state-error-primary, #d66)" }, children: L.uninstall })
+								: null,
+							jsx("input", {
+								type: "checkbox",
+								checked: rowValue(row),
+								disabled: !row.toggleable || pendingId === row.id,
+								onChange: () => onToggle(row, !rowValue(row)),
+								style: { marginTop: 2, cursor: row.toggleable ? "pointer" : "not-allowed" }
+							})
+					] })
 				]
 			});
 

@@ -15,6 +15,7 @@ DEFAULT_LAYOUT: dict[str, Any] = {
     "y": None,
     "scale": 1.0,
     "reducedMotion": False,
+    "pinTopmost": True,
 }
 
 
@@ -44,6 +45,8 @@ def normalise_layout(value: Any) -> dict[str, Any]:
         layout["scale"] = min(1.4, max(0.7, float(scale)))
     if isinstance(value.get("reducedMotion"), bool):
         layout["reducedMotion"] = value["reducedMotion"]
+    if isinstance(value.get("pinTopmost"), bool):
+        layout["pinTopmost"] = value["pinTopmost"]
     return layout
 
 

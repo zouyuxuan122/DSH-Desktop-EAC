@@ -24,6 +24,11 @@
 - ✅ **崩溃急救与撤销（v4，dsh-undo-savepoint）**：配置与插件代码树快照、undo/redo、一键安全模式、密钥脱敏 vault —— 配置改坏、dsh 起不来也能救
 - ✅ **插件启停管理（v4）**：设置页「插件 → 管理」不重启切换任意插件启停（含默认禁用的大肥鱼桌宠）
 - ✅ **一键迁移（一键夺舍）**：设置页选择任意已有 AI 工具目录（如 Codex / Claude 安装目录）→ 自动新建工作区与对话 → 发送迁移指令，AI 在对话中全程可视化提取 skills / MCP 配置 / 长期记忆
+- ✅ **错误日志一键复制（v4.1）**：启动失败 / DSH 服务停止的报错弹窗带「复制日志」按钮，一键复制完整诊断信息（错误、堆栈、日志目录、最近日志尾部）供反馈
+- ✅ **应用内反馈入口（v4.1）**：⋯ 菜单与托盘「反馈建议…」直达 GitHub Issues，关于弹窗附交流群号
+- ✅ **拖文件进对话（v4.1，dsh-file-drop）**：把本地文件直接拖进对话输入框 —— 文本/代码自动注入（上限 256KB，带文件名头）；图片注入路径配合 inspect_image 让 agent 看图；二进制/超大文件注入路径提示
+- ✅ **设置页边栏自定义（v4.1，dsh-settings-nav-custom）**：设置面板左侧导航底部「自定义边栏」，按需显示/隐藏与排序导航项，localStorage 持久化，默认全显
+- ✅ **更新保障（v4.1）**：更新前强制插件/配置快照（失败中止更新）；官方 dsh 更新后上一版本备份保留到下次启动确认健康，启动失败可一键「回退到上一版本」；便携版客户端更新后若新版崩溃自动回退上一版；更新完成弹窗明示插件/皮肤/会话全部保留
 
 ## 快速开始（成品用户）
 
@@ -45,7 +50,7 @@
 下载或构建 pacman 包后安装：
 
 ```bash
-sudo pacman -U ./Deepseek-Harness-EAC-4.0.2-x64.pacman
+sudo pacman -U ./Deepseek-Harness-EAC-4.1.0-x64.pacman
 ```
 
 安装完成后从桌面应用菜单启动，或运行 `deepseek-harness-eac`。卸载命令：
@@ -62,7 +67,7 @@ sudo pacman -Rns dsh-desktop
 下载 `Deepseek-Harness-EAC-<版本>-amd64.deb` 后安装：
 
 ```bash
-sudo apt install ./Deepseek-Harness-EAC-4.0.2-amd64.deb
+sudo apt install ./Deepseek-Harness-EAC-4.1.0-amd64.deb
 ```
 
 卸载：`sudo apt remove dsh-desktop`。
@@ -72,7 +77,7 @@ sudo apt install ./Deepseek-Harness-EAC-4.0.2-amd64.deb
 下载 `Deepseek-Harness-EAC-<版本>.x86_64.rpm` 后安装：
 
 ```bash
-sudo dnf install ./Deepseek-Harness-EAC-4.0.2.x86_64.rpm
+sudo dnf install ./Deepseek-Harness-EAC-4.1.0.x86_64.rpm
 ```
 
 卸载：`sudo dnf remove dsh-desktop`。
@@ -80,8 +85,8 @@ sudo dnf install ./Deepseek-Harness-EAC-4.0.2.x86_64.rpm
 ### AppImage（免安装，通用）
 
 ```bash
-chmod +x ./Deepseek-Harness-EAC-4.0.2-x86_64.AppImage
-./Deepseek-Harness-EAC-4.0.2-x86_64.AppImage
+chmod +x ./Deepseek-Harness-EAC-4.1.0-x86_64.AppImage
+./Deepseek-Harness-EAC-4.1.0-x86_64.AppImage
 ```
 
 > Ubuntu 24.04 等只有 FUSE3 的发行版，若提示缺少 FUSE2，先安装 `libfuse2`
@@ -91,9 +96,9 @@ chmod +x ./Deepseek-Harness-EAC-4.0.2-x86_64.AppImage
 
 - 启动 15 秒后及此后每 6 小时，自动查询 npm 官方 registry 上 @deepseek-ai/dsh 的最新版本；菜单「帮助 → 检查更新…」可随时手动检查。
 - 发现新版本时弹窗询问：**立即更新 / 跳过此版本 / 稍后**。
-- 同意后，内置 node + npm 把官方新版本安装到用户数据目录的 `agent\`（overlay），全程写入 staging 目录，成功后才原子切换，失败自动保留当前版本。后续更新只下载差异（复用 npm 缓存）。
+- 同意后，内置 node + npm 把官方新版本安装到用户数据目录的 `agent\`（overlay），全程写入 staging 目录，成功后才原子切换，失败自动保留当前版本。后续更新只下载差异（复用 npm 缓存）。更新前自动对插件/配置做保护快照（失败则中止更新）。
 - 完成后提示**立即重启 / 稍后重启**，重启即用新版；启动时 dsh 路径解析优先使用 overlay、内置版本兜底。
-- 若新版启动失败，启动失败对话框提供**「回退到内置版本并重试」**一键回退。
+- **上一版本备份保留**（v4.1）：切换成功后旧版保留为 `agent-previous`，直到下次启动确认新版健康才自动清理；若新版启动失败，启动失败对话框提供**「回退到上一版本并重试」**（优先）与「回退到内置版本并重试」一键回退。
 - 尊重用户 npm 配置：自定义 registry 镜像/代理请设 `NPM_CONFIG_REGISTRY`（如 `https://registry.npmmirror.com`）。
 
 ## 客户端自更新（封装层）
@@ -102,6 +107,7 @@ chmod +x ./Deepseek-Harness-EAC-4.0.2-x86_64.AppImage
 - 发现新版本时弹窗询问：**立即更新 / 跳过此版本 / 稍后**；同意后带进度条下载安装包（便携版选 `*-portable-x64.exe`，安装版选 `Setup-*-x64.exe`；Gitee 因单文件 100MB 限制拆分的 `.part1/.part2` 分片会自动按序下载并合并），下载到 `<数据目录>\updates\`。
 - **SHA-256 内容校验（v4）**：下载完成后强制校验文件哈希 —— 优先用 GitHub Release 资产自带的 digest 字段，其次取 Release 附带的 `SHA256SUMS.txt`（`npm run dist` 自动生成，发布时随资产上传）；不一致 → 删除文件并中止更新，绝不运行被篡改或损坏的安装包。上游未提供哈希时记录告警并放行（老 Release 兼容）。
 - 确认重启后：**便携版**用 detached 脚本等待旧 exe 解锁 → 备份 → 原地替换 → 自动启动新版本（只读目录自动退化为直接启动新 exe）；**安装版**等待进程退出后以向导方式启动新安装包。失败自动保留当前版本，下次启动继续提示待安装更新。
+- **崩溃自回退（v4.1）**：便携版更新后，上一版 exe 备份与 marker 保留到新版首次健康启动；若新版启动失败（上次运行非干净退出），下次启动自动用上一版还原并保留崩溃副本、弹系统通知告知。
 - 菜单入口：chrome 栏 ⋯ 菜单 →「检查客户端更新…」；托盘菜单同样可用。跳过版本记录在 `settings.json`（`skipClientVersion`）。
 - **更新源可见可复制**：⋯ 菜单内「更新源」区块与「关于 Deepseek Harness EAC」对话框展示项目仓库地址（GitHub），一键复制到剪贴板。
 - 链路自检：`node scripts/check-client-latest.js [--download]`（可设 `DSH_DESKTOP_RELEASE_API` / `PORTABLE_EXECUTABLE_DIR`）。

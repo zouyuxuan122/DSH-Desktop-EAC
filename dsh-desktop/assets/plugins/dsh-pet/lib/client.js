@@ -49,7 +49,14 @@ window.__ModuleLoader__.load({
 		// - 双 video 层叠：一个显示、一个预加载，切换时交叉淡入避免闪空白
 		const css = [
 			// 根容器：fixed 固定定位、层级 40（在界面之上）、整体点击穿透（不挡界面操作）、禁止选中
-			'.dsh-pet-root{position:fixed;z-index:40;pointer-events:none;user-select:none}',
+			// EAC 本地补丁：40 会被右侧栏（dsh-better-sidebar 面板 z-index:50）盖住，
+			// 提到 CSS 最大值保证页面桌宠始终是最高显示优先级（root 点击穿透不受影响）。
+			'.dsh-pet-root{position:fixed;z-index:2147483647;pointer-events:none;user-select:none}',
+			// EAC 本地补丁 2（根治）：官方 shell.overlay 容器（data-shell-overlay，
+			// z-index:20）创建独立层叠上下文，把上面 root 的 2147483647 限制在容器
+			// 内部、整体仍低于右侧栏(z-index:50)。这里把容器本身抬到最高 —— 容器
+			// pointer-events:none 不挡操作，其它 overlay 条目一并浮最上（符合覆盖层语义）。
+			'[data-shell-overlay]{z-index:2147483647!important}',
 			// 右下角默认位置（right:24px 距右缘、bottom:0 贴底）
 			'.dsh-pet-root[data-corner="bottom-right"]{right:24px;bottom:0}',
 			// 左下角位置
@@ -70,6 +77,34 @@ window.__ModuleLoader__.load({
 			// 淡出，两者互不影响，facing 翻转时机因此无关紧要。
 			// 无障碍：用户系统开启"减少动态效果"时关闭过渡动画
 			'@media (prefers-reduced-motion: reduce){.dsh-pet-video{transition:none}}',
+			// V4.2 桌宠设置：悬停工具条（设置 ⚙ / 关闭 ×）、设置面板、召唤按钮、
+			// 自动挂边（空闲折叠）。面板内按钮全部 pointer-events:auto。
+			// 工具条定位在 root 顶部内侧（top:10px），与宠物本体零间隙 —— 指针
+			// 从宠物移到按钮全程都在 root 子树内，:hover 不会断（旧版 top:-30px
+			// 悬在宠物上方 30px，移动路径穿过空隙导致工具条在到达前消失）。
+			'.dsh-pet-toolbar{position:absolute;top:10px;right:10px;display:flex;gap:4px;opacity:0;transition:opacity .15s ease;pointer-events:none}',
+			'.dsh-pet-root:hover .dsh-pet-toolbar{opacity:1;pointer-events:auto}',
+			'.dsh-pet-tbtn{width:26px;height:24px;border:none;border-radius:7px;background:color-mix(in srgb,var(--dsw-alias-bg-layer-2,#101828) 90%,transparent);color:var(--dsw-alias-label-secondary,#b8c5ea);cursor:pointer;font-size:12px;line-height:1;display:grid;place-items:center;border:1px solid var(--dsw-alias-border-l1,rgba(255,255,255,.12));padding:0;font-family:inherit}',
+			'.dsh-pet-tbtn:hover{background:var(--dsw-alias-interactive-bg-hover,rgba(255,255,255,.14));color:var(--dsw-alias-label-primary,#eef2ff)}',
+			'.dsh-pet-tbtn.danger:hover{background:#e81123;color:#fff}',
+			'.dsh-pet-panel{position:absolute;bottom:calc(100% + 34px);right:0;width:236px;padding:10px 12px;border-radius:12px;background:var(--dsw-alias-bg-layer-2,color-mix(in srgb,var(--dsw-alias-bg-base,#0b1220) 94%,white));border:1px solid var(--dsw-alias-border-l1,rgba(255,255,255,.12));box-shadow:0 10px 30px rgba(0,0,0,.45);font-size:12px;color:var(--dsw-alias-label-primary,#e6ecff);z-index:6;pointer-events:auto;box-sizing:border-box;user-select:none}',
+			'.dsh-pet-panel h4{margin:0 0 6px;font-size:12px;font-weight:600}',
+			'.dsh-pet-row{display:flex;align-items:center;justify-content:space-between;gap:8px;margin:7px 0}',
+			'.dsh-pet-row label{color:var(--dsw-alias-label-secondary,#b8c5ea);flex:none}',
+			'.dsh-pet-row input[type=range]{flex:1;min-width:0;accent-color:#5b8cff}',
+			'.dsh-pet-row select{background:var(--dsw-alias-bg-layer-3,rgba(255,255,255,.06));color:var(--dsw-alias-label-primary,#e6ecff);border:1px solid var(--dsw-alias-border-l2,rgba(255,255,255,.14));border-radius:6px;padding:2px 6px;font-size:11px;max-width:128px}',
+			'.dsh-pet-switch{appearance:none;width:30px;height:17px;border-radius:999px;border:1px solid rgba(128,128,128,.4);background:transparent;position:relative;cursor:pointer;flex:none;margin:0}',
+			'.dsh-pet-switch:checked{background:color-mix(in srgb,var(--dsw-alias-state-success-primary,#4caf7d) 30%,transparent);border-color:var(--dsw-alias-state-success-primary,#4caf7d)}',
+			'.dsh-pet-switch::after{content:"";position:absolute;top:2px;left:2px;width:11px;height:11px;border-radius:999px;background:rgba(128,128,128,.6);transition:left .14s ease}',
+			'.dsh-pet-switch:checked::after{left:15px;background:var(--dsw-alias-state-success-primary,#4caf7d)}',
+			'.dsh-pet-close-btn{width:100%;margin-top:8px;padding:6px 0;border:none;border-radius:8px;background:rgba(232,17,35,.16);color:#ff7a85;cursor:pointer;font-size:12px;font-family:inherit}',
+			'.dsh-pet-close-btn:hover{background:rgba(232,17,35,.3)}',
+			'.dsh-pet-root{transition:transform .25s ease}',
+			'.dsh-pet-root.collapsed{transform:scale(.45) translateY(38%);transform-origin:center bottom}',
+			'.dsh-pet-root.collapsed:hover{transform:scale(.75) translateY(10%)}',
+			'.dsh-pet-call{position:fixed;z-index:2147483647;pointer-events:auto;padding:6px 12px;border:none;border-radius:999px;background:color-mix(in srgb,var(--dsw-alias-bg-layer-2,#101828) 92%,transparent);color:var(--dsw-alias-label-secondary,#b8c5ea);border:1px solid var(--dsw-alias-border-l1,rgba(255,255,255,.14));cursor:pointer;font-size:11px;box-shadow:0 4px 14px rgba(0,0,0,.35);opacity:.85;transition:opacity .15s ease;font-family:inherit}',
+			'.dsh-pet-call:hover{opacity:1;color:var(--dsw-alias-label-primary,#eef2ff)}',
+			'@media (prefers-reduced-motion: reduce){.dsh-pet-toolbar,.dsh-pet-call,.dsh-pet-root,.dsh-pet-panel{transition:none}}',
 		].join('\n');
 		const cssTag = 'dsh-pet/style.css';
 		// 只在页面还没有这个 style 标签时才注入（防止热重载/重复挂载时重复）
@@ -140,6 +175,48 @@ window.__ModuleLoader__.load({
 		};
 
 		// ============================================================================
+		// 桌宠设置（V4.2）—— 面板 + 持久化
+		// ============================================================================
+		// 说明：DSH 客户端配置管线暂未把 patch 配置下发到浏览器（client 收到
+		// 空对象），所以设置面板把用户选择存到 localStorage（dsh-pet:settings:v1），
+		// 优先级：localStorage > config（patch 里若有 size/position 兜底）> 默认值。
+		const SETTINGS_KEY = 'dsh-pet:settings:v1';
+		const DEFAULT_SETTINGS = {
+			size: 260,          // 显示尺寸（px）
+			corner: 'bottom-right', // 角落位置；'free' = 跟随拖拽的自定义位置
+			interactions: true, // 互动开关（点击回应 / 随机动作）
+			autoHide: false,    // 自动挂边（空闲折叠成小图标）
+			hidden: false,      // 是否已关闭（隐藏）——面板「关闭桌宠」/ 工具条 ×
+		};
+		const PET_CORNERS = [
+			{ value: 'bottom-right', label: '右下角' },
+			{ value: 'bottom-left', label: '左下角' },
+			{ value: 'top-right', label: '右上角' },
+			{ value: 'top-left', label: '左上角' },
+			{ value: 'free', label: '自由位置（拖拽）' },
+		];
+		const readSettings = (config) => {
+			let saved = {};
+			try { saved = JSON.parse(localStorage.getItem(SETTINGS_KEY) || '{}') || {}; } catch {}
+			return {
+				...DEFAULT_SETTINGS,
+				size: (config && config.size) || DEFAULT_SETTINGS.size,
+				corner: (config && config.position) || DEFAULT_SETTINGS.corner,
+				...saved,
+			};
+		};
+		const saveSettings = (s) => {
+			try { localStorage.setItem(SETTINGS_KEY, JSON.stringify(s)); } catch {}
+		};
+		// 角落 → 召唤按钮的固定坐标（hidden 时显示）
+		const CALL_POS = {
+			'bottom-right': { right: 24, bottom: 24 },
+			'bottom-left': { left: 24, bottom: 24 },
+			'top-right': { right: 24, top: 52 },
+			'top-left': { left: 24, top: 52 },
+		};
+
+		// ============================================================================
 		// Pet 组件 —— 宠物本体
 		// ============================================================================
 		/**
@@ -149,12 +226,30 @@ window.__ModuleLoader__.load({
 		 * 3. 朝向（facing）渲染：right 时 CSS 镜像
 		 *
 		 * 参数 config：来自 patch 配置。当前 DSH 客户端配置管线尚未打通，
-		 * 实际收到的是空对象，所以下面全部用 || 默认值兜底。
+		 * 实际收到的是空对象，所以全部由 readSettings 的 localStorage 优先级兜底。
 		 */
 		function Pet({ config }) {
-			// ---- 从 config 读取参数（当前走默认值） ----
-			const size = (config && config.size) || 260;             // 显示尺寸（px）
-			const corner = (config && config.position) || 'bottom-right'; // 默认角落
+			// ---- 设置（localStorage 优先，config 兜底） ----
+			const [settings, setSettings] = useState(() => readSettings(config));
+			const [panelOpen, setPanelOpen] = useState(false);
+			const [collapsed, setCollapsed] = useState(false); // 自动挂边折叠
+			const lastInteractRef = useRef(Date.now());
+			// 写入即持久化
+			useEffect(() => { saveSettings(settings); }, [settings]);
+			const patchSetting = (key, value) => setSettings((prev) => ({ ...prev, [key]: value }));
+
+			const size = settings.size;
+			const corner = settings.corner === 'free' ? 'bottom-right' : settings.corner;
+			const interactions = settings.interactions;
+			// 挂边折叠的 idle 计时：设置里没开自动挂边时永不折叠
+			useEffect(() => {
+				if (!settings.autoHide) { setCollapsed(false); return; }
+				const timer = setInterval(() => {
+					if (Date.now() - lastInteractRef.current > 8000) setCollapsed(true);
+				}, 1000);
+				return () => clearInterval(timer);
+			}, [settings.autoHide]);
+			const touch = () => { lastInteractRef.current = Date.now(); setCollapsed(false); };
 
 			// ---- React 状态 ----
 			const [anim, setAnim] = useState(IDLE);   // 当前动画名
@@ -272,6 +367,7 @@ window.__ModuleLoader__.load({
 			//   按概率选下一个：30% 待机 / 10% 转向 / 40% 动作 / 20% 移动。
 			//   点击/拖拽打断的动画播完后先回待机（作为缓冲），待机播完再进随机链。
 			const pickNext = () => {
+				if (!interactions) { setAnim(IDLE); setOnce(true); setSeq((s) => s + 1); return; }
 				const roll = Math.random();
 				if (roll < 0.3) {
 					// 30% 待机：待机呼吸休闲（也是一次性，播完再选）
@@ -455,6 +551,7 @@ window.__ModuleLoader__.load({
 
 			// 按下：只记录，不立即切动画
 			const handlePointerDown = (e) => {
+				touch(); // 交互刷新 idle 计时（取消挂边折叠）
 				stopMove(); // 用户交互打断正在进行的移动
 				e.currentTarget.setPointerCapture(e.pointerId); // 捕获指针（拖出元素也能收到 move）
 				dragRef.current = { active: true, dragging: false, sx: e.clientX, sy: e.clientY };
@@ -511,8 +608,10 @@ window.__ModuleLoader__.load({
 
 			// ---- 点击回应（仅真点击触发，拖拽后的 click 被忽略） ----
 			const handleClick = () => {
+				setPanelOpen(false); // 点宠物本体时收起设置面板
 				const d = dragRef.current;
 				if (d.active || d.dragging || justDraggedRef.current) return; // 拖拽中/刚拖完：忽略
+				if (!interactions) return; // 互动开关关闭：不回应
 				if (once && animRef.current !== IDLE) return; // 正在播一次性动画：不打断
 				stopMove(); // 点击打断移动
 				setOnce(true);
@@ -559,23 +658,129 @@ window.__ModuleLoader__.load({
 				title: 'dsh-pet',
 			};
 
-			// 渲染树：root > stage > [video A, video B]
+			// 渲染树：root > [toolbar, panel, stage > [video A, video B]]
 			// A 初始带 is-front（显示），B 隐藏待命
+			// 位置选择为非自由（角落）时，清掉拖拽自定义位置，回到 CSS 角落定位
+			useEffect(() => { if (settings.corner !== 'free') setCustomPos(null); }, [settings.corner]);
+			// hidden=true 时整个 root 不渲染，只留「召唤桌宠」按钮（CALL_POS 定位）。
+			if (settings.hidden) {
+				return h('button', {
+					type: 'button',
+					className: 'dsh-pet-call',
+					style: CALL_POS[settings.corner] || CALL_POS['bottom-right'],
+					title: '点击召唤桌宠',
+					onClick: () => { touch(); patchSetting('hidden', false); },
+					children: '召唤桌宠',
+				});
+			}
+
+			const rootClass = 'dsh-pet-root' + (collapsed ? ' collapsed' : '');
 			return h('div', {
 				ref: rootRef,
-				className: 'dsh-pet-root',
+				className: rootClass,
 				'data-corner': corner,   // CSS 决定默认角落
 				'data-facing': facing,   // CSS 决定是否镜像
+				onMouseEnter: () => setCollapsed(false),
+				onMouseLeave: () => touch(),
 				style: Object.assign({ '--dsh-pet-size': size + 'px' }, rootStyle),
-				children: h('div', {
-					ref: stageRef,
-					className: 'dsh-pet-stage',
-					style: stageStyle,
-					children: [
-						h('video', Object.assign({}, commonVideoProps, { ref: videoARef, className: 'dsh-pet-video is-front' })),
-						h('video', Object.assign({}, commonVideoProps, { ref: videoBRef, className: 'dsh-pet-video' })),
-					],
-				}),
+				children: [
+					// 悬停工具条：设置 ⚙ / 关闭 ×（stopPropagation 防止触发宠物点击回应）
+					h('div', {
+						className: 'dsh-pet-toolbar',
+						children: [
+							h('button', {
+								type: 'button',
+								className: 'dsh-pet-tbtn',
+								title: '桌宠设置',
+								'aria-label': '桌宠设置',
+								onClick: (e) => { e.stopPropagation(); setPanelOpen((v) => !v); },
+								children: '设',
+							}),
+							h('button', {
+								type: 'button',
+								className: 'dsh-pet-tbtn danger',
+								title: '关闭桌宠',
+								'aria-label': '关闭桌宠',
+								onClick: (e) => { e.stopPropagation(); touch(); patchSetting('hidden', true); },
+								children: '\u00d7',
+							}),
+						],
+					}),
+					// 设置面板
+					panelOpen ? h('div', {
+						className: 'dsh-pet-panel',
+						onClick: (e) => e.stopPropagation(),
+						children: [
+							h('h4', { children: '桌宠设置' }),
+							h('div', {
+								className: 'dsh-pet-row',
+								children: [
+									h('label', { children: '大小' }),
+									h('input', {
+										type: 'range',
+										min: 120,
+										max: 420,
+										step: 10,
+										value: settings.size,
+										onChange: (e) => patchSetting('size', Number(e.target.value)),
+									}),
+									h('span', { style: { color: 'var(--dsw-alias-label-tertiary,#7c8fc0)', fontVariantNumeric: 'tabular-nums', flex: 'none', minWidth: 34, textAlign: 'right' }, children: settings.size + 'px' }),
+								],
+							}),
+							h('div', {
+								className: 'dsh-pet-row',
+								children: [
+									h('label', { children: '位置' }),
+									h('select', {
+										value: settings.corner,
+										onChange: (e) => { patchSetting('corner', e.target.value); if (e.target.value === 'free') { setPanelOpen(false); } },
+										children: PET_CORNERS.map((c) => h('option', { key: c.value, value: c.value, children: c.label })),
+									}),
+								],
+							}),
+							h('div', {
+								className: 'dsh-pet-row',
+								children: [
+									h('label', { children: '互动（点击回应 / 随机动作）' }),
+									h('input', {
+										type: 'checkbox',
+										className: 'dsh-pet-switch',
+										checked: settings.interactions,
+										onChange: (e) => patchSetting('interactions', e.target.checked),
+									}),
+								],
+							}),
+							h('div', {
+								className: 'dsh-pet-row',
+								children: [
+									h('label', { children: '自动挂边隐藏（空闲折叠）' }),
+									h('input', {
+										type: 'checkbox',
+										className: 'dsh-pet-switch',
+										checked: settings.autoHide,
+										onChange: (e) => patchSetting('autoHide', e.target.checked),
+									}),
+								],
+							}),
+							h('button', {
+								type: 'button',
+								className: 'dsh-pet-close-btn',
+								onClick: () => { touch(); setPanelOpen(false); patchSetting('hidden', true); },
+								children: '关闭桌宠',
+							}),
+						],
+					}) : null,
+					// 舞台：两个 video 层叠
+					h('div', {
+						ref: stageRef,
+						className: 'dsh-pet-stage',
+						style: stageStyle,
+						children: [
+							h('video', Object.assign({}, commonVideoProps, { ref: videoARef, className: 'dsh-pet-video is-front' })),
+							h('video', Object.assign({}, commonVideoProps, { ref: videoBRef, className: 'dsh-pet-video' })),
+						],
+					}),
+				],
 			});
 		}
 

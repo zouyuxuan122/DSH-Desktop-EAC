@@ -368,13 +368,15 @@ async function callVision(config, imageUrl, question, detail, signal) {
  * later still sees the original images.
  */
 function attachRequestGuard(ctx, getConfig, exportDir) {
-  // The llm/stream waterfall awaits an async iterable from each listener. An
-  // async listener returns a Promise (not a generator), so every turn died
-  // with `yield* (intermediate value) is not async iterable`. Keep the
-  // listener synchronous and return an immediately-invoked async generator;
-  // delegation to the rest of the waterfall is `yield* next(...)`.
+  // llm/stream 监听器必须返回「流」：waterfall 上游对监听器返回值做
+  // yield*。async 函数返回 Promise，yield* Promise 会以
+  // "yield* (intermediate value) is not async iterable" 炸掉整个 turn。
+  // 因此监听器保持同步、立即返回一个 async generator；桥接逻辑在生成器
+  // 内部进行。下游委托放在 try/catch 之外：若放在里面，下游流自身的
+  // 错误会被守卫捕获并再次 next()，造成双重请求。
   ctx.on("llm/stream", (options, next) => {
     return (async function* () {
+      let downstream;
       try {
         const config = getConfig();
         if (config.requestGuard && typeof options?.model === "string"
@@ -385,8 +387,7 @@ function attachRequestGuard(ctx, getConfig, exportDir) {
             ctx.logger.info(
               `[tool-vision] request guard downgraded image blocks for model "${options.model}"`,
             );
-            yield* next({ ...options, messages });
-            return;
+            downstream = next({ ...options, messages });
           }
         }
       } catch (error) {
@@ -394,7 +395,7 @@ function attachRequestGuard(ctx, getConfig, exportDir) {
         // options (the adapter's own error, if any, is the status quo ante).
         ctx.logger.warn(`[tool-vision] request guard failed: ${String(error)}`);
       }
-      yield* next();
+      yield* downstream ?? next();
     })();
   });
 }

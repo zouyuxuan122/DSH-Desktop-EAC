@@ -552,7 +552,10 @@ function createGuard(opts) {
   // startOnce: () => Promise<url>（真正的拉起动作）。失败链路：
   //   体检 → 可修复项修复 → 重试 → 仍有最后良好快照则回滚 → 重试 → 事故报告。
   // 每层只重试一次，绝不无限循环。
-  async function guardedBoot(startOnce, describeFailure) {
+  // V4.2：opts.preRetry(errText) 是配置级修复钩子（pnpm allowBuilds 等），
+  // 返回 { applied: [...] }（或真值）即视为「已修复」，与 repair() 结果合并
+  // 后一起重试一次；返回 false 则走原链路。钩子只调用一次。
+  async function guardedBoot(startOnce, describeFailure, opts = {}) {
     const snap = snapshot('boot');
     try {
       const url = await startOnce();
@@ -564,14 +567,27 @@ function createGuard(opts) {
       const fixable = findings.filter((f) => f.fixable);
       for (const f of findings) log('guard', `[体检] ${f.code}(${f.severity}): ${f.message}`);
 
-      if (fixable.length) {
+      // V4.2：allowBuilds 等配置级修复钩子（只调用一次，返回 false 不打扰）。
+      let preApplied = [];
+      if (opts.preRetry) {
+        try {
+          const r = await opts.preRetry(String((firstErr && firstErr.message) || firstErr));
+          if (r && Array.isArray(r.applied) && r.applied.length) preApplied = r.applied;
+          else if (r) preApplied = ['配置级修复钩子已应用'];
+        } catch (err) {
+          log('guard', 'preRetry 钩子失败: ' + String((err && err.message) || err));
+        }
+      }
+
+      if (fixable.length || preApplied.length) {
         const { applied } = repair(findings);
-        if (applied.length) {
-          log('guard', '已应用修复: ' + applied.join('；'));
+        const all = [...applied, ...preApplied];
+        if (all.length) {
+          log('guard', '已应用修复: ' + all.join('；'));
           try {
             const url = await startOnce();
             if (snap) markGood(snap.id);
-            reportIncident('boot-recovered', '首次启动失败，自动修复后恢复。\n修复项：\n- ' + applied.join('\n- ') + '\n\n原始错误：\n' + String((firstErr && firstErr.message) || firstErr));
+            reportIncident('boot-recovered', '首次启动失败，自动修复后恢复。\n修复项：\n- ' + all.join('\n- ') + '\n\n原始错误：\n' + String((firstErr && firstErr.message) || firstErr));
             return url;
           } catch (secondErr) {
             log('guard', '修复后重试仍失败，进入回滚流程');
@@ -611,6 +627,78 @@ function createGuard(opts) {
     throw new Error('rollback lift not configured');
   }
 
+  // ── 启动失败归因（V4.2）────────────────────────────────────────────
+  // 把启动报错文案里的包名/行 id 对应到 profile 里「可停用的插件」：
+  //   · 命中 patch 行 id/name → 返回 { name, kind: 'patchRow', rowId }
+  //   · 命中 bundles / dependencies 键 → 返回 { name, kind, rowId: null }
+  // 归因失败（报错不含可识别包名）返回 null —— 调用方退回通用按钮。
+  // 只读 profile 配置面，绝不执行插件代码。
+  function attributeBootFailure(errText) {
+    try {
+      const text = String(errText || '');
+      if (!text) return null;
+      const dir = profileDir();
+      const candidates = [];
+      const push = (raw) => {
+        const k = String(raw || '').replace(/['",.;:]+$/g, '');
+        if (k && /^@?[A-Za-z0-9][A-Za-z0-9._@/+-]*$/.test(k) && !candidates.includes(k)) candidates.push(k);
+      };
+      const patterns = [
+        /duplicate (?:loader )?entry[^\n]*?['"]?(@?[A-Za-z0-9][\w.@/-]*)['"]?/gi,
+        /already registered[^\n]*?['"]?(@?[A-Za-z0-9][\w.@/-]*)['"]?/gi,
+        /cannot find module\s+['"]([^'"]+)['"]/gi,
+        /failed to (?:load|apply|initialize|resolve)\s+(?:plugin|entry|bundle)[^\n]*?['"]?(@?[A-Za-z0-9][\w.@/-]*)['"]?/gi,
+        /(?:plugin|entry|bundle)\s+['"]?(@?[A-Za-z0-9][\w.@/-]*)['"]?\s+(?:failed|not found|unavailable|rejected)/gi,
+      ];
+      for (const re of patterns) {
+        let m;
+        while ((m = re.exec(text)) !== null) push(m[1]);
+      }
+      if (candidates.length === 0) return null;
+
+      const manifest = readJson(path.join(dir, 'package.json'), {});
+      const bundles = (manifest.dsh && manifest.dsh.profile && Array.isArray(manifest.dsh.profile.bundles)) ? manifest.dsh.profile.bundles : [];
+      const depKeys = Object.keys(manifest.dependencies || {});
+      // patch 行（顶层 + insert 内层）→ { id, name }
+      let patchText = '';
+      try { patchText = fs.readFileSync(path.join(dir, 'cordis.patch.yml'), 'utf8'); } catch {}
+      const rows = [];
+      if (patchText) {
+        const lines = patchText.split(/\r?\n/);
+        let pendingId = null;
+        for (const line of lines) {
+          const idm = /^\s*-\s*id:\s*([\w.-]+)\s*$/.exec(line);
+          if (idm !== null) {
+            if (pendingId !== null) rows.push({ id: pendingId, name: null });
+            pendingId = idm[1];
+            continue;
+          }
+          const nm = /^\s+name:\s*['"]?([^'"\s]+)['"]?\s*$/.exec(line);
+          if (nm !== null && pendingId !== null) {
+            rows.push({ id: pendingId, name: nm[1] });
+            pendingId = null;
+            continue;
+          }
+          if (pendingId !== null && /^\s*-\s*insert:/.test(line)) {
+            rows.push({ id: pendingId, name: null });
+            pendingId = null;
+          }
+        }
+        if (pendingId !== null) rows.push({ id: pendingId, name: null });
+      }
+
+      for (const cand of candidates) {
+        const row = rows.find((r) => r.id === cand || r.name === cand);
+        if (row) return { name: row.name || row.id, kind: 'patchRow', rowId: row.id };
+        if (bundles.includes(cand)) return { name: cand, kind: 'bundle', rowId: null };
+        if (depKeys.includes(cand)) return { name: cand, kind: 'dependency', rowId: null };
+      }
+      return null;
+    } catch {
+      return null;
+    }
+  }
+
   function safeReadlink(p) {
     try { return fs.readlinkSync(p); } catch { return null; }
   }
@@ -630,7 +718,7 @@ function createGuard(opts) {
     snapshot, listSnapshots, restore, markGood, lastGoodSnapshot,
     healthCheck, repair, repairJunctions, junctionFindings,
     reportIncident, listIncidents, readIncident, resolveIncident,
-    guardedBoot, setRollbackLift,
+    guardedBoot, setRollbackLift, attributeBootFailure,
   };
 }
 

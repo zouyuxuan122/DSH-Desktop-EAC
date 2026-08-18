@@ -7,7 +7,7 @@ import { fileURLToPath } from 'node:url';
 
 const require = createRequire(import.meta.url);
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
-const { configLinesFor, healSoulMdPatchRow, healRowConfig, healRowDisabled, removeBundledRowDuplicates, bundlePatchEntryIds, collectBundleEntryIds } = require(join(root, 'patch-row-heal.js'));
+const { configLinesFor, normalizeRowConfigIndent, healSoulMdPatchRow, healRowConfig, healRowDisabled, removeBundledRowDuplicates, bundlePatchEntryIds, collectBundleEntryIds } = require(join(root, 'patch-row-heal.js'));
 
 // v2.0.0 实际写进用户 profile 的坏行：只有 id + name，没有 config。
 const BROKEN_PATCH = [
@@ -46,6 +46,59 @@ test('configLinesFor 生成合法 patch YAML', () => {
   assert.equal(configLinesFor({ path: 'soul.md' }), '      config:\n        path: "soul.md"\n');
 });
 
+// 向导/插件管理写的是顶层行（`- id:` 在列 0），config 缩进必须跟着行走：
+// 顶层行用 2/4，insert 块内行用 6/8，混用会让 dsh-app-boot 解析 patch 直接
+// 报 YAMLException（bad indentation of a mapping entry）→ dsh web 退出 1。
+test('configLinesFor 顶层行缩进（baseIndent=0 → 2/4）', () => {
+  assert.equal(configLinesFor({ path: 'soul.md' }, 0), '  config:\n    path: "soul.md"\n');
+});
+
+test('healSoulMdPatchRow 给顶层行补 config 时用 2/4 缩进', () => {
+  const patch = "- id: soul-md\n  name: 'dsh-soul-md'\n  disabled: true\n";
+  const { patch: out, healed } = healSoulMdPatchRow(patch);
+  assert.deepEqual(healed, ['soul-md']);
+  assert.equal(out, "- id: soul-md\n  name: 'dsh-soul-md'\n  config:\n    path: \"soul.md\"\n  disabled: true\n");
+});
+
+// 存量坏行自愈：旧 build 把 6 空格 config 贴到顶层行上，YAML 直接解析失败。
+test('normalizeRowConfigIndent 修复顶层行的缩进错位 config（存量坏行）', () => {
+  const bad = "- id: soul-md\n  name: 'dsh-soul-md'\n      config:\n        path: \"soul.md\"\n  disabled: true\n";
+  const out = normalizeRowConfigIndent(bad, 'soul-md');
+  assert.equal(out, "- id: soul-md\n  name: 'dsh-soul-md'\n  config:\n    path: \"soul.md\"\n  disabled: true\n");
+});
+
+test('normalizeRowConfigIndent 幂等且不碰 insert 块内合法行', () => {
+  const ok = '- insert:\n    - id: soul-md\n      name: \'dsh-soul-md\'\n      config:\n        path: "soul.md"\n';
+  assert.equal(normalizeRowConfigIndent(ok, 'soul-md'), ok, 'insert 块内 6/8 缩进合法，不动');
+  const topOk = "- id: soul-md\n  name: 'dsh-soul-md'\n  config:\n    path: \"soul.md\"\n";
+  assert.equal(normalizeRowConfigIndent(topOk, 'soul-md'), topOk, '顶层 2/4 缩进合法，不动');
+});
+
+test('normalizeRowConfigIndent 不把长 id 兄弟误当目标行（前缀 bug 回归）', () => {
+  // 传短 id dsh-pet 时不得碰 dsh-pet-settings 行（旧 \b 词边界会误命中）。
+  const bad = "- id: dsh-pet-settings\n  name: 'dsh-pet-settings'\n    config:\n      x: 1\n";
+  assert.equal(normalizeRowConfigIndent(bad, 'dsh-pet'), bad, '短 id 不得误改长 id 兄弟的 config 缩进');
+  const fixed = normalizeRowConfigIndent(bad, 'dsh-pet-settings');
+  assert.ok(fixed.includes('  config:\n    x: 1\n'), '正确 id 应修复错位缩进');
+});
+
+test('healRowConfig 不把长 id 兄弟当目标行补 config（前缀 bug 回归）', () => {
+  // 启动自愈 healRowConfig(patch, 'dsh-pet', …) 若误命中 dsh-pet-settings，
+  // 会把 dsh-pet 的 config（size/position）塞进设置插件行里改坏它。
+  const t = '- insert:\n    - id: dsh-pet-settings\n      name: dsh-pet-settings\n';
+  const r = healRowConfig(t, 'dsh-pet', { size: 260, position: 'bottom-right' });
+  assert.equal(r.patch, t, '短 id 不得给长 id 兄弟补 config');
+  const r2 = healRowConfig(t, 'dsh-pet-settings', { x: 1 });
+  assert.ok(r2.patch.includes('config:\n        x: 1\n'), '正确 id 应正常补 config');
+});
+
+test('healRowConfig 给顶层 dsh-pet 行补 config 时用 2/4 缩进', () => {
+  const patch = "- id: dsh-pet\n  name: 'dsh-pet'\n  disabled: true\n";
+  const { patch: out, healed } = healRowConfig(patch, 'dsh-pet', { size: 260, position: 'bottom-right' });
+  assert.ok(healed.includes('dsh-pet'));
+  assert.equal(out, "- id: dsh-pet\n  name: 'dsh-pet'\n  config:\n    size: 260\n    position: \"bottom-right\"\n  disabled: true\n");
+});
+
 // 根因防回归：schema 的 path 必须有默认值（文件缺失 → fallback 空 → 不注册
 // section，官方提示词原样使用），绝不能再变回 required 无默认。
 test('dsh-soul-md schema: path 带默认值，不再是 required', () => {
@@ -55,11 +108,14 @@ test('dsh-soul-md schema: path 带默认值，不再是 required', () => {
 });
 
 // main.js 侧双保险：新增行必须显式写 config，且启动时 heal 存量坏行。
+// heal 与行生成逻辑随 syncCompanionPlugins 迁到 profile/companion-sync.js
+// （main.js 经 createCompanionSync 接线，启动/服务重启时重放）。
 test('main.js: soul-md 行带 config + 启动时执行存量 heal', () => {
   const src = readFileSync(join(root, 'main.js'), 'utf8');
+  const syncSrc = readFileSync(join(root, 'profile', 'companion-sync.js'), 'utf8');
   assert.match(src, /id:\s*'soul-md',[^\n]*config:\s*\{\s*path:\s*'soul\.md'\s*\}/);
-  assert.match(src, /healSoulMdPatchRow\(patch\)/);
-  assert.match(src, /block \+= configLinesFor\(p\.config\)/);
+  assert.match(syncSrc, /healSoulMdPatchRow\(patch\)/);
+  assert.match(syncSrc, /block \+= configLinesFor\(p\.config\)/);
 });
 
 // 市场安装（dsh plugin add 登记 bundles）与 overlay 写行双挂载 →
