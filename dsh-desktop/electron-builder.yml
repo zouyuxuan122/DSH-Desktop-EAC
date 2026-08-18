@@ -53,6 +53,7 @@ files:
   - profile/companion-sync.js
   - profile/plugin-manager.js
   - profile/profile-guard.js
+  - client-update-flow.js
   - watchdog.js
   - builtin-plugin-state.js
   - preload.js
