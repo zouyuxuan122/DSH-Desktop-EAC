@@ -17,23 +17,33 @@ const fs = require('node:fs');
 const path = require('node:path');
 
 // 解析一行块内的 name（跟随 id 行的缩进行里找 name:）。
+/**
+ * @param {string[]} lines
+ * @param {number} startIdx
+ * @returns {string | null}
+ */
 function rowNameOf(lines, startIdx) {
   for (let j = startIdx + 1; j < lines.length; j++) {
-    const l = lines[j];
+    const l = lines[j] ?? '';
     if (/^\s*-/.test(l)) break;               // 下一个行项
     if (l.trim() === '') break;               // 空行
     if (!/^\s+/.test(l)) break;               // 顶层非缩进行（注释等）
     const m = /name:\s*['"]?([^'"\s]+)['"]?\s*/.exec(l);
-    if (m) return m[1];
+    if (m) return m[1] ?? null;
   }
   return null;
 }
 
 // 跳过一行块（id 行 + 其后的缩进配置行）；返回下一个要处理的下标。
+/**
+ * @param {string[]} lines
+ * @param {number} startIdx
+ * @returns {number}
+ */
 function blockEnd(lines, startIdx) {
   let j = startIdx + 1;
   while (j < lines.length) {
-    const l = lines[j];
+    const l = lines[j] ?? '';
     if (/^\s*-/.test(l)) break;
     if (l.trim() === '') break;
     if (!/^\s+/.test(l)) break;
@@ -44,24 +54,32 @@ function blockEnd(lines, startIdx) {
 
 // 从 patch 文本里移除 name/id 匹配 target 的 patch 行（顶层 + insert 内层）。
 // 返回 { patch, removed }。
+/**
+ * @param {string} patch
+ * @param {string} targetName
+ * @param {string} targetId
+ * @returns {{ patch: string, removed: string[] }}
+ */
 function stripPatchRows(patch, targetName, targetId) {
   const lines = String(patch || '').split(/\r?\n/);
+  /** @type {string[]} */
   const out = [];
+  /** @type {string[]} */
   const removed = [];
   for (let i = 0; i < lines.length; i++) {
-    const m = /^(\s*)-\s*id:\s*([\w.-]+)\s*$/.exec(lines[i]);
+    const m = /^(\s*)-\s*id:\s*([\w.-]+)\s*$/.exec(lines[i] ?? '');
     if (m === null) {
-      out.push(lines[i]);
+      out.push(lines[i] ?? '');
       continue;
     }
-    const id = m[2];
+    const id = /** @type {string} */ (m[2]);
     const name = rowNameOf(lines, i);
     if (id === targetId || (targetName && name === targetName)) {
       removed.push(id);
       i = blockEnd(lines, i) - 1;
       continue;
     }
-    out.push(lines[i]);
+    out.push(lines[i] ?? '');
   }
   let text = out.join('\n');
   if (!/^[\s\S]*\n$/.test(text)) text += '\n';
@@ -81,6 +99,7 @@ function removeMarketDuplicate(profileDir, builtinName, opts = {}) {
   const log = opts.log || (() => {});
   const removedDep = [];
   const removedBundles = [];
+  /** @type {string[]} */
   let removedRows = [];
   let changed = false;
   try {
@@ -99,7 +118,7 @@ function removeMarketDuplicate(profileDir, builtinName, opts = {}) {
       }
       if (pkg.dsh && pkg.dsh.profile && Array.isArray(pkg.dsh.profile.bundles)
         && pkg.dsh.profile.bundles.includes(builtinName)) {
-        pkg.dsh.profile.bundles = pkg.dsh.profile.bundles.filter((b) => b !== builtinName);
+        pkg.dsh.profile.bundles = pkg.dsh.profile.bundles.filter((/** @type {string} */ b) => b !== builtinName);
         removedBundles.push(builtinName);
         dirty = true;
       }
@@ -112,7 +131,7 @@ function removeMarketDuplicate(profileDir, builtinName, opts = {}) {
     const patchFile = path.join(profileDir, 'cordis.patch.yml');
     if (fs.existsSync(patchFile)) {
       const patch = fs.readFileSync(patchFile, 'utf8');
-      const { patch: patched, removed } = stripPatchRows(patch, builtinName, builtinName.split('/').pop());
+      const { patch: patched, removed } = stripPatchRows(patch, builtinName, builtinName.split('/').pop() ?? '');
       if (removed.length) {
         fs.writeFileSync(patchFile, patched, 'utf8');
         removedRows = removed;
@@ -122,7 +141,7 @@ function removeMarketDuplicate(profileDir, builtinName, opts = {}) {
     }
     return { ok: true, changed, removedDep, removedBundles, removedRows };
   } catch (err) {
-    log('内置插件同名迁移失败: ' + String((err && err.message) || err));
+    log('内置插件同名迁移失败: ' + (err instanceof Error ? err.message : String(err)));
     return { ok: false, changed, removedDep, removedBundles, removedRows };
   }
 }

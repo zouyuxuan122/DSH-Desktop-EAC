@@ -17,6 +17,21 @@ const path = require('node:path');
 const os = require('node:os');
 const fs = require('node:fs');
 
+/**
+ * @typedef {object} RuntimePatchesDeps
+ * @property {() => string} dshHome
+ * @property {() => string} userDataDir
+ * @property {(file: string) => Record<string, unknown> | null} readJsonFile
+ * @property {(root: string, notify: (m: string) => void) => number} patchSessionManage
+ * @property {(tag: string, msg: string) => void} log
+ * @property {typeof fs} [fsImpl]
+ * @property {typeof path} [pathImpl]
+ * @property {typeof os} [osImpl]
+ */
+
+/**
+ * @param {RuntimePatchesDeps} deps
+ */
 function createRuntimePatches(deps) {
   const {
     dshHome, // () => string —— main.js 的 let，调用期取当前值
@@ -52,7 +67,7 @@ function createRuntimePatches(deps) {
       }
       if (installed.length) log('boot', '已同步内置 skills 到 ' + destRoot + ': ' + installed.join(', '));
     } catch (err) {
-      log('boot', '同步内置 skills 失败: ' + err.message);
+      log('boot', '同步内置 skills 失败: ' + (/** @type {Error} */ (err)).message);
     }
   }
 
@@ -73,10 +88,10 @@ function createRuntimePatches(deps) {
     for (const root of runtimePatchRoots()) {
       if (!root || !fsImpl.existsSync(root)) continue;
       try {
-        const n = patchSessionManage(root, (m) => log('boot', m));
+        const n = patchSessionManage(root, (/** @type {string} */ m) => log('boot', m));
         if (n > 0) log('boot', '对话删除补丁: 已应用到 ' + root);
       } catch (err) {
-        log('boot', '对话删除补丁失败(' + root + '): ' + err.message);
+        log('boot', '对话删除补丁失败(' + root + '): ' + (/** @type {Error} */ (err)).message);
       }
     }
   }
@@ -101,7 +116,7 @@ function createRuntimePatches(deps) {
         fsImpl.writeFileSync(apiproxy, src);
         log('boot', '已补丁 apiproxy 设置命名空间白名单: ' + apiproxy);
       } catch (err) {
-        log('boot', 'apiproxy 白名单补丁失败(' + apiproxy + '): ' + err.message);
+        log('boot', 'apiproxy 白名单补丁失败(' + apiproxy + '): ' + (/** @type {Error} */ (err)).message);
       }
     }
   }

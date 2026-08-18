@@ -13,6 +13,55 @@
 // 依赖注入：quitting / clientUpdateBusy 为 main.js 可变 let，经 getter /
 // setter 调用期取值；其余稳定引用按引用传入。
 
+/**
+ * 上游发布信息（clientUpdater.checkLatest 返回值的最小形状）。
+ * @typedef {object} ClientRelease
+ * @property {string} version
+ * @property {boolean} isNewer
+ * @property {string} source
+ * @property {string} [body]
+ */
+
+/**
+ * 本流程用到的 settings 字段（其余字段透传）。
+ * @typedef {object} ClientSettings
+ * @property {string | null} [skipClientVersion]
+ * @property {string | null} [pendingClientVersion]
+ * @property {{ version: string, path: string, source: string } | null} [pendingClientUpdate]
+ */
+
+/**
+ * @typedef {object} ClientUpdateFlowDeps
+ * @property {boolean} isWin
+ * @property {() => boolean} getQuitting
+ * @property {() => boolean} getClientUpdateBusy
+ * @property {(v: boolean) => void} setClientUpdateBusy
+ * @property {(opts: object) => Promise<{ response: number }>} showBox
+ * @property {(version: string, kind: string) => { isDestroyed(): boolean, destroy(): void }} showUpdateWindow
+ * @property {(win: object) => { force(meta: object): void, client(received: number, total: number, meta: object): void }} makeUpdateProgressPusher
+ * @property {() => { snapshot(reason: string): boolean }} ensureGuard
+ * @property {(ctx: object, pending: object) => Promise<void>} restartWithClientUpdate
+ * @property {{
+ *   checkLatest(ctx: object, appVersion: string): Promise<ClientRelease>,
+ *   releaseFallbacks(ctx: object, release: ClientRelease): Promise<object[]>,
+ *   downloadRelease(ctx: object, release: ClientRelease, opts: {
+ *     fallbacks: object[],
+ *     onSourceChange: (source: string, idx: number, urls: string[]) => void,
+ *     onProgress: (received: number, total: number) => void,
+ *   }): Promise<{ filePath: string, size: number }>
+ * }} clientUpdater
+ * @property {{ compareVersions(a: string, b: string): number }} updater
+ * @property {() => object} updCtx
+ * @property {(ctx: object) => ClientSettings} loadSettings
+ * @property {(ctx: object, s: ClientSettings) => boolean} saveSettings
+ * @property {string} APP_VERSION
+ * @property {typeof import('node:fs')} fs
+ * @property {(tag: string, msg: string) => void} log
+ */
+
+/**
+ * @param {ClientUpdateFlowDeps} deps
+ */
 function createClientUpdateFlow(deps) {
   const {
     isWin,
@@ -25,6 +74,7 @@ function createClientUpdateFlow(deps) {
     APP_VERSION, fs, log,
   } = deps;
 
+/** @param {boolean} manual @returns {Promise<void>} */
 async function runClientUpdateFlow(manual) {
   if (getQuitting()) return;
   if (!isWin) {
@@ -49,13 +99,13 @@ async function runClientUpdateFlow(manual) {
   try {
     release = await clientUpdater.checkLatest(ctx, APP_VERSION);
   } catch (err) {
-    log('client-update', '检查失败: ' + err.message);
+    log('client-update', '检查失败: ' + (/** @type {Error} */ (err)).message);
     if (manual) {
       await showBox({
         type: 'warning',
         title: '检查客户端更新失败',
         message: '无法连接上游发布源。',
-        detail: err.message + '\n\n可通过环境变量 DSH_DESKTOP_RELEASE_API 指定镜像 API。',
+        detail: (/** @type {Error} */ (err)).message + '\n\n可通过环境变量 DSH_DESKTOP_RELEASE_API 指定镜像 API。',
         buttons: ['确定'],
       });
     }
@@ -115,6 +165,7 @@ async function runClientUpdateFlow(manual) {
     // V4.2：探测其余发布源的同版本 release 作为备用下载源（GitHub ↔ Gitee），
     // 主源多次失败/卡住时自动切换，全程在弹窗内提示。
     const fallbacks = await clientUpdater.releaseFallbacks(ctx, release);
+    /** @type {{ t: number, bytes: number, speed: number | null }} */
     const speedState = { t: 0, bytes: 0, speed: null };
     const { filePath, size } = await clientUpdater.downloadRelease(ctx, release, {
       fallbacks,
@@ -155,12 +206,12 @@ async function runClientUpdateFlow(manual) {
     });
     if (r2 === 0) await restartWithClientUpdate(ctx, settings.pendingClientUpdate);
   } catch (err) {
-    log('client-update', '更新失败: ' + err.message);
+    log('client-update', '更新失败: ' + (/** @type {Error} */ (err)).message);
     await showBox({
       type: 'error',
       title: '更新失败',
       message: '未能完成客户端更新，仍使用当前版本。',
-      detail: err.message,
+      detail: (/** @type {Error} */ (err)).message,
       buttons: ['确定'],
     });
   } finally {

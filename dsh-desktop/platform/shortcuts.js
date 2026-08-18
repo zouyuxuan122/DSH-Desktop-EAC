@@ -13,6 +13,33 @@
 // 平台差异：仅 Windows（isWin）；shell / app 为 Electron 能力，依赖注入。
 // __dirname 位于 platform/ 子目录，应用根目录资源需上溯一层（../assets）。
 
+/**
+ * .lnk 解析结果（shell.readShortcutLink 返回形状）。
+ * @typedef {{ target?: string, icon?: string }} ShortcutLink
+ */
+
+/**
+ * @typedef {object} ShortcutManagerDeps
+ * @property {{ isPackaged: boolean, getPath(name: string): string }} app
+ * @property {{
+ *   readShortcutLink(p: string): { target?: string, icon?: string } | null,
+ *   writeShortcutLink(p: string, mode: string, opts: object): void,
+ * }} shell
+ * @property {typeof import('node:path')} path
+ * @property {typeof import('node:fs')} fs
+ * @property {typeof import('node:os')} os
+ * @property {boolean} isWin
+ * @property {() => string} getUserDataDir
+ * @property {(ctx: object) => { shortcutPolicy?: string, shortcutTarget?: string, shortcutIcon?: string }} loadSettings
+ * @property {(ctx: object, s: object) => boolean} saveSettings
+ * @property {() => object} updCtx
+ * @property {(opts: object) => Promise<{ response: number }>} showBox
+ * @property {(tag: string, msg: string) => void} log
+ */
+
+/**
+ * @param {ShortcutManagerDeps} deps
+ */
 function createShortcutManager(deps) {
   const {
     app, shell, path, fs, os,
@@ -24,6 +51,7 @@ function createShortcutManager(deps) {
 
 const SHORTCUT_ICON_VERSION = 'whale-2';
 
+/** @returns {string} */
 function shortcutIconPath() {
   // 复制到 userData 保证路径稳定（便携版 exe 解压目录每次启动都会变）。
   const ico = path.join(getUserDataDir(), 'icon.ico');
@@ -35,7 +63,7 @@ function shortcutIconPath() {
     }
     return ico;
   } catch (err) {
-    log('boot', '复制快捷方式图标失败: ' + err.message);
+    log('boot', '复制快捷方式图标失败: ' + (/** @type {Error} */ (err)).message);
     return path.join(__dirname, '..', 'assets', 'icon.ico');
   }
 }
@@ -52,6 +80,7 @@ function shortcutIconPath() {
 //      自定义图标）时进行，用户自定义图标绝不覆盖；
 //   3. settings.shortcutPolicy = 'never' 时完全不碰桌面快捷方式（⋯ 菜
 //      单可切换），开始菜单快捷方式仍维护（系统通知的前置条件）。
+/** @param {string} dir @returns {string[]} */
 function listLnkFiles(dir) {
   try {
     return fs.readdirSync(dir, { withFileTypes: true })
@@ -60,16 +89,19 @@ function listLnkFiles(dir) {
   } catch { return []; }
 }
 
+/** @param {string} p @returns {ShortcutLink | null} */
 function readLnkSafe(p) {
   try { return shell.readShortcutLink(p); } catch { return null; }
 }
 
+/** @param {string} lnkPath @param {string} target @returns {boolean} */
 function lnkTargetsApp(lnkPath, target) {
   const link = readLnkSafe(lnkPath);
   if (!link || !link.target) return false;
   return path.resolve(String(link.target)).toLowerCase() === path.resolve(target).toLowerCase();
 }
 
+/** @param {string} lnkPath @param {string} ico @returns {boolean} */
 function lnkUsesManagedIcon(lnkPath, ico) {
   if (!ico) return false;
   const link = readLnkSafe(lnkPath);
@@ -79,6 +111,7 @@ function lnkUsesManagedIcon(lnkPath, ico) {
   return path.resolve(String(link.icon)).toLowerCase() === path.resolve(ico).toLowerCase();
 }
 
+/** @returns {void} */
 function maintainShortcuts() {
   if (!app.isPackaged || !isWin) return;
   // E2E / 自动化：跳过快捷方式维护（临时 exe 不得改写真实开始菜单/桌面
@@ -107,7 +140,7 @@ function maintainShortcuts() {
       path.join(desktopDir, 'DSH Desktop.lnk'),
     ]) {
       try { if (fs.existsSync(legacy)) { fs.rmSync(legacy); changed = true; } }
-      catch (err) { log('shortcut', '清理旧快捷方式失败 ' + legacy + ': ' + err.message); }
+      catch (err) { log('shortcut', '清理旧快捷方式失败 ' + legacy + ': ' + (/** @type {Error} */ (err)).message); }
     }
     // exe 被移动过或图标设计更新：只刷新「确认属于本应用」的快捷方式。
     // 归属判定：target 指向当前 exe，或指向上次记录的 exe 位置（搬家后
@@ -115,8 +148,8 @@ function maintainShortcuts() {
     const targetMoved = settings.shortcutTarget && settings.shortcutTarget !== target;
     const iconOutdated = settings.shortcutIcon !== SHORTCUT_ICON_VERSION;
     if (targetMoved || iconOutdated) {
-      const isOurs = (p) => fs.existsSync(p)
-        && (lnkTargetsApp(p, target) || (targetMoved && lnkTargetsApp(p, settings.shortcutTarget)));
+      const isOurs = (/** @type {string} */ p) => fs.existsSync(p)
+        && (lnkTargetsApp(p, target) || (targetMoved && lnkTargetsApp(p, settings.shortcutTarget ?? '')));
       const candidates = [startMenu].concat(policy === 'never' ? [] : listLnkFiles(desktopDir));
       for (const p of candidates) {
         if (!isOurs(p)) continue;
@@ -148,10 +181,11 @@ function maintainShortcuts() {
       log('boot', '快捷方式已维护（开始菜单/桌面 → ' + target + '，图标 ' + SHORTCUT_ICON_VERSION + '）');
     }
   } catch (err) {
-    log('boot', '快捷方式维护失败: ' + err.message);
+    log('boot', '快捷方式维护失败: ' + (/** @type {Error} */ (err)).message);
   }
 }
 
+/** @returns {void} */
 function warnTempRun() {
   if (!app.isPackaged || !isWin || !process.env.PORTABLE_EXECUTABLE_DIR) return;
   // E2E（scripts/e2e-v4.js）从临时目录跑便携版：告警弹窗会卡住无头验证。

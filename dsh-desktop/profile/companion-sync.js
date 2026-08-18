@@ -11,6 +11,54 @@
 // 按引用传入；__dirname 位于 profile/ 子目录，引用应用根目录资源时需上溯
 // 一层（../assets、../builtin-collision）。
 
+/**
+ * 配套插件定义（COMPANION_PLUGINS 条目）。
+ * @typedef {object} CompanionPlugin
+ * @property {string} id
+ * @property {string} name
+ * @property {string} [dir]
+ * @property {boolean} [disabled]
+ * @property {object} [config]
+ */
+
+/**
+ * @typedef {object} CompanionSyncDeps
+ * @property {() => string} dshHomePath
+ * @property {() => void} ensureDesktopProfileInit
+ * @property {() => void} applySessionManageFix
+ * @property {() => void} patchApiproxyBridgeNamespace
+ * @property {() => string} desktopProfileDir
+ * @property {(src: string, dest: string, notify: (m: string) => void) => { installed: string[] }} syncBundledPresets
+ * @property {(home: string, preset: string, notify: (m: string) => void) => string} ensureDefaultAgentPreset
+ * @property {(profileDir: string) => { plugins: Record<string, { state?: string } | undefined> }} loadBuiltinPluginState
+ * @property {() => Set<string>} removedPluginIds
+ * @property {(profileDir: string, name: string) => { ok: boolean, error?: string }} removeOwnedPluginPackage
+ * @property {(dirName: string) => string} builtinPluginSourceDir
+ * @property {(profileDir: string, src: string, name: string) => void} copyPluginPackage
+ * @property {(patch: string) => { patch: string, healed: string[] }} healSoulMdPatchRow
+ * @property {(patch: string, id: string, config: object) => { patch: string, healed: string[] }} healRowConfig
+ * @property {(patch: string, id: string) => { patch: string, healed: string[] }} healRowDisabled
+ * @property {(bundles: string[], nodeModulesDir: string) => Set<string>} collectBundleEntryIds
+ * @property {(patch: string, rowIds: Record<string, string>, bundles: string[], declaredIds: Set<string>) => { patch: string, removed: string[] }} removeBundledRowDuplicates
+ * @property {(patch: string, id: string) => boolean} hasEntryId
+ * @property {(config: object) => string} configLinesFor
+ * @property {(patch: string, id: string) => { text: string, removed?: string[] }} removePluginFromPatch
+ * @property {() => void} applyLegacySkinChoice
+ * @property {() => void} showMainWindow
+ * @property {() => { snapshot(reason: string): boolean }} ensureGuard
+ * @property {CompanionPlugin[]} COMPANION_PLUGINS
+ * @property {string} SKINS_DIR
+ * @property {(file: string) => any} readJsonFile
+ * @property {(profileDir: string, name: string, opts: { log: (m: string) => void }) => { ok: boolean, changed: boolean, removedDep: string[], removedRows: string[] }} removeMarketDuplicate
+ * @property {typeof import('node:fs')} fs
+ * @property {typeof import('node:path')} path
+ * @property {{ new (opts: object): { on(event: string, cb: () => void): object, show(): void } }} Notification
+ * @property {(tag: string, msg: string) => void} log
+ */
+
+/**
+ * @param {CompanionSyncDeps} deps
+ */
 function createCompanionSync(deps) {
   const {
     dshHomePath, ensureDesktopProfileInit,
@@ -78,7 +126,7 @@ function createCompanionSync(deps) {
       // V4 修复：旧回退是 name.slice('@deepseek-ai/'.length) —— 对无 scope 的
       // 长包名会截出错误目录（dsh-session-manager → 'manager'），该插件被
       // 静默跳过（行与包都不落盘）。
-      const dirName = p.dir || (p.name.includes('/') ? p.name.split('/').pop() : p.name);
+      const dirName = p.dir || (p.name.includes('/') ? (p.name.split('/').pop() ?? p.name) : p.name);
       // V4.3：覆盖层优先 —— 用户更新过的内置插件从 <userData>/builtin-plugin-updates
       // 拷贝（不被资产版本还原）；应用升级后资产版本更新则自动接管。
       const src = builtinPluginSourceDir(dirName);
@@ -106,7 +154,7 @@ function createCompanionSync(deps) {
           log('boot', `内置插件 ${p.name} 已接管市场同名包（移除依赖 ${migrated.removedDep.length} 个、patch 行 ${migrated.removedRows.length} 个）`);
         }
       } catch (err) {
-        log('boot', `内置插件同名迁移失败(${p.id}): ${String((err && err.message) || err)}`);
+        log('boot', `内置插件同名迁移失败(${p.id}): ${String((err instanceof Error ? err.message : err) || err)}`);
       }
       copyPluginPackage(profileDirP, src, p.name);
       // p.disabled: true 的配套插件默认以禁用行注册（如 dsh-dafeiyu 桌宠），
@@ -124,7 +172,7 @@ function createCompanionSync(deps) {
         n.on('click', () => showMainWindow());
         n.show();
       } catch (err) {
-        log('boot', '内置接管通知发送失败: ' + err.message);
+        log('boot', '内置接管通知发送失败: ' + (/** @type {Error} */ (err)).message);
       }
     }
     // 内置皮肤：行 id 取皮肤包 skin.json 的 wiring.id（ui-skin-*）。
@@ -170,7 +218,7 @@ function createCompanionSync(deps) {
         fs.writeFileSync(marker, JSON.stringify(next, null, 2) + '\n');
       }
     } catch (err) {
-      log('boot', '写入内置插件清单失败: ' + err.message);
+      log('boot', '写入内置插件清单失败: ' + (/** @type {Error} */ (err)).message);
     }
     // 注册到 profile 的 patch 层（幂等：已有行不重写，用户选择的皮肤/disabled 状态保留）。
     const patchFile = path.join(profileDirP, 'cordis.patch.yml');
@@ -225,6 +273,7 @@ function createCompanionSync(deps) {
     // #16）。这里再解析每个 bundle 包实际声明的 entry id 集合：overlay 中 id
     // 已被任一 bundle 声明（无论包名如何）即视为重复。
     const declaredBundleIds = collectBundleEntryIds(bundled, path.join(profileDirP, 'node_modules'));
+    /** @type {Record<string, string>} */
     const rowIds = {};
     for (const p of COMPANION_PLUGINS) rowIds[p.id] = p.name;
     const deduped = removeBundledRowDuplicates(patch, rowIds, bundled, declaredBundleIds);
@@ -255,7 +304,7 @@ function createCompanionSync(deps) {
     // 迁移带来的皮肤选择（migrateFromSharedWebProfile 记录）在此落位。
     applyLegacySkinChoice();
   } catch (err) {
-    log('boot', '同步配套插件失败: ' + err.message);
+    log('boot', '同步配套插件失败: ' + (/** @type {Error} */ (err)).message);
   }
   }
 

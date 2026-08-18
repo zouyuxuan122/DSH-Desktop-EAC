@@ -17,6 +17,34 @@
 // 经 getter 调用期取值；isWin 为稳定布尔；execSync 可注入（默认真实）；
 // __dirname 位于 profile/ 子目录，应用根目录资源需上溯一层（../assets）。
 
+/**
+ * @typedef {object} ProfileGuardDeps
+ * @property {boolean} isWin
+ * @property {() => string} getDshHome
+ * @property {() => boolean} getQuitting
+ * @property {() => boolean} getRestartingServer
+ * @property {() => import('node:child_process').ChildProcess | null} getServerProc
+ * @property {() => { junctionFindings(): unknown[], repairJunctions(): { repaired: unknown[] } }} ensureGuard
+ * @property {() => void} showMainWindow
+ * @property {{ new (opts: object): { on(event: string, cb: () => void): object, show(): void } }} Notification
+ * @property {{ loadSettings(ctx: object): { desktopProfileMigrated?: string, shareWebProfile?: boolean, legacySkinChoice?: string }, saveSettings(ctx: object, s: object): boolean }} updater
+ * @property {() => object} updCtx
+ * @property {() => string} desktopProfileDir
+ * @property {(file: string) => any} readJsonFile
+ * @property {(dir: string) => { plugins: Record<string, { state?: string } | undefined> }} loadBuiltinPluginState
+ * @property {(dir: string, id: string, state: string) => void} setBuiltinPluginState
+ * @property {string} DESKTOP_PROFILE
+ * @property {Array<{ id: string }>} COMPANION_PLUGINS
+ * @property {typeof import('node:fs')} fs
+ * @property {typeof import('node:path')} path
+ * @property {typeof import('node:os')} os
+ * @property {(tag: string, msg: string) => void} log
+ * @property {(cmd: string, opts: object) => string} [execSyncImpl]
+ */
+
+/**
+ * @param {ProfileGuardDeps} deps
+ */
 function createProfileGuard(deps) {
   const {
     isWin,
@@ -69,14 +97,14 @@ function migrateFromSharedWebProfile() {
     {
       const lines = oldPatch.split(/\r?\n/);
       for (let i = 0; i < lines.length; i++) {
-        const m = /^- id: (ui-skin-[\w-]+)\s*$/.exec(lines[i]);
+        const m = /^- id: (ui-skin-[\w-]+)\s*$/.exec(lines[i] ?? '');
         if (!m) continue;
         let disabled = false;
         for (let j = i + 1; j < lines.length; j++) {
-          if (/^- /.test(lines[j])) break;
-          if (/^\s+disabled:\s*true/.test(lines[j])) disabled = true;
+          if (/^- /.test(lines[j] ?? '')) break;
+          if (/^\s+disabled:\s*true/.test(lines[j] ?? '')) disabled = true;
         }
-        if (!disabled) enabledSkin = m[1];
+        if (!disabled) enabledSkin = m[1] ?? null;
       }
     }
 
@@ -103,33 +131,42 @@ function migrateFromSharedWebProfile() {
       log('boot', '将迁移用户皮肤选择: ' + enabledSkin);
     }
   } catch (err) {
-    log('boot', '共享 profile 迁移失败（不影响启动）: ' + err.message);
+    log('boot', '共享 profile 迁移失败（不影响启动）: ' + (/** @type {Error} */ (err)).message);
   }
 }
 
+/** @param {string} patch @returns {string[]} */
 function extractPatchRowIds(patch) {
+  /** @type {string[]} */
   const ids = [];
   const re = /^\s*-\s*id:\s*([\w.-]+)\s*$/gm;
   let m;
-  while ((m = re.exec(String(patch || ''))) !== null) ids.push(m[1]);
+  while ((m = re.exec(String(patch || ''))) !== null) ids.push(m[1] ?? '');
   return ids;
 }
 
 // 按 id 集合删除 patch 里的 insert 行块（与 removeBundledRowDuplicates 同
 // 语法约定：id 紧跟 `- insert:` 之后）。
+/**
+ * @param {string} patch
+ * @param {Set<string>} ids
+ * @returns {{ patch: string, removed: string[] }}
+ */
 function removePatchRowsById(patch, ids) {
+  /** @type {string[]} */
   const removed = [];
   if (typeof patch !== 'string' || patch === '' || !ids || ids.size === 0) return { patch, removed };
   const lines = patch.split(/\r?\n/);
+  /** @type {string[]} */
   const out = [];
   for (let i = 0; i < lines.length; i++) {
-    const line = lines[i];
+    const line = lines[i] ?? '';
     if (/^-\s*insert:/.test(line)) {
-      const mid = /^\s*-\s*id:\s*([\w.-]+)\s*$/.exec(lines[i + 1] || '');
-      if (mid && ids.has(mid[1])) {
-        removed.push(mid[1]);
+      const mid = /^\s*-\s*id:\s*([\w.-]+)\s*$/.exec(lines[i + 1] ?? '');
+      if (mid && ids.has(mid[1] ?? '')) {
+        removed.push(mid[1] ?? '');
         let j = i + 1;
-        while (j < lines.length && !/^-\s*insert:/.test(lines[j]) && /^#/.test(lines[j]) === false && /^\s+\S/.test(lines[j])) j++;
+        while (j < lines.length && !/^-\s*insert:/.test(lines[j] ?? '') && /^#/.test(lines[j] ?? '') === false && /^\s+\S/.test(lines[j] ?? '')) j++;
         i = j - 1;
         continue;
       }
@@ -159,7 +196,7 @@ function applyLegacySkinChoice() {
     delete s.legacySkinChoice;
     updater.saveSettings(updCtx(), s);
   } catch (err) {
-    log('boot', '应用迁移皮肤选择失败: ' + err.message);
+    log('boot', '应用迁移皮肤选择失败: ' + (/** @type {Error} */ (err)).message);
   }
 }
 
@@ -209,12 +246,13 @@ function detectExternalDsh() {
   return new Promise((resolve) => {
     if (!isWin) return resolve({ running: false, pids: [] });
     const own = new Set([process.pid]);
-    if (getServerProc() && getServerProc().pid) own.add(getServerProc().pid);
+    const sp = getServerProc();
+    if (sp && sp.pid) own.add(sp.pid);
     let out = '';
     try {
-      out = execSyncImpl(
+      out = String(execSyncImpl(
         'powershell -NoProfile -Command "Get-CimInstance Win32_Process -Filter \'Name=\'\'node.exe\'\'\' | Select-Object ProcessId,CommandLine | ConvertTo-Json -Compress"',
-        { encoding: 'utf8', windowsHide: true, timeout: 12000 });
+        { encoding: 'utf8', windowsHide: true, timeout: 12000 }));
     } catch {
       return resolve({ running: false, pids: [] });
     }
