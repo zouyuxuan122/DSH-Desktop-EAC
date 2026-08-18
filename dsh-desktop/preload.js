@@ -75,6 +75,13 @@ const dshDesktop = {
     // V4.2：移除（卸载语义）/恢复内置插件，返回 { ok, restartRequired }。
     setRemoved: (id, removed) => ipcRenderer.invoke('dsh:plugin-set-removed', { id, removed }),
   },
+  // 插件更新（V4.3，dsh-plugin-marketplace「更新」标签）：内置插件上游更新
+  // —— 清单 / 手动更新单个 / 自动更新开关（默认关，仅提示）。
+  pluginUpdates: {
+    list: (force = false) => ipcRenderer.invoke('dsh:plugin-updates', { force }),
+    update: (id) => ipcRenderer.invoke('dsh:plugin-update', { id }),
+    setAutoUpdate: (enabled) => ipcRenderer.invoke('dsh:plugin-auto-update', { enabled }),
+  },
   // 图片粘贴（V4.2，dsh-image-paste 插件）：把剪贴板图片存到临时目录
   // （%TEMP%/dsh-paste/），返回 { ok, path, size } 供 agent 读取。
   imagePaste: {

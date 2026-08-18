@@ -394,4 +394,6 @@ module.exports = {
   abort,
   registryChain,
   currentRegistry,
+  // 供 plugin-updater.js（内置/市场插件更新）复用同一 npm 运行器与镜像链。
+  runNpm,
 };

@@ -42,6 +42,17 @@ window.__ModuleLoader__.load({
       return React.createElement('div', { role: 'status', style: { fontSize: 12, color: kind === 'ok' ? '#7fd6a0' : kind === 'err' ? '#e5484d' : 'inherit', opacity: 0.85 } }, text);
     }
 
+    function pluginRowsFrom(result) {
+      if (Array.isArray(result)) return result;
+      if (Array.isArray(result && result.rows)) return result.rows;
+      if (Array.isArray(result && result.entries)) return result.entries;
+      return [];
+    }
+
+    function pluginRow(rows, id) {
+      return rows.find((item) => item && (item.id === id || item.entryId === id)) || null;
+    }
+
     // ── 页面桌宠（dsh-pet）开关 ──────────────────────────────
     function PagePetCard() {
       const [state, setState] = useState({ loaded: false, enabled: false, busy: false, pending: null, notice: null, err: null });
@@ -51,14 +62,14 @@ window.__ModuleLoader__.load({
         if (!b) { if (active) setState((s) => ({ ...s, err: '插件管理桥不可用' })); return; }
         b.list().then((res) => {
           if (!active) return;
-          const entries = res && res.entries;
-          const rows = res && res.rows;
-          const row = (entries || []).find((e) => e.entryId === 'dsh-pet')
-            || (rows || []).find((r) => r.id === 'dsh-pet')
-            || null;
+          const row = pluginRow(pluginRowsFrom(res), 'dsh-pet');
           setState((s) => ({ ...s, loaded: true, enabled: !!(row && row.enabled), err: null }));
-        }).catch(() => {
-          if (active) setState((s) => ({ ...s, loaded: true, err: '读取桌宠状态失败' }));
+        }).catch((err) => {
+          if (active) setState((s) => ({
+            ...s,
+            loaded: true,
+            err: '读取桌宠状态失败: ' + String((err && err.message) || err),
+          }));
         });
         return () => { active = false; };
       }, []);
@@ -70,6 +81,7 @@ window.__ModuleLoader__.load({
         b.setEnabled('dsh-pet', enabled).then((res) => {
           setState((s) => ({
             ...s, busy: false, pending: null,
+            enabled: res && res.ok ? enabled : s.enabled,
             notice: res && res.ok ? (enabled ? '已启用，重启应用后生效' : '已停用，重启应用后生效') : null,
             err: res && !res.ok ? String(res.error || '操作失败') : null,
           }));
@@ -105,13 +117,29 @@ window.__ModuleLoader__.load({
       const writable = status === 'ready' && !busy;
       useEffect(() => {
         let active = true;
-        fetch(FISH_ENDPOINT, { cache: 'no-store' })
+        const loadSettings = () => fetch(FISH_ENDPOINT, { cache: 'no-store' })
           .then(async (response) => {
             if (!response.ok) throw new Error('settings request failed: ' + response.status);
             return response.json();
           })
           .then((next) => { if (active) { setValue(next); setStatus('ready'); } })
           .catch(() => { if (active) setStatus('unavailable'); });
+        const bridge = window.dshDesktop && window.dshDesktop.pluginManager;
+        if (!bridge) {
+          loadSettings();
+          return () => { active = false; };
+        }
+        bridge.list()
+          .then((result) => {
+            if (!active) return;
+            const row = pluginRow(pluginRowsFrom(result), 'dsh-dafeiyu');
+            if (row && row.enabled === false) {
+              setStatus('disabled');
+              return;
+            }
+            loadSettings();
+          })
+          .catch(loadSettings);
         return () => { active = false; };
       }, []);
       const write = (field, next) => {
@@ -136,6 +164,8 @@ window.__ModuleLoader__.load({
         ),
         status === 'unavailable'
           ? React.createElement('span', { role: 'status' }, '大肥鱼设置尚未连接到 DSH Host。')
+          : status === 'disabled'
+          ? React.createElement('span', { role: 'status' }, '大肥鱼当前未启用。请在“插件 → 管理”启用 dsh-dafeiyu 后重启应用。')
           : status === 'loading'
           ? React.createElement('span', null, '正在读取设置…')
           : React.createElement(React.Fragment, null,

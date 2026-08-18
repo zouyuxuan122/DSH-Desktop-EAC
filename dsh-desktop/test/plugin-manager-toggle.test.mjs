@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { togglePluginInPatch, removePluginFromPatch } from '../scripts/plugin-manager-patch.js';
+import { togglePluginInPatch, removePluginFromPatch, hasEntryId } from '../scripts/plugin-manager-patch.js';
 
 // EAC 重写后的回归：上游正则版会吞掉目标条目之后的兄弟条目（数据丢失）。
 test('禁用中位条目不吞兄弟条目（上游 bug 回归）', () => {
@@ -17,6 +17,24 @@ test('禁用首位/末位条目同样不吞兄弟条目', () => {
   assert.ok(r1.includes('- id: second'), 'second 必须保留');
   const r2 = togglePluginInPatch(t, 'second', false, 'b');
   assert.ok(r2.includes('- id: first'), 'first 必须保留');
+});
+
+test('切换 dsh-pet 不得误匹配并删除 dsh-pet-settings', () => {
+  const t = '- insert:\n    - id: dsh-pet\n      name: dsh-pet\n    - id: dsh-pet-settings\n      name: dsh-pet-settings\n';
+  const r = togglePluginInPatch(t, 'dsh-pet', false, 'dsh-pet');
+  assert.ok(r.includes('- id: dsh-pet-settings'), 'dsh-pet-settings 必须保留');
+  assert.ok(r.includes('name: dsh-pet-settings'), '设置插件包名必须保留');
+  assert.ok(/- id: dsh-pet\n  name: 'dsh-pet'\n  disabled: true/.test(r), 'dsh-pet 应被单独关闭');
+});
+
+test('hasEntryId：短 id 不得误命中长 id 兄弟（前缀 bug 回归）', () => {
+  const onlyLong = '- insert:\n    - id: dsh-pet-settings\n      name: dsh-pet-settings\n';
+  assert.equal(hasEntryId(onlyLong, 'dsh-pet'), false, 'dsh-pet 不得命中 dsh-pet-settings 行');
+  assert.equal(hasEntryId(onlyLong, 'dsh-pet-settings'), true, '完整 id 应命中 insert 内层行');
+  assert.equal(hasEntryId('- id: dsh-pet\n  name: dsh-pet\n', 'dsh-pet'), true, '顶层行命中');
+  assert.equal(hasEntryId('    - id: dsh-pet\n', 'dsh-pet'), true, 'insert 内层行命中');
+  assert.equal(hasEntryId('', 'dsh-pet'), false, '空文本不命中');
+  assert.equal(hasEntryId('- id: dsh-pet-settings\n', 'dsh-pet-settings'), true);
 });
 
 test('默认禁用配套插件的完整生命周期（dafeiyu 场景）', () => {

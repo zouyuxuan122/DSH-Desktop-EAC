@@ -49,7 +49,14 @@ window.__ModuleLoader__.load({
 		// - 双 video 层叠：一个显示、一个预加载，切换时交叉淡入避免闪空白
 		const css = [
 			// 根容器：fixed 固定定位、层级 40（在界面之上）、整体点击穿透（不挡界面操作）、禁止选中
-			'.dsh-pet-root{position:fixed;z-index:40;pointer-events:none;user-select:none}',
+			// EAC 本地补丁：40 会被右侧栏（dsh-better-sidebar 面板 z-index:50）盖住，
+			// 提到 CSS 最大值保证页面桌宠始终是最高显示优先级（root 点击穿透不受影响）。
+			'.dsh-pet-root{position:fixed;z-index:2147483647;pointer-events:none;user-select:none}',
+			// EAC 本地补丁 2（根治）：官方 shell.overlay 容器（data-shell-overlay，
+			// z-index:20）创建独立层叠上下文，把上面 root 的 2147483647 限制在容器
+			// 内部、整体仍低于右侧栏(z-index:50)。这里把容器本身抬到最高 —— 容器
+			// pointer-events:none 不挡操作，其它 overlay 条目一并浮最上（符合覆盖层语义）。
+			'[data-shell-overlay]{z-index:2147483647!important}',
 			// 右下角默认位置（right:24px 距右缘、bottom:0 贴底）
 			'.dsh-pet-root[data-corner="bottom-right"]{right:24px;bottom:0}',
 			// 左下角位置
@@ -95,7 +102,7 @@ window.__ModuleLoader__.load({
 			'.dsh-pet-root{transition:transform .25s ease}',
 			'.dsh-pet-root.collapsed{transform:scale(.45) translateY(38%);transform-origin:center bottom}',
 			'.dsh-pet-root.collapsed:hover{transform:scale(.75) translateY(10%)}',
-			'.dsh-pet-call{position:fixed;z-index:40;pointer-events:auto;padding:6px 12px;border:none;border-radius:999px;background:color-mix(in srgb,var(--dsw-alias-bg-layer-2,#101828) 92%,transparent);color:var(--dsw-alias-label-secondary,#b8c5ea);border:1px solid var(--dsw-alias-border-l1,rgba(255,255,255,.14));cursor:pointer;font-size:11px;box-shadow:0 4px 14px rgba(0,0,0,.35);opacity:.85;transition:opacity .15s ease;font-family:inherit}',
+			'.dsh-pet-call{position:fixed;z-index:2147483647;pointer-events:auto;padding:6px 12px;border:none;border-radius:999px;background:color-mix(in srgb,var(--dsw-alias-bg-layer-2,#101828) 92%,transparent);color:var(--dsw-alias-label-secondary,#b8c5ea);border:1px solid var(--dsw-alias-border-l1,rgba(255,255,255,.14));cursor:pointer;font-size:11px;box-shadow:0 4px 14px rgba(0,0,0,.35);opacity:.85;transition:opacity .15s ease;font-family:inherit}',
 			'.dsh-pet-call:hover{opacity:1;color:var(--dsw-alias-label-primary,#eef2ff)}',
 			'@media (prefers-reduced-motion: reduce){.dsh-pet-toolbar,.dsh-pet-call,.dsh-pet-root,.dsh-pet-panel{transition:none}}',
 		].join('\n');

@@ -51,7 +51,7 @@ function configLinesFor(config, baseIndent = 4) {
 function normalizeRowConfigIndent(patch, id) {
   if (typeof patch !== 'string' || patch === '' || !id) return patch;
   const esc = String(id).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-  const rowRe = new RegExp(`^([\\t ]*)- id: ${esc}\\b`);
+  const rowRe = new RegExp(`^([\\t ]*)- id: ${esc}(?![A-Za-z0-9_.-])`);
   const lines = patch.split(/\r?\n/);
   let changed = false;
   for (let i = 0; i < lines.length; i++) {
@@ -125,7 +125,7 @@ function healRowConfig(patch, id, config) {
   if (normalized !== patch) healed.push(id);
   patch = normalized;
   const rowRe = new RegExp(
-    `(^[\\t ]*- id: ${String(id).replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b[^\\n]*\\n[\\t ]*name: ['"]?[^'"\\n]+['"]?\\n)(?![\\t ]*config:)`,
+    `(^[\\t ]*- id: ${String(id).replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}(?![A-Za-z0-9_.-])[^\\n]*\\n[\\t ]*name: ['"]?[^'"\\n]+['"]?\\n)(?![\\t ]*config:)`,
     'gm'
   );
   const out = patch.replace(rowRe, (m) => m + configLinesFor(config, (m.match(/^[\t ]*/) || [''])[0].replace(/\t/g, '  ').length));

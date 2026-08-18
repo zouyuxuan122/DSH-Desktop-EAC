@@ -28,12 +28,14 @@ files:
   - updater.js
   - settings.js
   - client-updater.js
+  - plugin-updater.js
   - balance.js
   - dsh-home.js
   - session-watcher.js
   - profile-module-heal.js
   - patch-row-heal.js
   - builtin-collision.js
+  - plugin-manager-state.js
   - plugin-guard.js
   - preset-sync.js
   - error-detail.js

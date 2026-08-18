@@ -28,7 +28,13 @@ dsh-desktop/data/
 .DS_Store
 Thumbs.db
 
+# Python build artifacts (dsh-dafeiyu helper 等)
+__pycache__/
+*.pyc
+
 # Temp & updater artifacts
 *.tmp
 updates/
 
+# Reasonix 工具元数据（勿提交）
+.reasonix/
