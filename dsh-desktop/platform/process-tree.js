@@ -14,21 +14,63 @@
 
 const { spawn, execSync } = require('node:child_process');
 
+/**
+ * 子进程句柄（main.js 里 spawn 的 dsh web / 市场任务进程的最小形状）。
+ * @typedef {object} ChildProc
+ * @property {number} pid
+ * @property {number | null} exitCode
+ * @property {boolean} [killed]
+ * @property {(signal: NodeJS.Signals | number) => void} kill
+ */
+
+/**
+ * @typedef {object} KillOpts
+ * @property {number} [graceMs]
+ * @property {number} [hardMs]
+ */
+
+/**
+ * @typedef {object} ProcessTreeDeps
+ * @property {string} [platform] 覆盖 process.platform（测试注入）
+ * @property {(cmd: string, args: string[], opts: object) => unknown} [spawnImpl]
+ * @property {(cmd: string, opts: object) => string} [execSyncImpl]
+ * @property {(pid: number, signal: NodeJS.Signals | number) => void} [killSignal]
+ * @property {(tag: string, msg: string) => void} [log]
+ * @property {(fn: () => void, ms: number) => { unref: () => unknown }} [setTimer]
+ */
+
+/**
+ * @typedef {object} ProcessTree
+ * @property {(proc: ChildProc | null | undefined) => void} killTree
+ * @property {(proc: ChildProc | null | undefined, opts?: KillOpts) => Promise<void>} killTreeAndWait
+ * @property {(proc: ChildProc | null | undefined, timeoutMs: number) => Promise<void>} waitForProcExit
+ * @property {(pid: number) => boolean} pidAliveWin
+ */
+
+/**
+ * @param {ProcessTreeDeps} [deps]
+ * @returns {ProcessTree}
+ */
 function createProcessTree(deps = {}) {
   const {
     platform = process.platform,
     spawnImpl = spawn,
     execSyncImpl = execSync,
+    /** @type {(pid: number, signal: NodeJS.Signals | number) => void} */
     killSignal = (pid, signal) => process.kill(pid, signal),
     log = () => {},
-    setTimer = setTimeout,
   } = deps;
+  // TS7 对「可选声明类型 + setTimeout 默认值」的解构会求并出 undefined，
+  // 这里显式解析（运行时空操作，与原先 destructure 默认完全等价）。
+  /** @type {(fn: () => void, ms: number) => { unref: () => unknown }} */
+  const setTimer = deps.setTimer || ((fn, ms) => setTimeout(fn, ms));
 
   const IS_WIN = platform === 'win32';
 
   // Windows tasklist PID 存活探测（killTree 与 waitForProcExit 共用）。
   // CSV 输出里 PID 总是带引号（"app.exe","1234",...），带引号匹配避免裸
   // 子串误命中（如 PID 234 误匹配内存列 "1,234 K"）。查询失败视为已退出。
+  /** @param {number} pid */
   function pidAliveWin(pid) {
     try {
       const out = execSyncImpl(
@@ -39,6 +81,7 @@ function createProcessTree(deps = {}) {
     } catch { return false; }
   }
 
+  /** @param {ChildProc | null | undefined} proc */
   function killTree(proc) {
     if (!proc || !proc.pid) return;
     try {
@@ -74,6 +117,11 @@ function createProcessTree(deps = {}) {
   // conhost.exe 每次退出都原样残留（用户实测三次，三次成对）。
   // 这里：优雅 taskkill → 等待 graceMs → 仍存活则 taskkill /T /F → 再等
   // hardMs，全程有界，绝不无限阻塞退出。
+  /**
+   * @param {ChildProc | null | undefined} proc
+   * @param {KillOpts} [opts]
+   * @returns {Promise<void>}
+   */
   async function killTreeAndWait(proc, { graceMs = 1200, hardMs = 4000 } = {}) {
     if (!proc || !proc.pid || proc.exitCode !== null) return;
     const pid = proc.pid;
@@ -105,6 +153,11 @@ function createProcessTree(deps = {}) {
 
   // 等待一个子进程真正退出。Windows 轮询 tasklist，POSIX 用 signal 0
   // 探测进程组；超时后放行由调用方自行处理。
+  /**
+   * @param {ChildProc | null | undefined} proc
+   * @param {number} timeoutMs
+   * @returns {Promise<void>}
+   */
   function waitForProcExit(proc, timeoutMs) {
     return new Promise((resolve) => {
       if (!proc || !proc.pid) return resolve();

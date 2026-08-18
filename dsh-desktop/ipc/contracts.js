@@ -18,6 +18,27 @@
 //   float-window  —— 必须是某个会话浮窗 webContents
 //   any           —— 不做 sender 校验
 
+/**
+ * @typedef {'handle' | 'on'} IpcKind
+ * @typedef {'main-window' | 'wizard-window' | 'float-window' | 'any'} IpcSenderRule
+ * @typedef {'null' | 'array-empty' | 'unauthorized' | 'forbidden' | 'ok-false' | 'state' | 'ignore' | 'balance-cache'} IpcUnauthorized
+ * @typedef {object} IpcRequestSpec
+ * @property {string[]} keys
+ * @property {Record<string, string>} [types]
+ * @property {string[]} [required]
+ * @typedef {object} IpcContract
+ * @property {string} channel
+ * @property {IpcKind} kind
+ * @property {string} domain
+ * @property {IpcSenderRule} sender
+ * @property {IpcUnauthorized} unauthorized
+ * @property {IpcRequestSpec | null} request
+ * @property {string} response
+ * @property {boolean} idempotent
+ * @property {string} description
+ */
+
+/** @type {IpcContract[]} */
 const IPC_CONTRACTS = [
   // ---- chrome（自绘标题栏 / 窗口 / 菜单 / 浮窗） ----
   {
@@ -277,12 +298,21 @@ const PUSH_CHANNELS = ['chrome:maximized', 'dsh:balance'];
 
 const BY_CHANNEL = new Map(IPC_CONTRACTS.map((c) => [c.channel, c]));
 
+/**
+ * @param {string} channel
+ * @returns {IpcContract | null}
+ */
 function channelContract(channel) {
   return BY_CHANNEL.get(channel) || null;
 }
 
 // 载荷结构校验（非抛出）。只检查「形状/类型」，业务语义由 handler 负责。
 // 返回 { ok, violations }；violations 为空即合法。
+/**
+ * @param {string} channel
+ * @param {unknown} payload
+ * @returns {{ ok: boolean, violations: string[] }}
+ */
 function validatePayload(channel, payload) {
   const contract = BY_CHANNEL.get(channel);
   if (!contract) return { ok: false, violations: ['unknown channel: ' + channel] };
@@ -298,19 +328,21 @@ function validatePayload(channel, payload) {
   if (typeof payload !== 'object' || Array.isArray(payload)) {
     return { ok: false, violations: ['payload must be a plain object'] };
   }
+  /** @type {Record<string, unknown>} */
+  const record = /** @type {Record<string, unknown>} */ (payload);
   if (spec && spec.required) {
     for (const key of spec.required) {
-      if (payload[key] === undefined) {
+      if (record[key] === undefined) {
         violations.push('missing required payload key: ' + key);
       }
     }
   }
   const allowed = new Set(spec ? spec.keys : []);
-  for (const key of Object.keys(payload)) {
+  for (const key of Object.keys(record)) {
     if (!allowed.has(key)) violations.push('unknown payload key: ' + key);
   }
   for (const [key, type] of Object.entries(spec ? spec.types || {} : {})) {
-    const value = payload[key];
+    const value = record[key];
     if (value !== undefined && value !== null && typeof value !== type) {
       violations.push('payload key ' + key + ' must be ' + type + ', got ' + typeof value);
     }
