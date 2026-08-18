@@ -11,6 +11,56 @@ const fs = require('node:fs');
 const http = require('node:http');
 const path = require('node:path');
 
+/**
+ * 子进程句柄（真实 child_process.ChildProcess，含 stdout/stderr/on 事件面）。
+ * @typedef {import('node:child_process').ChildProcess} ChildProc
+ */
+
+/**
+ * 服务状态机取值。
+ * @typedef {'booting' | 'running' | 'restarting' | 'failed' | 'stopping' | 'stopped'} ServiceState
+ */
+
+/**
+ * watchServerProc 选项。
+ * @typedef {object} WatchOpts
+ * @property {number} [expectedPort]
+ * @property {number} [unsafePortRetries]
+ * @property {string[]} [overlays]
+ * @property {boolean} [firstBoot]
+ */
+
+/**
+ * supervisor 依赖（main.js 注入；可变状态一律以 getter 函数传入）。
+ * @typedef {object} SupervisorDeps
+ * @property {{ isPackaged: boolean }} app
+ * @property {(cmd: string, args: string[], opts: object) => ChildProc} spawn
+ * @property {() => string} nodeExe
+ * @property {() => string} dshBin
+ * @property {() => NodeJS.ProcessEnv} childEnv
+ * @property {() => string} desktopProfile
+ * @property {() => string} desktopProfileDir
+ * @property {() => string} userDataDir
+ * @property {() => string} getLogsDir
+ * @property {(ctx: object) => Promise<number>} chooseStableWebPort
+ * @property {() => object} stablePortCtx
+ * @property {(url: string) => number} restrictedPortOf
+ * @property {(url: string) => number} [overrideAnnouncedPort]
+ * @property {(ctx: object) => { webPort?: number }} loadSettings
+ * @property {(ctx: object, s: { webPort?: number }) => boolean} saveSettings
+ * @property {() => object} updCtx
+ * @property {(proc: ChildProc | null | undefined) => void} killTree
+ * @property {(proc: ChildProc | null | undefined, timeoutMs: number) => Promise<void>} waitForProcExit
+ * @property {() => boolean} isQuitting
+ * @property {() => boolean} isRestarting
+ * @property {(proc: ChildProc | null) => void} onProcessChanged
+ * @property {(info: { code: number | null, signal: NodeJS.Signals | null, proc: ChildProc, logPath: string }) => void} onUnexpectedExit
+ * @property {(tag: string, msg: string) => void} log
+ * @property {typeof fs} [fsImpl]
+ * @property {typeof http} [httpImpl]
+ * @property {typeof path} [pathImpl]
+ */
+
 const SERVICE_STATES = new Set([
   'booting',
   'running',
@@ -20,6 +70,9 @@ const SERVICE_STATES = new Set([
   'stopped',
 ]);
 
+/**
+ * @param {SupervisorDeps} deps
+ */
 function createWebServiceSupervisor(deps) {
   const {
     app,
@@ -50,20 +103,26 @@ function createWebServiceSupervisor(deps) {
     pathImpl = path,
   } = deps;
 
+  /** @type {ChildProc | null} */
   let serverProc = null;
+  /** @type {ServiceState} */
   let state = 'stopped';
+  /** @type {string | null} */
   let currentUrl = null;
 
+  /** @param {ServiceState} next */
   function setState(next) {
     if (!SERVICE_STATES.has(next)) throw new Error('未知 dsh 服务状态: ' + next);
     state = next;
   }
 
+  /** @param {ChildProc | null} next */
   function setProcess(next) {
     serverProc = next;
     if (typeof onProcessChanged === 'function') onProcessChanged(next);
   }
 
+  /** @param {ChildProc | null | undefined} [proc] */
   function isAlive(proc = serverProc) {
     return !!proc && proc.exitCode === null && !proc.killed;
   }
@@ -72,6 +131,11 @@ function createWebServiceSupervisor(deps) {
     return pathImpl.join(getLogsDir(), 'dsh-web.log');
   }
 
+  /**
+   * @param {number} unsafePortRetries
+   * @param {string[]} overlays
+   * @returns {Promise<string>}
+   */
   async function start(unsafePortRetries = 4, overlays = []) {
     if (isAlive() && !isQuitting()) {
       log('dsh', 'startServer 重入：先终结旧进程再启动');
@@ -116,12 +180,20 @@ function createWebServiceSupervisor(deps) {
     });
   }
 
+  /**
+   * @param {ChildProc} proc
+   * @param {import('node:fs').WriteStream} out
+   * @param {WatchOpts} [opts]
+   * @returns {Promise<string>}
+   */
   function watchServerProc(proc, out, opts = {}) {
     return new Promise((resolve, reject) => {
       let settled = false;
       let handedOff = false;
+      /** @type {ReturnType<typeof setTimeout> | null} */
       let bootTimer = null;
 
+      /** @param {Function} fn @param {unknown} value @param {ServiceState} [nextState] */
       const finish = (fn, value, nextState) => {
         if (nextState) setState(nextState);
         if (!settled) {
@@ -133,37 +205,44 @@ function createWebServiceSupervisor(deps) {
           bootTimer = null;
         }
       };
+      /** @param {string} url */
       const resolveReady = (url) => {
         currentUrl = url;
         finish(resolve, url, 'running');
       };
+      /** @param {Error} err */
       const rejectStart = (err) => finish(reject, err, 'failed');
 
+      /** @param {Buffer} chunk */
       const onData = (chunk) => {
         out.write(chunk);
         const text = chunk.toString();
         for (const line of text.split(/\r?\n/)) {
           const match = line.match(/dsh web:\s+(https?:\/\/\S+)/);
           if (!match) continue;
-          let blocked = restrictedPortOf(match[1]);
+          // 正则已整体匹配，捕获组必然存在（noUncheckedIndexedAccess 需要断言）。
+          const url = /** @type {string} */ (match[1]);
+          let blocked = restrictedPortOf(url);
           const forcedPort = typeof overrideAnnouncedPort === 'function'
-            ? overrideAnnouncedPort(match[1])
+            ? overrideAnnouncedPort(url)
             : 0;
           if (forcedPort) blocked = forcedPort;
-          if (blocked && opts.unsafePortRetries > 0) {
+          // undefined 等价 0 次重试（watchServerProc 缺省调用），保持原语义。
+          const retriesLeft = typeof opts.unsafePortRetries === 'number' ? opts.unsafePortRetries : 0;
+          if (blocked && retriesLeft > 0) {
             handedOff = true;
             setState('restarting');
-            log('dsh', `端口 ${blocked} 属于 Chromium 受限端口（ERR_UNSAFE_PORT），重启服务换端口（剩余重试 ${opts.unsafePortRetries} 次）`);
+            log('dsh', `端口 ${blocked} 属于 Chromium 受限端口（ERR_UNSAFE_PORT），重启服务换端口（剩余重试 ${retriesLeft} 次）`);
             killTree(proc);
             setTimeout(() => {
               if (isQuitting()) return rejectStart(new Error('应用正在退出'));
-              start(opts.unsafePortRetries - 1, opts.overlays).then(resolveReady, rejectStart);
+              start(retriesLeft - 1, opts.overlays || []).then(resolveReady, rejectStart);
             }, 600);
             return;
           }
 
           try {
-            const actual = Number(new URL(match[1]).port) || 0;
+            const actual = Number(new URL(url).port) || 0;
             if (opts.expectedPort != null && actual > 0 && actual !== opts.expectedPort) {
               const ctx = updCtx();
               const settings = loadSettings(ctx);
@@ -171,14 +250,14 @@ function createWebServiceSupervisor(deps) {
               saveSettings(ctx, settings);
             }
           } catch (err) {
-            log('dsh', '保存服务实际端口失败: ' + err.message);
+            log('dsh', '保存服务实际端口失败: ' + (/** @type {Error} */ (err)).message);
           }
-          resolveReady(match[1]);
+          resolveReady(url);
         }
       };
 
-      proc.stdout.on('data', onData);
-      proc.stderr.on('data', (chunk) => out.write(chunk));
+      if (proc.stdout) proc.stdout.on('data', onData);
+      if (proc.stderr) proc.stderr.on('data', (chunk) => out.write(chunk));
       proc.on('error', rejectStart);
       proc.on('exit', (code, signal) => {
         out.end();
@@ -224,6 +303,11 @@ function createWebServiceSupervisor(deps) {
     });
   }
 
+  /**
+   * @param {string} url
+   * @param {number} [timeoutMs]
+   * @returns {Promise<string>}
+   */
   function waitUntilUp(url, timeoutMs = 120000) {
     const started = Date.now();
     return new Promise((resolve, reject) => {
@@ -247,6 +331,10 @@ function createWebServiceSupervisor(deps) {
     });
   }
 
+  /**
+   * @param {{ graceMs?: number, hardMs?: number }} [opts]
+   * @returns {Promise<void>}
+   */
   async function stop({ graceMs = 1200, hardMs = 4000 } = {}) {
     const proc = serverProc;
     if (!proc || proc.exitCode !== null) {

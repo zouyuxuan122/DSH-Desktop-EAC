@@ -14,8 +14,36 @@ const CURRENT_SCHEMA_VERSION = 1;
 const EXIT_ACTIONS = new Set(['ask', 'minimize', 'quit']);
 const SHORTCUT_POLICIES = new Set(['auto', 'never']);
 
+/**
+ * settings 模块的运行上下文（main.js 注入）。
+ * @typedef {object} SettingsCtx
+ * @property {string} userDataDir
+ * @property {(tag: string, message: string) => void} [log]
+ */
+
+/**
+ * 应用设置对象（已知字段具名 + 未知历史字段透传）。
+ * @typedef {Record<string, unknown> & {
+ *   schemaVersion?: number,
+ *   exitAction?: string,
+ *   closeToTray?: boolean,
+ *   notifyOnTurnEnd?: boolean,
+ *   shareWebProfile?: boolean,
+ *   shortcutPolicy?: string,
+ *   webPort?: number
+ * }} SettingsShape
+ */
+
+/**
+ * @param {SettingsCtx} ctx
+ * @returns {string}
+ */
 function settingsPath(ctx) { return path.join(ctx.userDataDir, 'settings.json'); }
 
+/**
+ * @param {SettingsCtx | null | undefined} ctx
+ * @param {string} message
+ */
 function logSettings(ctx, message) {
   try {
     if (ctx && typeof ctx.log === 'function') ctx.log('settings', message);
@@ -24,22 +52,34 @@ function logSettings(ctx, message) {
   }
 }
 
+/** @returns {SettingsShape} */
 function defaultSettings() {
   return { schemaVersion: CURRENT_SCHEMA_VERSION };
 }
 
+/**
+ * @param {unknown} value
+ * @returns {value is Record<string, unknown>}
+ */
 function isPlainObject(value) {
   return value !== null && typeof value === 'object' && !Array.isArray(value);
 }
 
+/**
+ * @param {unknown} value
+ * @returns {SettingsShape}
+ */
 function migrateSettings(value) {
   const input = isPlainObject(value) ? value : {};
+  /** @type {SettingsShape} */
   const settings = { ...input };
-  const version = Number.isInteger(settings.schemaVersion) ? settings.schemaVersion : 0;
+  // typeof 守卫保持「非整数视为 0」的原语义，同时让 TS 收窄类型。
+  const rawVersion = settings.schemaVersion;
+  const version = (typeof rawVersion === 'number' && Number.isInteger(rawVersion)) ? rawVersion : 0;
 
   // Version 0 only had closeToTray. Keep the legacy field for older desktop
   // versions, but make the new three-state field canonical for this version.
-  if ((!EXIT_ACTIONS.has(settings.exitAction) || version < 1) &&
+  if ((!settings.exitAction || !EXIT_ACTIONS.has(settings.exitAction) || version < 1) &&
       typeof settings.closeToTray === 'boolean') {
     settings.exitAction = settings.closeToTray ? 'minimize' : 'quit';
   }
@@ -47,9 +87,14 @@ function migrateSettings(value) {
   return validateSettings(settings);
 }
 
+/**
+ * @param {SettingsShape} value
+ * @returns {SettingsShape}
+ */
 function validateSettings(value) {
   const settings = { ...value };
-  if (!Number.isInteger(settings.schemaVersion) || settings.schemaVersion < 1) {
+  if (typeof settings.schemaVersion !== 'number' ||
+      !Number.isInteger(settings.schemaVersion) || settings.schemaVersion < 1) {
     settings.schemaVersion = CURRENT_SCHEMA_VERSION;
   }
 
@@ -75,10 +120,16 @@ function validateSettings(value) {
   return settings;
 }
 
+/** @param {SettingsCtx} ctx */
 function settingsTempPrefix(ctx) {
   return path.basename(settingsPath(ctx)) + '.tmp-';
 }
 
+/**
+ * @param {SettingsCtx} ctx
+ * @param {string} target
+ * @returns {SettingsShape | null}
+ */
 function recoverInterruptedWrite(ctx, target) {
   if (fs.existsSync(target)) return null;
   let candidates;
@@ -105,6 +156,11 @@ function recoverInterruptedWrite(ctx, target) {
   return null;
 }
 
+/**
+ * @param {SettingsCtx} ctx
+ * @param {string} target
+ * @returns {string | null}
+ */
 function preserveCorruptSettings(ctx, target) {
   const suffix = `${Date.now()}-${process.pid}-${Math.random().toString(16).slice(2)}`;
   const evidence = `${target}.corrupt-${suffix}.json`;
@@ -113,11 +169,15 @@ function preserveCorruptSettings(ctx, target) {
     logSettings(ctx, `settings.json 损坏，原文件已保留: ${evidence}`);
     return evidence;
   } catch (err) {
-    logSettings(ctx, `settings.json 损坏且无法保留原文件: ${err.message}`);
+    logSettings(ctx, `settings.json 损坏且无法保留原文件: ${(/** @type {Error} */ (err)).message}`);
     return null;
   }
 }
 
+/**
+ * @param {SettingsCtx} ctx
+ * @returns {SettingsShape}
+ */
 function loadSettings(ctx) {
   const target = settingsPath(ctx);
   try {
@@ -129,11 +189,16 @@ function loadSettings(ctx) {
     return migrateSettings(parsed);
   } catch (err) {
     if (fs.existsSync(target)) preserveCorruptSettings(ctx, target);
-    logSettings(ctx, `加载 settings 失败，使用默认设置: ${err.message}`);
+    logSettings(ctx, `加载 settings 失败，使用默认设置: ${(/** @type {Error} */ (err)).message}`);
     return defaultSettings();
   }
 }
 
+/**
+ * @param {SettingsCtx} ctx
+ * @param {SettingsShape} s
+ * @returns {boolean}
+ */
 function saveSettings(ctx, s) {
   const target = settingsPath(ctx);
   const temp = `${target}.tmp-${process.pid}-${Date.now()}-${Math.random().toString(16).slice(2)}`;
@@ -163,10 +228,10 @@ function saveSettings(ctx, s) {
     try { if (fs.existsSync(temp)) fs.rmSync(temp, { force: true }); } catch {}
     if (backup && !fs.existsSync(target) && fs.existsSync(backup)) {
       try { fs.renameSync(backup, target); } catch (rollbackErr) {
-        logSettings(ctx, `保存 settings 失败且回滚失败: ${rollbackErr.message}`);
+        logSettings(ctx, `保存 settings 失败且回滚失败: ${(/** @type {Error} */ (rollbackErr)).message}`);
       }
     }
-    logSettings(ctx, '保存 settings 失败: ' + err.message);
+    logSettings(ctx, '保存 settings 失败: ' + (/** @type {Error} */ (err)).message);
     return false;
   }
 }

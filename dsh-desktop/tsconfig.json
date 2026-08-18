@@ -16,6 +16,8 @@
   },
   "include": [
     "platform/process-tree.js",
-    "ipc/contracts.js"
+    "ipc/contracts.js",
+    "settings.js",
+    "web-service-supervisor.js"
   ]
 }
