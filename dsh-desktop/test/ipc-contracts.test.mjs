@@ -25,7 +25,8 @@ const onboardingPreloadSrc = fs.readFileSync(join(root, 'assets', 'onboarding-pr
 
 function registeredChannels(src) {
   const out = new Set();
-  const re = /ipcMain\.(?:handle|on)\('([^']+)'/g;
+  // ipcMain.handle/on 直连注册，或 registerIpc 内 handle() 包装注册
+  const re = /(?:ipcMain\.(?:handle|on)|handle)\('([^']+)'/g;
   let m;
   while ((m = re.exec(src)) !== null) out.add(m[1]);
   return out;
@@ -142,6 +143,15 @@ test('validatePayload：合法载荷', () => {
   assert.equal(validatePayload('dsh:plugin-set-enabled', { id: 'x', enabled: true }).ok, true);
   assert.equal(validatePayload('dsh:balance-prices-set', { model: 'v4-flash', prices: {} }).ok, true);
   assert.equal(validatePayload('dsh:file-revert', { changes: [{ path: '/a', oldText: '', newText: 'b' }] }).ok, true);
+});
+
+test('registerIpc 已接线 validatePayload 运行时校验（log-only）', () => {
+  assert.ok(registerIpcSrc.includes("require('./contracts')"), 'register-ipc 未引入契约模块');
+  assert.ok(registerIpcSrc.includes('validatePayload(channel, payload)'), 'validatePayload 未在注册层被调用');
+  assert.ok(registerIpcSrc.includes("log('ipc-contract'"), '契约违反未记录日志');
+  const handleCount = (registerIpcSrc.match(/\bhandle\('([^']+)'/g) || []).length;
+  const contractHandleCount = IPC_CONTRACTS.filter((c) => c.kind === 'handle').length;
+  assert.equal(handleCount, contractHandleCount, 'handle() 包装数量应与契约表 handle 通道数一致');
 });
 
 test('validatePayload：未知通道', () => {
