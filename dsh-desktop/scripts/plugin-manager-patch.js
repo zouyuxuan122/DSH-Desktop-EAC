@@ -30,7 +30,8 @@ const LEADING = /^([ \t]*)(.*)$/;
 
 /** 行是否是指定 id 的条目起始行；返回缩进宽度，否则 null。indentLo/Hi 限定层级。 */
 function entryIndentOf(line, id, indentLo, indentHi) {
-  const m = new RegExp('^- id:\\s*' + id.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '\\b').exec(line.replace(/^[ \t]+/, ''));
+  const escapedId = id.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const m = new RegExp('^- id:\\s*' + escapedId + '(?![A-Za-z0-9_.-])').exec(line.replace(/^[ \t]+/, ''));
   if (!m) return null;
   const ind = LEADING.exec(line)[1].length;
   if (ind < indentLo || ind > indentHi) return null;
@@ -104,7 +105,7 @@ function togglePluginInPatch(text, id, enabled, name) {
       }
     } else {
       // 追加前先清掉历史遗留的标记注释（避免反复开关时注释堆积）
-      lines = lines.filter((l) => !new RegExp('# [^\\n]*关闭 ' + id + '\\b').test(l));
+      lines = lines.filter((l) => !new RegExp('# [^\\n]*关闭 ' + id.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '(?![A-Za-z0-9_.-])').test(l));
       while (lines.length && lines[lines.length - 1].trim() === '') lines.pop();
       lines.push('', '# 插件管理（设置页「插件」栏）：关闭 ' + id, '- id: ' + id, '  name: ' + yamlQuote(pkgName), '  disabled: true');
     }
@@ -122,7 +123,7 @@ function togglePluginInPatch(text, id, enabled, name) {
       lines.splice(idx, 1);
     }
   }
-  lines = lines.filter((l) => !new RegExp('# [^\\n]*关闭 ' + id + '\\b').test(l));
+  lines = lines.filter((l) => !new RegExp('# [^\\n]*关闭 ' + id.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '(?![A-Za-z0-9_.-])').test(l));
   return lines.join('\n');
 }
 
@@ -150,8 +151,20 @@ function removePluginFromPatch(text, id) {
     while (k < lines.length && lines[k].trim() === '') k += 1;
     return k < lines.length && /^[ \t]+- /.test(lines[k]);
   });
-  lines = lines.filter((l) => !new RegExp('# [^\\n]*关闭 ' + id + '\\b').test(l));
+  lines = lines.filter((l) => !new RegExp('# [^\\n]*关闭 ' + id.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '(?![A-Za-z0-9_.-])').test(l));
   return lines.join('\n');
 }
 
-module.exports = { togglePluginInPatch, removePluginFromPatch };
+/**
+ * patch 文本里是否已登记 `id: <id>`（顶层条目或 insert 内层条目）。
+ * 用于 syncCompanionPlugins / restoreCompanionPlugin 的「已有行不重写」判定。
+ * 负向断言 (?![A-Za-z0-9_.-]) 防止前缀误匹配：dsh-pet 不得命中
+ * `- id: dsh-pet-settings` 这类兄弟条目（旧 `\b` 词边界会命中）。
+ */
+function hasEntryId(text, id) {
+  if (typeof text !== 'string' || !text || typeof id !== 'string' || !id) return false;
+  const escapedId = id.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  return new RegExp('id:\\s*' + escapedId + '(?![A-Za-z0-9_.-])').test(text);
+}
+
+module.exports = { togglePluginInPatch, removePluginFromPatch, hasEntryId };

@@ -162,6 +162,15 @@ def run_visual(recorder: EventRecorder, snapshot_path: Path | None = None) -> in
                 else self.layout["reducedMotion"]
             )
             self.activity_level = os.environ.get("DSH_DAFEIYU_ACTIVITY_LEVEL", "normal")
+            # 保持置顶：周期抬升到 topmost 链顶（Windows 的 topmost 是链，其它
+            # 置顶窗口后来居上会盖住桌宠且不会自动让位，须主动 raise_ 抢回）。
+            # 默认开；右键菜单「保持置顶」可关（关闭后不再主动抬升）。
+            self.pin_topmost = self.layout.get("pinTopmost", True)
+            self.pin_timer = QTimer(self)
+            self.pin_timer.setInterval(2000)
+            self.pin_timer.timeout.connect(self._keep_topmost)
+            if self.pin_topmost:
+                self.pin_timer.start()
             self.model = AnimationModel(manifest)
             self.pixmaps: dict[str, QPixmap] = {}
             for clip in self.model.clips.values():
@@ -319,6 +328,13 @@ def run_visual(recorder: EventRecorder, snapshot_path: Path | None = None) -> in
             y = min(max(self.y(), geometry.top()), max(geometry.top(), geometry.bottom() - self.height() + 1))
             self.move(x, y)
 
+        def _keep_topmost(self) -> None:
+            if not self.isVisible():
+                return
+            # 抬到 topmost 链顶。raise_ 不抢键盘焦点：对 Tool 窗口（无激活、
+            # 无任务栏按钮）只是调整 z 序，不影响用户正在操作的其它窗口。
+            self.raise_()
+
         def _save_layout(self) -> None:
             self.layout = {
                 "version": 1,
@@ -326,6 +342,7 @@ def run_visual(recorder: EventRecorder, snapshot_path: Path | None = None) -> in
                 "y": self.y(),
                 "scale": self.scale,
                 "reducedMotion": self.reduced_motion,
+                "pinTopmost": self.pin_topmost,
             }
             try:
                 save_layout(self.layout_path, self.layout)
@@ -560,6 +577,9 @@ def run_visual(recorder: EventRecorder, snapshot_path: Path | None = None) -> in
             reduced_action = menu.addAction("减少动态")
             reduced_action.setCheckable(True)
             reduced_action.setChecked(self.reduced_motion)
+            pin_action = menu.addAction("保持置顶")
+            pin_action.setCheckable(True)
+            pin_action.setChecked(self.pin_topmost)
             menu.addSeparator()
             hide_action = menu.addAction("本次隐藏")
             exit_action = menu.addAction("本次关闭")
@@ -576,6 +596,15 @@ def run_visual(recorder: EventRecorder, snapshot_path: Path | None = None) -> in
                     self.micro_timer.stop()
                 else:
                     self._schedule_micro()
+                self._save_layout()
+                self.update()
+            elif selected == pin_action:
+                self.pin_topmost = pin_action.isChecked()
+                if self.pin_topmost:
+                    self._keep_topmost()
+                    self.pin_timer.start()
+                else:
+                    self.pin_timer.stop()
                 self._save_layout()
                 self.update()
             elif selected == hide_action:
@@ -608,6 +637,7 @@ def run_visual(recorder: EventRecorder, snapshot_path: Path | None = None) -> in
     reader = threading.Thread(target=read_stdin, name="dsh-bigfish-stdin", daemon=True)
     reader.start()
     window.show()
+    window._keep_topmost()
     emit_reply("ready")
     code = application.exec()
     recorder.close()
