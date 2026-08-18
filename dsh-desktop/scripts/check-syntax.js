@@ -37,6 +37,7 @@ const entryFiles = [
   'profile/runtime-patches.js',
   'profile/companion-sync.js',
   'profile/plugin-manager.js',
+  'profile/profile-guard.js',
 ];
 
 // 匹配「async/await 关键字与紧随其后的 function 声明之间被空行/注释行拆开」：
