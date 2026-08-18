@@ -227,17 +227,20 @@ window.__ModuleLoader__.load({
       var t = ctx.locale.bind(NS);
       ctx.effect(function () { return ctx.locale.register(NS, { zh: zh, en: en }); }, "dsh-soul-md: dictionaries");
       var scope = ctx.settingsScope.bind({ namespace: "soul-md" });
-      ctx.slots.inject("settings.section", function () {
-        return ctx.slots.register({
-          name: "settings.section",
-          id: "soul-md",
-          order: 24,
-          label: function () { return t("nav"); },
-          locale: NS
-        }, function (props) {
-          return h(SoulSection, Object.assign({}, props, { scope: scope }));
+      // 原生"人设卡"（仅路径/顺序/热重载等底层参数）与 easy-setup 官方"人设卡"（预设+卡片库+编辑）重复 → 写死关闭这张。
+      if (false) {
+        ctx.slots.inject("settings.section", function () {
+          return ctx.slots.register({
+            name: "settings.section",
+            id: "soul-md",
+            order: 24,
+            label: function () { return t("nav"); },
+            locale: NS
+          }, function (props) {
+            return h(SoulSection, Object.assign({}, props, { scope: scope }));
+          });
         });
-      });
+      }
     }
 
     exports.apply = apply;

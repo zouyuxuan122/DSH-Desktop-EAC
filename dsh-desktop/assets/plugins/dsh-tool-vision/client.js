@@ -33,7 +33,11 @@ window.__ModuleLoader__.load({
       ".__tv_btnPrimary{border-color:var(--dsw-alias-state-business-primary);background:var(--dsw-alias-state-business-primary);color:var(--dsw-alias-label-on-accent)}" +
       ".__tv_status{font-size:12px;color:var(--dsw-alias-label-tertiary)}" +
       ".__tv_error{font-size:12px;color:var(--dsw-alias-state-error-primary)}" +
-      ".__tv_unavailable{font-size:13px;color:var(--dsw-alias-label-tertiary)}";
+      ".__tv_unavailable{font-size:13px;color:var(--dsw-alias-label-tertiary)}" +
+      ".__tv_advanced{margin-top:8px;border-top:1px solid var(--dsw-alias-border-l2);padding-top:6px}" +
+      ".__tv_advancedSummary{cursor:pointer;font-size:13px;font-weight:600;color:var(--dsw-alias-label-secondary);user-select:none;display:flex;align-items:center;gap:5px}" +
+      ".__tv_advancedArrow{display:inline-block;transition:transform .18s ease;font-size:18px;line-height:1;color:var(--dsw-alias-label-secondary);margin-top:-1px}" +
+      ".__tv_advanced[open] .__tv_advancedArrow{transform:rotate(90deg)}";
     var tagId = "dsh-tool-vision/main.css";
     if (typeof document !== "undefined" && document.querySelector("style[data-plugin-css=" + JSON.stringify(tagId) + "]") === null) {
       var tag = document.createElement("style");
@@ -57,6 +61,7 @@ window.__ModuleLoader__.load({
       bridgeExportDir: "桥接图片导出目录（空 = 系统临时目录）",
       multimodalModels: "多模态白名单（逗号分隔，这些模型直收图片块）",
       requestGuard: "请求兜底（发往文本模型的图片块在请求发出前自动降级为 inspect_image 指引，避免整轮失败）",
+      advanced: "高级设置",
       save: "保存",
       reset: "恢复默认",
       saved: "已保存",
@@ -77,6 +82,7 @@ window.__ModuleLoader__.load({
       bridgeExportDir: "Bridge export dir (empty = system temp)",
       multimodalModels: "Multimodal whitelist (comma-separated; these models receive image blocks directly)",
       requestGuard: "Request guard (image blocks headed to a text-only model are downgraded to inspect_image hints before dispatch, so the turn never hard-fails)",
+      advanced: "Advanced settings",
       save: "Save",
       reset: "Reset",
       saved: "Saved",
@@ -224,35 +230,48 @@ window.__ModuleLoader__.load({
         });
       }
 
-      return h("div", { className: "__tv_root" },
-        h("p", { className: "__tv_hint", style: { margin: "0 0 4px" } }, t("intro")),
-        FIELDS.map(function (f) {
-          var overridden = f.key in user;
-          if (f.type === "checkbox") {
-            return h("label", { key: f.key, className: "__tv_field" },
-              h("span", { className: "__tv_row" },
-                h("input", { className: "__tv_check", type: "checkbox", checked: Boolean(fieldDraft(f)), onChange: function (e) { setField(f, e.target.checked); } }),
-                h("span", { className: "__tv_label" }, labelOf(f)),
-                overridden ? h("span", { className: "__tv_override" }, t("overridden")) : null
-              ),
-              f.key in ZH_HINTS ? h("span", { className: "__tv_hint" }, t(ZH_HINTS[f.key])) : null
-            );
-          }
+      var renderField = function (f) {
+        var overridden = f.key in user;
+        if (f.type === "checkbox") {
           return h("label", { key: f.key, className: "__tv_field" },
-            h("span", { className: "__tv_label" },
-              labelOf(f),
+            h("span", { className: "__tv_row" },
+              h("input", { className: "__tv_check", type: "checkbox", checked: Boolean(fieldDraft(f)), onChange: function (e) { setField(f, e.target.checked); } }),
+              h("span", { className: "__tv_label" }, labelOf(f)),
               overridden ? h("span", { className: "__tv_override" }, t("overridden")) : null
             ),
-            h("input", {
-              className: "__tv_input",
-              type: f.type === "password" ? "password" : f.type === "number" ? "number" : "text",
-              value: fieldDraft(f),
-              placeholder: f.type === "password" ? (overridden ? "••••••••" : t("apiKeyHint")) : (f.placeholder || ""),
-              onChange: function (e) { setField(f, e.target.value); }
-            }),
             f.key in ZH_HINTS ? h("span", { className: "__tv_hint" }, t(ZH_HINTS[f.key])) : null
           );
-        }),
+        }
+        return h("label", { key: f.key, className: "__tv_field" },
+          h("span", { className: "__tv_label" },
+            labelOf(f),
+            overridden ? h("span", { className: "__tv_override" }, t("overridden")) : null
+          ),
+          h("input", {
+            className: "__tv_input",
+            type: f.type === "password" ? "password" : f.type === "number" ? "number" : "text",
+            value: fieldDraft(f),
+            placeholder: f.type === "password" ? (overridden ? "••••••••" : t("apiKeyHint")) : (f.placeholder || ""),
+            onChange: function (e) { setField(f, e.target.value); }
+          }),
+          f.key in ZH_HINTS ? h("span", { className: "__tv_hint" }, t(ZH_HINTS[f.key])) : null
+        );
+      };
+      // 基础字段（URL/模型/密钥）常显；其余归入默认折叠的"高级设置"。
+      var primaryKeys = ["baseURL", "model", "apiKey"];
+      var primary = FIELDS.filter(function (f) { return primaryKeys.indexOf(f.key) >= 0; });
+      var advanced = FIELDS.filter(function (f) { return primaryKeys.indexOf(f.key) < 0; });
+
+      return h("div", { className: "__tv_root" },
+        h("p", { className: "__tv_hint", style: { margin: "0 0 4px" } }, t("intro")),
+        primary.map(renderField),
+        advanced.length ? h("details", { className: "__tv_advanced" },
+          h("summary", { className: "__tv_advancedSummary" },
+            h("span", null, t("advanced")),
+            h("span", { className: "__tv_advancedArrow" }, "\u25b8")
+          ),
+          advanced.map(renderField)
+        ) : null,
         h("div", { className: "__tv_actions" },
           h("button", { type: "button", className: "__tv_btn __tv_btnPrimary", onClick: onSave, disabled: busy || !snapshot.writable }, t("save")),
           h("button", { type: "button", className: "__tv_btn", onClick: onReset, disabled: busy || !snapshot.writable }, t("reset")),
