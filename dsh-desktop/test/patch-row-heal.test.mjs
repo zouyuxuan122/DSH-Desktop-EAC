@@ -108,11 +108,14 @@ test('dsh-soul-md schema: path 带默认值，不再是 required', () => {
 });
 
 // main.js 侧双保险：新增行必须显式写 config，且启动时 heal 存量坏行。
+// heal 与行生成逻辑随 syncCompanionPlugins 迁到 profile/companion-sync.js
+// （main.js 经 createCompanionSync 接线，启动/服务重启时重放）。
 test('main.js: soul-md 行带 config + 启动时执行存量 heal', () => {
   const src = readFileSync(join(root, 'main.js'), 'utf8');
+  const syncSrc = readFileSync(join(root, 'profile', 'companion-sync.js'), 'utf8');
   assert.match(src, /id:\s*'soul-md',[^\n]*config:\s*\{\s*path:\s*'soul\.md'\s*\}/);
-  assert.match(src, /healSoulMdPatchRow\(patch\)/);
-  assert.match(src, /block \+= configLinesFor\(p\.config\)/);
+  assert.match(syncSrc, /healSoulMdPatchRow\(patch\)/);
+  assert.match(syncSrc, /block \+= configLinesFor\(p\.config\)/);
 });
 
 // 市场安装（dsh plugin add 登记 bundles）与 overlay 写行双挂载 →

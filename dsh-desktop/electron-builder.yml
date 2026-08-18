@@ -49,6 +49,7 @@ files:
   - ipc/contracts.js
   - ipc/register-ipc.js
   - profile/runtime-patches.js
+  - profile/companion-sync.js
   - watchdog.js
   - builtin-plugin-state.js
   - preload.js
