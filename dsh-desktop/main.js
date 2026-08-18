@@ -2321,7 +2321,18 @@ function registerChromeIpc() {
   ipcMain.handle('dsh:file-open', async (event, { path: p } = {}) => {
     if (!mainWindow || event.sender !== mainWindow.webContents) return { ok: false, error: 'forbidden' };
     if (typeof p !== 'string' || !path.isAbsolute(p)) return { ok: false, error: 'path must be absolute' };
-    if (!isUnderFileRoots(p)) return { ok: false, error: 'path outside session workspace' };
+    // Skills 根目录（~/.dsh/skills、~/.agents/skills）不在会话工作区内，但
+    // 「设置 → Skills 与 MCP → 打开目录」需要放行；严格限定为两个根本身及其
+    // 子路径（白名单，非任意路径），危险扩展名检查仍生效。
+    const skillsRoots = [
+      path.join(dshHome || path.join(os.homedir(), '.dsh'), 'skills'),
+      path.join(process.env.DSH_AGENTS_HOME || path.join(os.homedir(), '.agents'), 'skills'),
+    ];
+    const underSkillsRoot = skillsRoots.some((r) => {
+      const rp = path.resolve(r);
+      return p === rp || p.startsWith(rp + path.sep);
+    });
+    if (!underSkillsRoot && !isUnderFileRoots(p)) return { ok: false, error: 'path outside session workspace' };
     if (DANGEROUS_EXT.test(p)) return { ok: false, error: 'executable files are not openable from the file view' };
     try {
       if (!fs.existsSync(p)) return { ok: false, error: 'file not found' };
