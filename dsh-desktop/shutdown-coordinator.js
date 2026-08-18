@@ -6,6 +6,33 @@
 // 标记，并且子进程树在重启/更新交接前完成有界清理。平台差异由注入的
 // terminateChildTree 实现承担，协调器本身不执行 taskkill 或 POSIX shell。
 
+/**
+ * @typedef {import('node:child_process').ChildProcess} ChildProc
+ */
+
+/**
+ * 协调器依赖（main.js 注入；全部为稳定引用或 getter）。
+ * @typedef {object} CoordinatorDeps
+ * @property {{ relaunch(): void, exit(code?: number): void, quit(): void }} app
+ * @property {(tag: string, msg: string) => void} log
+ * @property {() => void} markCleanExit
+ * @property {(v: boolean) => void} setQuitting
+ * @property {(v: boolean) => void} setForceQuit
+ * @property {() => ChildProc | null} getServerProcess
+ * @property {(proc: ChildProc | null) => Promise<void>} stopServerProcess
+ * @property {(child: ChildProc) => void} terminateChildTree
+ * @property {() => ChildProc | null} getMarketOpChild
+ * @property {() => void} closeAllFloatWindows
+ * @property {() => void} abortUpdater
+ * @property {() => void} stopSessionWatcher
+ * @property {() => void} clearBalanceTimer
+ * @property {() => void} destroyTray
+ * @property {(ctx: object, pending: { version: string, path: string }) => Promise<void>} applyClientUpdate
+ */
+
+/**
+ * @param {CoordinatorDeps} deps
+ */
 function createShutdownCoordinator(deps) {
   const {
     app,
@@ -32,7 +59,7 @@ function createShutdownCoordinator(deps) {
     const marketChild = getMarketOpChild();
     if (marketChild && marketChild.pid && marketChild.exitCode === null) {
       try { terminateChildTree(marketChild); } catch (err) {
-        log('boot', '终止插件市场任务失败: ' + err.message);
+        log('boot', '终止插件市场任务失败: ' + (/** @type {Error} */ (err)).message);
       }
     }
     await stopServerProcess(getServerProcess());
@@ -51,6 +78,10 @@ function createShutdownCoordinator(deps) {
     app.exit(0);
   }
 
+  /**
+   * @param {object} ctx
+   * @param {{ version: string, path: string }} pendingUpdate
+   */
   async function restartWithClientUpdate(ctx, pendingUpdate) {
     setQuitting(true);
     setForceQuit(true);
@@ -60,6 +91,7 @@ function createShutdownCoordinator(deps) {
     setTimeout(() => app.exit(0), 400);
   }
 
+  /** @param {{ preventDefault(): void }} event */
   function beforeQuit(event) {
     if (shutdownInProgress) return;
     shutdownInProgress = true;

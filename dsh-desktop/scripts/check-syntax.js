@@ -31,6 +31,15 @@ const entryFiles = [
   'preset-sync.js',
   'web-service-supervisor.js',
   'shutdown-coordinator.js',
+  'platform/process-tree.js',
+  'platform/shortcuts.js',
+  'ipc/contracts.js',
+  'ipc/register-ipc.js',
+  'profile/runtime-patches.js',
+  'profile/companion-sync.js',
+  'profile/plugin-manager.js',
+  'profile/profile-guard.js',
+  'client-update-flow.js',
 ];
 
 // 匹配「async/await 关键字与紧随其后的 function 声明之间被空行/注释行拆开」：

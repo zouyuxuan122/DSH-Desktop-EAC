@@ -36,12 +36,12 @@
     "fetch-npm": "node scripts/fetch-npm.js",
     "fetch-runtime": "node scripts/fetch-node.js && node scripts/fetch-npm.js",
     "electron:fetch": "node node_modules/electron/install.js",
-    "test": "vendor/node/node --test \"test/*.test.mjs\""
+    "test": "vendor/node/node --test \"test/*.test.mjs\"",
+    "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@deepseek-ai/dsh": "0.1.0-rc.7",
-    "zstddec": "0.2.0",
     "@deepseek-ai/cordis-plugin-group": "1.0.1",
+    "@deepseek-ai/dsh": "0.1.0-rc.7",
     "@deepseek-ai/dsh-anonymous-user-id": "0.1.0-rc.7",
     "@deepseek-ai/dsh-atomic-write": "0.1.0-rc.7",
     "@deepseek-ai/dsh-bash-local": "0.1.0-rc.7",
@@ -60,11 +60,13 @@
     "@deepseek-ai/dsh-subprocess": "0.1.0-rc.7",
     "@deepseek-ai/dsh-timeout": "0.1.0-rc.7",
     "@deepseek-ai/dsh-workflow": "0.1.0-rc.7",
+    "koffi": "3.1.5",
     "schemastery": "^3.18.0",
-    "koffi": "3.1.5"
+    "zstddec": "0.2.0"
   },
   "devDependencies": {
     "electron": "^43.4.0",
-    "electron-builder": "^26.15.3"
+    "electron-builder": "^26.15.3",
+    "typescript": "^7.0.2"
   }
 }

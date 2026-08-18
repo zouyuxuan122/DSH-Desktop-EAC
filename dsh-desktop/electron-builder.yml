@@ -45,6 +45,15 @@ files:
   - renderer-recovery.js
   - web-service-supervisor.js
   - shutdown-coordinator.js
+  - platform/process-tree.js
+  - platform/shortcuts.js
+  - ipc/contracts.js
+  - ipc/register-ipc.js
+  - profile/runtime-patches.js
+  - profile/companion-sync.js
+  - profile/plugin-manager.js
+  - profile/profile-guard.js
+  - client-update-flow.js
   - watchdog.js
   - builtin-plugin-state.js
   - preload.js
