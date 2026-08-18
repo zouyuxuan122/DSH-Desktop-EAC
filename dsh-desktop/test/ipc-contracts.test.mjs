@@ -19,6 +19,7 @@ import {
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
 const mainSrc = fs.readFileSync(join(root, 'main.js'), 'utf8');
+const registerIpcSrc = fs.readFileSync(join(root, 'ipc', 'register-ipc.js'), 'utf8');
 const preloadSrc = fs.readFileSync(join(root, 'preload.js'), 'utf8');
 const onboardingPreloadSrc = fs.readFileSync(join(root, 'assets', 'onboarding-preload.js'), 'utf8');
 
@@ -40,14 +41,17 @@ function rendererInvokedChannels(...srcs) {
   return out;
 }
 
-test('契约表与 main.js 的 ipcMain 注册双向一致（防漂移）', () => {
+test('契约表与 IPC 注册（main.js + ipc/register-ipc.js）双向一致（防漂移）', () => {
   const contractChannels = new Set(IPC_CONTRACTS.map((c) => c.channel));
-  const registered = registeredChannels(mainSrc);
-  assert.ok(registered.size >= 30, 'main.js 应识别出 30+ 个注册通道，实际 ' + registered.size);
+  const registered = new Set([
+    ...registeredChannels(mainSrc),
+    ...registeredChannels(registerIpcSrc),
+  ]);
+  assert.ok(registered.size >= 30, '应识别出 30+ 个注册通道，实际 ' + registered.size);
   const missingInMain = [...contractChannels].filter((ch) => !registered.has(ch));
   const notInTable = [...registered].filter((ch) => !contractChannels.has(ch));
-  assert.deepEqual(missingInMain, [], '契约表有但 main.js 未注册: ' + missingInMain.join(', '));
-  assert.deepEqual(notInTable, [], 'main.js 注册了但契约表缺失: ' + notInTable.join(', '));
+  assert.deepEqual(missingInMain, [], '契约表有但未注册: ' + missingInMain.join(', '));
+  assert.deepEqual(notInTable, [], '已注册但契约表缺失: ' + notInTable.join(', '));
 });
 
 test('preload / onboarding-preload 调用的通道都在契约表内', () => {

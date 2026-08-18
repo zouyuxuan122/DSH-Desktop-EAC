@@ -47,6 +47,7 @@ files:
   - shutdown-coordinator.js
   - platform/process-tree.js
   - ipc/contracts.js
+  - ipc/register-ipc.js
   - watchdog.js
   - builtin-plugin-state.js
   - preload.js
