@@ -48,6 +48,7 @@ files:
   - platform/process-tree.js
   - ipc/contracts.js
   - ipc/register-ipc.js
+  - profile/runtime-patches.js
   - watchdog.js
   - builtin-plugin-state.js
   - preload.js

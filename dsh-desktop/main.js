@@ -38,6 +38,7 @@ const { createWebServiceSupervisor } = require('./web-service-supervisor');
 const { createShutdownCoordinator } = require('./shutdown-coordinator');
 const { createProcessTree } = require('./platform/process-tree');
 const { registerIpc } = require('./ipc/register-ipc');
+const { createRuntimePatches } = require('./profile/runtime-patches');
 const {
   runKoffiPreflight,
   runKoffiPreflightAsync,
@@ -2451,92 +2452,22 @@ async function processPendingMarketOps() {
 }
 
 // 内置 skills 分发目录：assets/skills/<kebab-name>/SKILL.md。~/.dsh/skills
-// 本就是 dsh-skill-filesystem 的默认扫描根（rank 400），这里只需把内置
-// 技能同步过去 —— 内核零配置。同步规则：带 .eac-skill.json 标记的目录由
-// EAC 管理（版本变化时覆盖更新）；用户自建同名目录（无标记）永不覆盖。
-const BUNDLED_SKILLS_DIR = path.join(__dirname, 'assets', 'skills');
-
-function syncBundledSkills() {
-  try {
-    const src = BUNDLED_SKILLS_DIR;
-    if (!fs.existsSync(src)) return;
-    const destRoot = path.join(dshHome || path.join(os.homedir(), '.dsh'), 'skills');
-    fs.mkdirSync(destRoot, { recursive: true });
-    const installed = [];
-    for (const entry of fs.readdirSync(src, { withFileTypes: true })) {
-      if (!entry.isDirectory()) continue;
-      const skillSrc = path.join(src, entry.name);
-      if (!fs.existsSync(path.join(skillSrc, 'SKILL.md'))) continue;
-      const skillDst = path.join(destRoot, entry.name);
-      const markerSrc = readJsonFile(path.join(skillSrc, '.eac-skill.json')) || { version: 1, managed: true };
-      const markerDst = readJsonFile(path.join(skillDst, '.eac-skill.json'));
-      if (markerDst && markerDst.version === markerSrc.version) continue;
-      if (!markerDst && fs.existsSync(skillDst)) continue; // 用户自建同名技能：不动
-      fs.cpSync(skillSrc, skillDst, { recursive: true });
-      installed.push(entry.name);
-    }
-    if (installed.length) log('boot', '已同步内置 skills 到 ' + destRoot + ': ' + installed.join(', '));
-  } catch (err) {
-    log('boot', '同步内置 skills 失败: ' + err.message);
-  }
-}
-
-// ---------------------------------------------------------------------------
-// V4 运行时补丁（移植自上游 dsh_desktop，幂等）：覆盖三处运行副本 ——
-// profile 共享 junction 根、内置 app 副本（__dirname/node_modules）、用户
-// 更新过的 agent overlay（<userData>/agent/node_modules）。agent 更新会换掉
-// overlay 整树，补丁随 syncCompanionPlugins 每次启动重放。
-// ---------------------------------------------------------------------------
-
-function runtimePatchRoots() {
-  const home = dshHome || path.join(os.homedir(), '.dsh');
-  return [
-    path.join(home, 'profiles', 'node_modules'),
-    path.join(__dirname, 'node_modules'),
-    path.join(userDataDir, 'agent', 'node_modules'),
-  ];
-}
-
-// 对话删除 / 归档管理（dsh-session-manager 插件的前置依赖）：
-// dsh-workspace + dsh-host-apiproxy + dsh-session + dsh-client-connection +
-// dsh-client-ui-workspace 的外科手术式扩展（详见 scripts/patch-session-manage.js
-// 头注释）。锚点不匹配（官方包结构变化）时自动跳过，绝不损坏文件。
-function applySessionManageFix() {
-  for (const root of runtimePatchRoots()) {
-    if (!root || !fs.existsSync(root)) continue;
-    try {
-      const n = patchSessionManage(root, (m) => log('boot', m));
-      if (n > 0) log('boot', '对话删除补丁: 已应用到 ' + root);
-    } catch (err) {
-      log('boot', '对话删除补丁失败(' + root + '): ' + err.message);
-    }
-  }
-}
-
-// openclaw-bridge 的设置命名空间白名单：dsh-host-apiproxy 的
-// settings.describe/mutate 只暴露 WEB_SETTINGS_NAMESPACES 列出的命名空间，
-// 补一行 "openclaw-bridge" 让设置页 ClawBot 栏可读写（同上游 install.ps1）。
-function patchApiproxyBridgeNamespace() {
-  for (const root of runtimePatchRoots()) {
-    if (!root || !fs.existsSync(root)) continue;
-    const apiproxy = path.join(root, '@deepseek-ai', 'dsh-host-apiproxy', 'lib', 'index.js');
-    if (!fs.existsSync(apiproxy)) continue;
-    try {
-      let src = fs.readFileSync(apiproxy, 'utf8');
-      if (src.includes('"openclaw-bridge"')) continue;
-      const marker = 'const WEB_SETTINGS_NAMESPACES = [';
-      if (!src.includes(marker)) {
-        log('boot', 'apiproxy 白名单锚点未找到，跳过（' + apiproxy + '）');
-        continue;
-      }
-      src = src.replace(marker, marker + '\n\t"openclaw-bridge",\n\t');
-      fs.writeFileSync(apiproxy, src);
-      log('boot', '已补丁 apiproxy 设置命名空间白名单: ' + apiproxy);
-    } catch (err) {
-      log('boot', 'apiproxy 白名单补丁失败(' + apiproxy + '): ' + err.message);
-    }
-  }
-}
+// 内置资产同步 + 运行时补丁（profile/runtime-patches.js）：内置 skills 分发、
+// dsh-session-manager 对话删除补丁、apiproxy 设置命名空间白名单。
+// 全部幂等、失败仅记录；启动与 syncCompanionPlugins 时重放。
+const runtimePatches = createRuntimePatches({
+  dshHome: () => dshHome,
+  userDataDir: () => userDataDir,
+  readJsonFile,
+  patchSessionManage,
+  log,
+});
+const {
+  syncBundledSkills,
+  runtimePatchRoots,
+  applySessionManageFix,
+  patchApiproxyBridgeNamespace,
+} = runtimePatches;
 
 // ---------------------------------------------------------------------------
 // 插件启停/卸载管理（V4，移植自上游）：设置页「插件 → 管理」标签的数据与写盘。

@@ -34,6 +34,7 @@ const entryFiles = [
   'platform/process-tree.js',
   'ipc/contracts.js',
   'ipc/register-ipc.js',
+  'profile/runtime-patches.js',
 ];
 
 // 匹配「async/await 关键字与紧随其后的 function 声明之间被空行/注释行拆开」：
