@@ -32,6 +32,7 @@ files:
   - profile-module-heal.js
   - patch-row-heal.js
   - builtin-collision.js
+  - plugin-manager-state.js
   - plugin-guard.js
   - preset-sync.js
   - error-detail.js

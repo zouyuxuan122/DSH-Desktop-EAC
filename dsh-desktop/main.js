@@ -42,7 +42,8 @@ const { syncBundledPresets, ensureDefaultAgentPreset } = require('./preset-sync'
 const { buildErrorDetail } = require('./error-detail');
 const { SessionWatcher, scanZstdFrames } = require('./session-watcher');
 const { patchSessionManage } = require('./scripts/patch-session-manage');
-const { togglePluginInPatch, removePluginFromPatch } = require('./scripts/plugin-manager-patch');
+const { togglePluginInPatch, removePluginFromPatch, hasEntryId } = require('./scripts/plugin-manager-patch');
+const { collectPluginRows } = require('./plugin-manager-state');
 const onboardingLogic = require('./scripts/onboarding');
 const zlib = require('node:zlib');
 
@@ -2354,13 +2355,14 @@ const COMPANION_PLUGINS = [
   // 分叉新会话（sessions.fork）并以编辑后内容重发（inputActions）。
   // 纯客户端实现，host 半边为 no-op。
   { id: 'message-rewind', name: 'dsh-message-rewind', dir: 'dsh-message-rewind' },
-  // 桌面宠物（npm: dsh-pet 0.1.3）：28 个透明动画的悬浮宠物，即装即用。
+  // 页面桌宠（npm: dsh-pet 0.1.3）：28 个透明动画的悬浮宠物，即装即用。
   // assets/ 15MB 播放资源随包分发；peer 依赖全部由 dsh 宿主提供。
   // V4 关键修复：行必须带 config —— dsh-pet 的 apply 读 config.fullRoot，
   // 无 config 块的行会让 loader 传 undefined 直接拖垮插件树（v3.1.0 全新
   // 安装即「启动失败」的根因之一；老用户因市场装过的行带 config 才幸免）。
   // 值沿用包内 cordis.patch.yml 的出厂默认。
-  { id: 'dsh-pet', name: 'dsh-pet', dir: 'dsh-pet', config: { size: 260, position: 'bottom-right' } },
+  // 默认禁用 —— 需要页面桌宠时在「设置 → 插件 → 管理」或「桌宠」分区开启。
+  { id: 'dsh-pet', name: 'dsh-pet', dir: 'dsh-pet', config: { size: 260, position: 'bottom-right' }, disabled: true },
   // 第二插件市场 Zat-DSH Engine（GitHub releases 分发，v0.5.0 vendor 自
   // 源码 tag）：GitHub dsh-plugin topic 检索 + 中文简介 + 国内镜像兜底。
   // 运行时依赖 zod ^4 由 profiles 闭包（junction 指向 app node_modules，
@@ -2421,9 +2423,9 @@ const COMPANION_PLUGINS = [
   { id: 'dsh-undo', name: 'dsh-undo-savepoint', dir: 'dsh-undo-savepoint' },
   // 大肥鱼桌宠（dsh-dafeiyu，QCYTSN；代码 MIT、角色素材按 ASSET_LICENSE.md
   // 随包分发保留署名）：真实会话状态驱动的原生置顶桌宠（空闲/思考/工作/
-  // 等待/完成/错误 六态 + 项目状态卡）。默认禁用 —— 在「设置 → 插件 →
-  // 管理」里启用（含 49MB PyInstaller helper，按需开启）。
-  { id: 'dsh-dafeiyu', name: 'dsh-dafeiyu', dir: 'dsh-dafeiyu', disabled: true },
+  // 等待/完成/错误 六态 + 项目状态卡）。默认开启 —— 可在「设置 → 插件 →
+  // 管理」或「桌宠」分区关闭（含 49MB PyInstaller helper，按需运行）。
+  { id: 'dsh-dafeiyu', name: 'dsh-dafeiyu', dir: 'dsh-dafeiyu' },
   // 桌宠设置分区（V4.2，dsh-pet-settings）：设置页「桌宠」分区，集中管理
   // 页面桌宠（dsh-pet 开关，重启生效）与大肥鱼桌面伴侣（启用/角色大小/
   // 空闲微动作频率/减少动态，走 dsh-dafeiyu config 端点即时生效）。
@@ -3002,64 +3004,18 @@ function pluginManagerPackageDescription(name) {
 
 function pluginManagerCollect() {
   const { entries } = pluginManagerReadPatch();
-  const companionById = new Map(COMPANION_PLUGINS.map((p) => [p.id, p.name]));
-  const insertById = new Map();
-  const userById = new Map();
-  for (const entry of entries) {
-    if (!entry || typeof entry !== 'object') continue;
-    if (Array.isArray(entry.insert)) {
-      for (const it of entry.insert) {
-        if (it && typeof it.id === 'string') insertById.set(it.id, it.name || '');
-      }
-    } else if (typeof entry.id === 'string') {
-      userById.set(entry.id, {
-        name: entry.name || '',
-        disabled: entry.disabled === true,
-        hasConfig: entry.config !== undefined && entry.config !== null,
-      });
-    }
-  }
   let bundles = [];
   try {
     const m = JSON.parse(fs.readFileSync(path.join(desktopProfileDir(), 'package.json'), 'utf8'));
     bundles = (m && m.dsh && m.dsh.profile && Array.isArray(m.dsh.profile.bundles)) ? m.dsh.profile.bundles : [];
   } catch {}
-  const companionNames = new Set(COMPANION_PLUGINS.map((p) => p.name));
-  const removedIds = removedPluginIds();
-
-  const seen = new Set();
-  const rows = [];
-  const addRow = (id, name, group, extra) => {
-    if (!id || seen.has(id)) return;
-    seen.add(id);
-    const user = userById.get(id);
-    const userDisabled = !!(user && user.disabled);
-    const hasConfig = !!(user && user.hasConfig);
-    const isRemoved = !!(extra && extra.removed);
-    const isCore = !!(extra && extra.core);
-    const toggleable = group !== 'core' && !(hasConfig && !userDisabled);
-    rows.push({
-      id,
-      name: name || id,
-      description: pluginManagerPackageDescription(name || id),
-      enabled: !userDisabled && !isRemoved,
-      toggleable: toggleable && !isRemoved,
-      removable: group === 'companion' && !isCore && !isRemoved,
-      removed: isRemoved,
-      core: isCore,
-      group,
-    });
-  };
-  for (const p of COMPANION_PLUGINS) addRow(p.id, p.name, 'companion', { removed: removedIds.has(p.id), core: onboardingLogic.CORE_PLUGIN_IDS.has(p.id) });
-  for (const [id, name] of insertById) if (!companionById.has(id)) addRow(id, name, 'other');
-  for (const [id, u] of userById) if (!companionById.has(id)) addRow(id, u.name, 'other');
-  for (const name of bundles) {
-    if (companionNames.has(name)) continue;
-    const id = name.includes('/') ? name.slice(name.indexOf('/') + 1) : name;
-    if (!seen.has(id)) addRow(id, name, 'core');
-  }
-  const order = { companion: 0, other: 1, core: 2 };
-  return rows.sort((a, b) => order[a.group] - order[b.group] || a.id.localeCompare(b.id));
+  return collectPluginRows(entries, {
+    companion: COMPANION_PLUGINS.map((p) => ({ id: p.id, name: p.name })),
+    coreIds: onboardingLogic.CORE_PLUGIN_IDS,
+    removedIds: removedPluginIds(),
+    describe: (name) => pluginManagerPackageDescription(name),
+    bundles,
+  });
 }
 
 function pluginManagerResolveName(id) {
@@ -3109,7 +3065,7 @@ function restoreCompanionPlugin(p) {
   const patchFile = path.join(profileDirP, 'cordis.patch.yml');
   let patch = '';
   try { patch = fs.readFileSync(patchFile, 'utf8'); } catch {}
-  if (!new RegExp('id:\\s*' + p.id + '\\b').test(patch)) {
+  if (!hasEntryId(patch, p.id)) {
     let bundled = [];
     try { bundled = readJsonFile(path.join(profileDirP, 'package.json'))?.dsh?.profile?.bundles || []; } catch { bundled = []; }
     if (!bundled.includes(p.name)) {
@@ -3389,7 +3345,7 @@ function syncCompanionPlugins() {
       log('boot', '已移除与 bundle 登记重复的 patch 行: ' + deduped.removed.join(', '));
     }
     for (const p of pending) {
-      if (new RegExp('id:\\s*' + p.id + '\\b').test(patch)) continue;
+      if (hasEntryId(patch, p.id)) continue;
       // 已在 bundle 列表里的插件由其包内 patch 挂载，overlay 不能再写行
       // （会 duplicate loader entry id，拖垮整个插件树）。issue #16：
       // 补充按 entry id 判断 —— git/fork 插件包名不同但 id 相同同样要跳过，
