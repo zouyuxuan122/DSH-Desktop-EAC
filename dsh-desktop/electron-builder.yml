@@ -50,6 +50,7 @@ files:
   - ipc/register-ipc.js
   - profile/runtime-patches.js
   - profile/companion-sync.js
+  - profile/plugin-manager.js
   - watchdog.js
   - builtin-plugin-state.js
   - preload.js
