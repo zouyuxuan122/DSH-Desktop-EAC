@@ -19,7 +19,7 @@
 - ✅ **会话删除与归档管理（v4）**：会话行菜单「删除对话」+ 设置内归档恢复/删除面板（官方只有归档，运行时补丁幂等打通全链路）
 - ✅ **微信 ClawBot / OpenClaw 桥（v4）**：设置页「ClawBot」栏扫码绑定微信官方 ClawBot 小程序，微信里直接驱动常驻 DSH 会话（每用户独立会话/工作区/白名单）；OpenAI 兼容端点供 OpenClaw 网关接入
 - ✅ **会话完成系统通知**：agent 任务跑完时弹 Windows 系统通知，点击回到窗口
-- ✅ **界面皮肤**：设置页「皮肤」标签页内置 10 款 Web UI 皮肤（9 款 dsh-web-ui 皮肤 + 1 款深海女仆工坊），互斥切换、默认不启用、重启生效；随包标注出处与许可（详见「界面皮肤」章节）
+- ✅ **界面皮肤**：设置页「皮肤」标签页内置 10 款 Web UI 皮肤（9 款 dsh-web-ui 皮肤 + 1 款鲸鱼娘昼夜工坊），互斥切换、默认不启用、重启生效；随包标注出处与许可（详见「界面皮肤」章节）
 - ✅ **内置社区插件套件**（v2.0 起，详见「内置社区插件」章节）：插件市场 / 外置视觉模型 / 长期记忆 / soul.md 人设卡 / 移动端适配修复，全部随包分发、开箱即用
 - ✅ **崩溃急救与撤销（v4，dsh-undo-savepoint）**：配置与插件代码树快照、undo/redo、一键安全模式、密钥脱敏 vault —— 配置改坏、dsh 起不来也能救
 - ✅ **插件启停管理（v4）**：设置页「插件 → 管理」不重启切换任意插件启停（含默认禁用的大肥鱼桌宠）
@@ -124,9 +124,9 @@
 | trading（交易风格） | 同上 | BSD-3-Clause |
 | whale-song（鲸歌） | 同上 | BSD-3-Clause |
 | miku（初音未来） | 同上 | BSD-3-Clause |
-| maid-atelier（深海女仆工坊） | [dsh-deep-whale](https://github.com/Small-tailqwq/dsh-deep-whale) | **CC BY-NC-SA 4.0**（禁止商用） |
+| deep-whale-day-night（鲸鱼娘昼夜工坊） | [deep-whale-day-night](https://github.com/GGBond2424648901/deep-whale-day-night-theme) | **CC BY-NC-SA 4.0**（禁止商用） |
 
-- 皮肤来源与版权：dsh-web-ui 九款皮肤包随包分发 `LICENSE`（BSD-3-Clause，出处/作者字段见皮肤卡片与包内元数据）；maid-atelier 为衍生创作（角色原作：上善；DeepSeek 元素二次设计：ZipZipPipe；本皮肤：Small-tailqwq），完整署名链见包内 `NOTICE`，整体仅限非商业使用。各皮肤包的 `LICENSE`/`NOTICE`/`README` 随同步一并分发到 web profile 的 `node_modules` 中。
+- 皮肤来源与版权：dsh-web-ui 九款皮肤包随包分发 `LICENSE`（BSD-3-Clause，出处/作者字段见皮肤卡片与包内元数据）；deep-whale-day-night 为衍生创作（角色原作：上善；DeepSeek 元素二次设计：ZipZipPipe；主题适配：Small-tailqwq），完整署名链见包内 `NOTICE`，整体仅限非商业使用。各皮肤包的 `LICENSE`/`NOTICE`/`README` 随同步一并分发到 web profile 的 `node_modules` 中。
 
 ## 内置社区插件（v2.0）
 

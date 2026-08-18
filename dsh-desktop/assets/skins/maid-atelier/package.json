@@ -1,7 +1,7 @@
 {
-  "name": "@dsh-external/dsh-client-ui-skin-maid-atelier",
-  "description": "Hot-pluggable Deep-sea maid atelier skin with character backdrop and ornamental navy UI for the dsh web GUI",
-  "version": "0.0.1",
+  "name": "@dsh-external/dsh-client-ui-skin-deep-whale-day-night",
+  "description": "Hot-pluggable Deep Whale day/night skin (EAC adapted): themed scenes, companions, controls, and lightweight ambience for the dsh web GUI",
+  "version": "0.1.10",
   "private": true,
   "type": "module",
   "main": "lib/index.js",
@@ -16,13 +16,22 @@
       "patch": "./cordis.patch.yml"
     },
     "client": {
-      "inject": [],
+      "inject": [
+        "@deepseek-ai/dsh-client-ui-theme"
+      ],
       "platform": "web"
     }
   },
+  "scripts": {
+    "build": "node scripts/embed-deep-whale-art.mjs && tsdown --config tsdown.config.ts",
+    "embed:assets": "node scripts/embed-deep-whale-art.mjs",
+    "test": "vitest run --config vitest.config.ts",
+    "typecheck": "tsc -p tsconfig.json"
+  },
   "license": "CC-BY-NC-SA-4.0",
   "peerDependencies": {
-    "@deepseek-ai/cordis": "^4.0.1"
+    "@deepseek-ai/cordis": "^4.0.1",
+    "@deepseek-ai/dsh-client-ui-theme": "^0.1.0-rc.5"
   },
   "files": [
     "lib/index.js",

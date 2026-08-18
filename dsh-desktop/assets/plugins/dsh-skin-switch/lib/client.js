@@ -48,7 +48,7 @@ window.__ModuleLoader__.load({
 			openRepo: "查看仓库",
 			srcDshWebUi: "dsh-web-ui 系列皮肤",
 			licBsd: "许可：BSD-3-Clause",
-			srcMaid: "maid-atelier · 深海女仆工坊",
+			srcMaid: "deep-whale-day-night · 鲸鱼娘昼夜工坊",
 			licMaid: "许可：CC BY-NC-SA 4.0（署名-非商业性使用-相同方式共享，禁止商业使用）",
 			creditMaid: "角色原作：上善（Pixiv 62155430 · B站「上善无形」）；DeepSeek 元素二次设计：ZipZipPipe（Pixiv 18604994 · B站「ZipZipPipe」）",
 			noticeMaid: "完整版权链见皮肤包 NOTICE（assets/skins/maid-atelier/）。",
@@ -56,7 +56,7 @@ window.__ModuleLoader__.load({
 			creditsTitle: "来源与版权",
 			creditsIntro: "以下皮肤均为第三方开源作品，版权归原作者所有，DSH Desktop 仅负责内置分发与切换管理：",
 			repoDshWebUi: "dsh-web-ui（zhu1090093659）· https://github.com/zhu1090093659/dsh-web-ui",
-			repoMaid: "dsh-deep-whale（Small-tailqwq）· https://github.com/Small-tailqwq/dsh-deep-whale",
+			repoMaid: "deep-whale-day-night（GGBond2424648901 / Small-tailqwq）· https://github.com/GGBond2424648901/deep-whale-day-night-theme",
 			creditsNote: "皮肤内容遵循各自许可；maid-atelier 禁止商业使用。"
 		};
 		const en = {
@@ -82,7 +82,7 @@ window.__ModuleLoader__.load({
 			openRepo: "Repository",
 			srcDshWebUi: "dsh-web-ui skin series",
 			licBsd: "License: BSD-3-Clause",
-			srcMaid: "maid-atelier · Abyssal Maid Atelier",
+			srcMaid: "deep-whale-day-night · Deep Whale Day & Night",
 			licMaid: "License: CC BY-NC-SA 4.0 (Attribution-NonCommercial-ShareAlike, no commercial use)",
 			creditMaid: "Character original: 上善 (Pixiv 62155430 · Bilibili “上善无形”); DeepSeek-flavored redesign: ZipZipPipe (Pixiv 18604994 · Bilibili “ZipZipPipe”)",
 			noticeMaid: "Full credit chain is in the skin package NOTICE (assets/skins/maid-atelier/).",
@@ -90,7 +90,7 @@ window.__ModuleLoader__.load({
 			creditsTitle: "Sources & Credits",
 			creditsIntro: "The skins below are third-party open-source works. All rights belong to their original authors; DSH Desktop only bundles and manages them:",
 			repoDshWebUi: "dsh-web-ui (zhu1090093659) · https://github.com/zhu1090093659/dsh-web-ui",
-			repoMaid: "dsh-deep-whale (Small-tailqwq) · https://github.com/Small-tailqwq/dsh-deep-whale",
+			repoMaid: "deep-whale-day-night (GGBond2424648901 / Small-tailqwq) · https://github.com/GGBond2424648901/deep-whale-day-night-theme",
 			creditsNote: "Each skin follows its own license; maid-atelier is non-commercial."
 		};
 		const NS = "settings.dshSkinSwitch";
@@ -215,7 +215,7 @@ window.__ModuleLoader__.load({
 									children: [
 										t("srcMaid") + " · " + t("byAuthor") + " Small-tailqwq · ",
 										(0, react_jsx_runtime.jsx)("a", {
-											href: "https://github.com/Small-tailqwq/dsh-deep-whale",
+											href: "https://github.com/GGBond2424648901/deep-whale-day-night-theme",
 											target: "_blank",
 											rel: "noreferrer noopener",
 											children: t("openRepo")
@@ -354,7 +354,7 @@ window.__ModuleLoader__.load({
 							(0, react_jsx_runtime.jsx)("p", { children: t("licBsd") }),
 							(0, react_jsx_runtime.jsx)("p", {
 								children: (0, react_jsx_runtime.jsx)("a", {
-									href: "https://github.com/Small-tailqwq/dsh-deep-whale",
+									href: "https://github.com/GGBond2424648901/deep-whale-day-night-theme",
 									target: "_blank",
 									rel: "noreferrer noopener",
 									children: t("repoMaid")

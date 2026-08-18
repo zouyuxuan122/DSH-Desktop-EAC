@@ -20,7 +20,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
 const skinPkgName = '@linxin666/dsh-client-ui-skin-xp';
-const otherPkgName = '@dsh-external/dsh-client-ui-skin-maid-atelier';
+const otherPkgName = '@dsh-external/dsh-client-ui-skin-deep-whale-day-night';
 
 /** Materialize one skin package + a starter patch in a profile dir. */
 function makeProfile(profileDir) {
@@ -38,7 +38,7 @@ function makeProfile(profileDir) {
     name: otherPkgName, version: '1.0.0', dsh: { client: { platform: 'web' } },
   }));
   writeFileSync(join(maidDir, 'skin.json'), JSON.stringify({
-    id: 'maid-atelier', name: '深海女仆', wiring: { id: 'ui-skin-maid-atelier' }, order: 2,
+    id: 'maid-atelier', name: '鲸鱼娘昼夜', wiring: { id: 'ui-skin-maid-atelier' }, order: 2,
   }));
   writeFileSync(join(profileDir, 'cordis.patch.yml'), [
     '- insert:',
@@ -46,7 +46,7 @@ function makeProfile(profileDir) {
     "      name: '@linxin666/dsh-client-ui-skin-xp'",
     '      disabled: true',
     '    - id: ui-skin-maid-atelier',
-    "      name: '@dsh-external/dsh-client-ui-skin-maid-atelier'",
+    "      name: '@dsh-external/dsh-client-ui-skin-deep-whale-day-night'",
     '      disabled: true',
     '',
   ].join('\n'));

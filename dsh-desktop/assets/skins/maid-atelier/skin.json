@@ -1,21 +1,23 @@
 {
   "id": "maid-atelier",
-  "name": "深海女仆工坊",
-  "nameEn": "Abyssal Maid Atelier",
+  "name": "鲸鱼娘昼夜工坊",
+  "nameEn": "Deep Whale Day & Night",
   "author": "Small-tailqwq",
-  "tagline": "双女仆背景、深海蓝蕾丝界面与 Q 版侧栏",
-  "description": "一套面向 DeepSeek Harness WebUI 的高定制动漫角色皮肤。它使用双女仆工坊场景作为对话区背景，以深海蓝、陶瓷白、长春花蓝和柔金构成可热切换的 UI 覆盖层，并为加载、思考和工具运行状态预留稳定动画钩子。",
+  "tagline": "水晶白昼、月潮夜晚与会换装的 Q 版鲸鱼娘",
+  "description": "一套面向 DeepSeek Harness WebUI 的完整鲸鱼娘昼夜皮肤。白昼使用水晶工坊、陶瓷白与海雾蓝，夜晚使用月潮观测室、深海蓝与柔金；原生主题按钮同步切换场景、角色、宠物、控件和轻量环境动效。",
   "tags": [
     "anime",
     "maid",
     "whale",
     "navy",
     "ornate",
-    "glass"
+    "glass",
+    "day-night",
+    "animated"
   ],
   "accent": "#c5a468",
   "bodyAttr": "data-dsh-maid-atelier",
-  "package": "@dsh-external/dsh-client-ui-skin-maid-atelier",
+  "package": "@dsh-external/dsh-client-ui-skin-deep-whale-day-night",
   "wiring": {
     "id": "ui-skin-maid-atelier",
     "bundleWired": false

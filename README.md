@@ -102,7 +102,7 @@ Linux 打包由社区开发者 [@Luoye-hb](https://github.com/Luoye-hb) 贡献�
 ### 界面皮肤自定义（EAC 特色）
 
 - 设置页「皮肤」标签页内置 **10 款 Web UI 皮肤**，卡片式网格展示（名称/简介/主色/作者/出处与许可角标）。
-- 9 款来自社区 [dsh-web-ui](https://github.com/zhu1090093659/dsh-web-ui)（BSD-3-Clause）+ 1 款 [dsh-deep-whale 深海女仆工坊](https://github.com/Small-tailqwq/dsh-deep-whale)（CC BY-NC-SA 4.0，禁止商用）。
+- 9 款来自社区 [dsh-web-ui](https://github.com/zhu1090093659/dsh-web-ui)（BSD-3-Clause）+ 1 款 [deep-whale-day-night 鲸鱼娘昼夜工坊](https://github.com/GGBond2424648901/deep-whale-day-night-theme)（CC BY-NC-SA 4.0，禁止商用）。
 - **默认不启用任何皮肤**（原生外观）；选中某款后其余自动禁用（互斥切换），「恢复默认皮肤」一键还原；切换后自动重启 Web 服务生效。
 - 皮肤是 browser-only 的 dsh client 插件，由桌面端同步进 web profile 并幂等注册到 `cordis.patch.yml`，完整版权署名随包分发。
 
@@ -117,7 +117,7 @@ Linux 打包由社区开发者 [@Luoye-hb](https://github.com/Luoye-hb) 贡献�
 | trading（交易风格） | 同上 | BSD-3-Clause |
 | whale-song（鲸歌） | 同上 | BSD-3-Clause |
 | miku（初音未来） | 同上 | BSD-3-Clause |
-| maid-atelier（深海女仆工坊） | [dsh-deep-whale](https://github.com/Small-tailqwq/dsh-deep-whale) | **CC BY-NC-SA 4.0**（禁止商用） |
+| deep-whale-day-night（鲸鱼娘昼夜工坊） | [deep-whale-day-night](https://github.com/GGBond2424648901/deep-whale-day-night-theme) | **CC BY-NC-SA 4.0**（禁止商用） |
 
 ### 开箱即用
 
