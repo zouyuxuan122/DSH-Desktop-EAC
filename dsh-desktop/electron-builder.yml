@@ -27,6 +27,7 @@ files:
   - main.js
   - updater.js
   - client-updater.js
+  - logger.js
   - plugin-updater.js
   - balance.js
   - session-watcher.js

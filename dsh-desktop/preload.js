@@ -105,7 +105,7 @@ const dshDesktop = {
     getState: () => ipcRenderer.invoke('chrome:recovery-state'),
     reload: () => ipcRenderer.invoke('chrome:recovery-reload'),
     restart: () => ipcRenderer.invoke('chrome:recovery-restart'),
-    openLogs: () => ipcRenderer.invoke('chrome:recovery-open-logs'),
+    exportLogs: () => ipcRenderer.invoke('chrome:export-logs'),
   },
 };
 
@@ -268,7 +268,7 @@ function renderMenu() {
     <button class="dch-item" data-act="fullscreen"><span>全屏</span><span class="dch-kbd">F11</span></button>
     <div class="dch-sep"></div>
     <button class="dch-item" data-act="open-browser">在浏览器中打开</button>
-    <button class="dch-item" data-act="open-logs">打开日志目录</button>
+    <button class="dch-item" data-act="export-logs">导出日志</button>
     <button class="dch-item" data-act="feedback">反馈建议</button>
     <div class="dch-sep"></div>
     <button class="dch-item" data-act="about">关于 Deepseek Harness EAC</button>

@@ -26,6 +26,7 @@ const { pathToFileURL } = require('node:url');
 const updater = require('./updater');
 const clientUpdater = require('./client-updater');
 const pluginUpdater = require('./plugin-updater');
+const structuredLogger = require('./logger');
 const balance = require('./balance');
 const { healProfileModuleShadowing } = require('./profile-module-heal');
 const { createGuard } = require('./plugin-guard');
@@ -213,6 +214,9 @@ function ensureGuard() {
 // ---------------------------------------------------------------------------
 
 function log(tag, msg) {
+  // 双通道记录（日志系统接入 AC-1 / AC-3）：
+  //   1) 旧 desktop.log 纯文本 —— 保留，便于 tail/外部脚本、NSIS 卸载诊断、非结构化查看。
+  //   2) 结构化 logger.{level}(msg, { tag, ... }) —— JSON lines + PII 脱敏 + rotation + 诊断 zip 导出。
   // 本地时间 + 显式时区偏移：此前用 toISOString()（UTC），本地排查时易误判（issue #4）。
   const d = new Date();
   const off = -d.getTimezoneOffset();
@@ -224,6 +228,11 @@ function log(tag, msg) {
   const line = `[${ts}] [${tag}] ${msg}\n`;
   try { if (desktopLog) desktopLog.write(line); } catch {}
   if (process.env.DSH_DESKTOP_DEBUG) process.stdout.write(line);
+  try {
+    const level = /^(warn|warning|err|error|fatal)$/i.test(tag) ? 'warn'
+      : /^debug$|trace$/i.test(tag) ? 'debug' : 'info';
+    structuredLogger[level](msg, { tag });
+  } catch {}
 }
 
 function nodeExe() {
@@ -1965,10 +1974,19 @@ function registerChromeIpc() {
     return { ok: true };
   });
 
-  ipcMain.handle('chrome:recovery-open-logs', (event) => {
+  // 一键导出诊断日志 zip（AC-8）：调用 structuredLogger.buildDiagnosticsZip，
+  // 打包 logs + configs + updater meta + 最新备份 manifest，PII 二次脱敏后
+  // 在文件管理器中选中 zip 文件，方便用户拖到反馈/GitHub issue 里。
+  ipcMain.handle('chrome:export-logs', async (event) => {
     if (!mainWindow || event.sender !== mainWindow.webContents) return { ok: false, error: 'unauthorized' };
-    shell.openPath(logsDir);
-    return { ok: true };
+    try {
+      const zipPath = await structuredLogger.buildDiagnosticsZip({ logsDir, userDataDir, dshHome });
+      shell.showItemInFolder(zipPath);
+      return { ok: true, zipPath };
+    } catch (err) {
+      log('boot', '导出诊断日志失败: ' + (err && err.message || err));
+      return { ok: false, error: String(err && err.message || err) };
+    }
   });
 
   ipcMain.handle('chrome:window', (event, { action } = {}) => {
@@ -4332,6 +4350,18 @@ async function boot() {
   dshHome = process.env.DSH_HOME || '';
   fs.mkdirSync(logsDir, { recursive: true });
   if (dshHome) fs.mkdirSync(dshHome, { recursive: true });
+  // 日志系统（AC-1：先 init，后 log() 调用，保证结构化 boot 行落到 main.00）
+  try {
+    structuredLogger.init({
+      logsDir,
+      level: process.env.DSH_LOG_LEVEL || (app.isPackaged ? 'info' : 'debug'),
+      appVersion: APP_VERSION,
+      env: app.isPackaged ? 'production' : 'development',
+    });
+  } catch (e) {
+    // 日志系统初始化失败不影响启动（仍然写 desktop.log）。
+    try { console.error('[logger.init fail]', e && e.message); } catch {}
+  }
   desktopLog = fs.createWriteStream(path.join(logsDir, 'desktop.log'), { flags: 'a' });
   log('boot', `Deepseek Harness EAC（封装 ${APP_VERSION}）  userData=${userDataDir}  dshHome=${dshHome || '(dsh 默认)'}  agent=${dshVersion()}(${dshVersionSource()})`);
 
@@ -4483,6 +4513,10 @@ if (!gotLock) {
         if (balanceTimer) clearInterval(balanceTimer);
         if (tray) { try { tray.destroy(); } catch {} tray = null; }
         log('boot', `退出清理完成（耗时 ${Date.now() - t0}ms）`);
+        // 日志系统 flush：结构化 logger 先关（flush 缓冲区+结束 rotation stream），
+        // 再关 desktop.log 纯文本，保证退出前两条通道都落盘。
+        try { structuredLogger.close(); } catch {}
+        try { if (desktopLog) desktopLog.end(); } catch {}
         app.exit(0);
       }
     })();
