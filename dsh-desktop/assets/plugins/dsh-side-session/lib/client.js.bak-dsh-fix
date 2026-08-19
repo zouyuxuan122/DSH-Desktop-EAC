@@ -44,7 +44,7 @@ window.__ModuleLoader__.load({
     // 全局单例 Store（模块级，panel/float 共享；浮窗状态仅内存，不持久化）
     // ------------------------------------------------------------------
     var store = {
-      mode: "3",
+      mode: "1",
       carrier: "float", // 仅浮窗形态
       expanded: false, // 不自动弹出：由 footer 图标 / Ctrl+Shift+S / 斜杠命令唤起（符合 SPEC）
       sessionId: "",
@@ -87,7 +87,7 @@ window.__ModuleLoader__.load({
     // ------------------------------------------------------------------
     var settingsScope = null;
     var pluginSettings = {
-      mode: "3",
+      mode: "1",
       apiKey: "",
       model: "deepseek-chat",
       endpoint: "https://api.deepseek.com",
@@ -101,7 +101,7 @@ window.__ModuleLoader__.load({
         if (snap && snap.status === "ready" && snap.value) {
           var v = snap.value;
           pluginSettings = {
-            mode: String(v.mode || "3"),
+            mode: String(v.mode || "1"),
             apiKey: v.apiKey || "",
             model: v.model || "deepseek-chat",
             endpoint: v.endpoint || "https://api.deepseek.com",

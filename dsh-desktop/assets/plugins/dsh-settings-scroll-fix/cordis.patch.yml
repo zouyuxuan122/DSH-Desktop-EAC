@@ -1,0 +1,7 @@
+# Bundle patch: mount the settings-scroll-fix plugin. Pure client-side CSS
+# overlay that forces the settings panel content/nav lists to scroll with the
+# mouse wheel. Remove this insert block (or the bundle from the profile bundles
+# list) to restore stock behavior.
+- insert:
+    - id: settings-scroll-fix
+      name: 'dsh-settings-scroll-fix'

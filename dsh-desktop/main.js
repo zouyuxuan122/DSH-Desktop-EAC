@@ -2594,6 +2594,11 @@ const COMPANION_PLUGINS = [
   { id: 'soul-md', name: 'dsh-soul-md', dir: 'dsh-soul-md', config: { path: 'soul.md' } },
   { id: 'tdai-memory', name: 'dsh-tdai-memory', dir: 'dsh-tdai-memory' },
   { id: 'mobile-fix', name: 'dsh-web-mobile-fix', dir: 'dsh-web-mobile-fix' },
+  // 设置面板滚轮修复（dsh-settings-scroll-fix，EAC 独占纯客户端 CSS）：
+  // 强制设置页内容区/导航列表可滚轮滚动（overflow-y:auto + 滚动条收敛），
+  // 面板容器 overflow:hidden 防双层滚动条。host 半边 no-op；无 npm 上游，
+  // 不登记到 PLUGIN_UPDATE_SOURCES。
+  { id: 'settings-scroll-fix', name: 'dsh-settings-scroll-fix', dir: 'dsh-settings-scroll-fix' },
   // VSCode 风格右侧边栏（文件树 / 编辑器 / 终端 / Git，按会话隔离）。
   // lib/ 预编译自包含（codemirror、xterm 已内嵌），服务端仅额外依赖
   // schemastery（已加入 app 闭包，见 package.json）。

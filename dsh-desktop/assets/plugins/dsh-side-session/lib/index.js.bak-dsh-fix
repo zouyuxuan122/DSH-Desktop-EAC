@@ -55,7 +55,7 @@ const MAX_TRANSCRIPT_CHARS = 40 * 1024; // 标准档字符上限（兼容引用�
 const Config = z.object({
   mode: z
     .string()
-    .default("3")
+    .default("1")
     .description(
       "回答引擎模式：1=复用 dsh 全局 Key；2=插件自带 Key；3=纯服务端走 dsh 宿主 LLM（ctx.llm，不读任何 key）"
     ),
@@ -110,27 +110,6 @@ function readGlobalModel() {
     if (anchored) return anchored[1];
   } catch {}
   return DEFAULT_MODEL;
-}
-
-// 锚定 agent-default-model 段取 provider（与 readGlobalModel 同源，供 mode3
-// 跟随主会话窗口的 provider，避免临时会话发到错误接口）。
-function readGlobalProvider() {
-  try {
-    const text = readFileSync(join(dshHome(), "settings.yaml"), "utf8");
-    const anchored = text.match(/agent-default-model:[\s\S]*?^\s*provider:\s*(\S+)/m);
-    if (anchored) return anchored[1];
-  } catch {}
-  return DEFAULT_PROVIDER;
-}
-
-// 锚定 agent-default-model 段取 reasoningEffort（供 mode3 透传思考强度）。
-function readGlobalReasoning() {
-  try {
-    const text = readFileSync(join(dshHome(), "settings.yaml"), "utf8");
-    const anchored = text.match(/agent-default-model:[\s\S]*?^\s*reasoningEffort:\s*(\S+)/m);
-    if (anchored) return anchored[1];
-  } catch {}
-  return "";
 }
 
 function globalBase() {
@@ -302,7 +281,7 @@ const parseCache = new Map(); // 文件 -> { mtimeMs, size, firstMagic, frameEnd
 const SEEN_FILES_MAX = 2000; // seenFiles 兜底上限（远大于任何档位的 filesTotal）
 
 function freshParseState() {
-  return { title: "", provider: "", model: "", reasoningEffort: "", seenFiles: new Map(), transcript: [] };
+  return { title: "", provider: "", model: "", seenFiles: new Map(), transcript: [] };
 }
 
 /** 逐行解析事件并累计进 state（增量与全量共用同一语义）。 */
@@ -328,12 +307,10 @@ function parseEventsInto(state, lines) {
       if (cfg) {
         if (cfg.provider) state.provider = String(cfg.provider);
         if (cfg.model) state.model = String(cfg.model);
-        if (cfg.reasoningEffort) state.reasoningEffort = String(cfg.reasoningEffort);
       }
     } else if (ev.type === "request/context" && ev.data) {
       if (ev.data.provider) state.provider = String(ev.data.provider);
       if (ev.data.model) state.model = String(ev.data.model);
-      if (ev.data.reasoningEffort) state.reasoningEffort = String(ev.data.reasoningEffort);
     }
 
     // 文件捕获：tool/code-dispatch* 事件
@@ -424,7 +401,6 @@ function renderState(state) {
     truncated,
     provider: state.provider || DEFAULT_PROVIDER,
     model: state.model || readGlobalModel(),
-    reasoningEffort: state.reasoningEffort || "",
   };
 }
 
@@ -555,58 +531,14 @@ function buildFileContext(sessionId) {
   );
 }
 
-// 取消息文本（content 为 string 或 [{type:"text",text}] 数组均兼容）
-function msgContentText(m) {
-  const c = m && m.content;
-  if (typeof c === "string") return c;
-  if (Array.isArray(c)) return c.map((p) => (p && typeof p.text === "string" ? p.text : "")).join("");
-  return "";
-}
-
-// 把临时会话历史折叠进 system，只把「最后一条 user 消息」作为真正发给
-// ctx.llm.stream 的消息数组 —— 避免 assistant 历史以消息数组形态进入
-// dsh 宿主 LLM 而触发 knife 错误「Cannot read properties of undefined
-// (reading 'kind')」。历史以纯文本上下文块注入 system。
+// 将客户端消息拆分为「客户端 system」+「其余消息」，并拼上文件上下文块
 function buildFinalPrompt(body) {
   const msgs = Array.isArray(body.messages) ? body.messages : [];
   const firstIsSystem = msgs.length && msgs[0] && msgs[0].role === "system";
   const clientSystem = firstIsSystem ? String(msgs[0].content || "") : "";
+  const rest = firstIsSystem ? msgs.slice(1) : msgs;
   const fileBlock = buildFileContext(String(body.sessionId || "").trim());
-
-  // 去掉首条 system 后，过滤掉空消息（content 为空串或全部 text 块为空）
-  const restAll = (firstIsSystem ? msgs.slice(1) : msgs).filter((m) => msgContentText(m).length > 0);
-
-  // 找最后一条 role==="user" 的消息作为唯一要发送的 rest
-  let lastUserIdx = -1;
-  for (let i = restAll.length - 1; i >= 0; i--) {
-    if (restAll[i] && restAll[i].role === "user") { lastUserIdx = i; break; }
-  }
-
-  let rest = [];
-  let contextBlock = "";
-  let prior = [];
-  if (lastUserIdx >= 0) {
-    rest = [restAll[lastUserIdx]];
-    prior = restAll.slice(0, lastUserIdx);
-  } else if (restAll.length) {
-    // 无 user 消息时退化为最后一条，其余作为上下文
-    rest = [restAll[restAll.length - 1]];
-    prior = restAll.slice(0, -1);
-  }
-  if (prior.length) {
-    const lines = prior.map((m) => {
-      const tag = m.role === "assistant" ? "助手" : m.role === "user" ? "用户" : (m.role || "消息");
-      return "[" + tag + "] " + msgContentText(m);
-    });
-    contextBlock = "==== 临时会话上下文 ====\n" + lines.join("\n");
-  }
-
-  // system 顺序：文件上下文 + 临时会话上下文 + 客户端 system
-  const systemParts = [];
-  if (fileBlock) systemParts.push(fileBlock);
-  if (contextBlock) systemParts.push(contextBlock);
-  if (clientSystem) systemParts.push(clientSystem);
-  const system = systemParts.join("\n\n");
+  const system = (fileBlock ? fileBlock + "\n\n" : "") + clientSystem;
   return { system, rest };
 }
 
@@ -711,15 +643,9 @@ function resolveKeyForMode(mode, settings) {
     ).replace(/\/+$/, "") || DEFAULT_BASE;
     return { key, model, base: endpoint, source: "plugin" };
   }
-  // mode 1 复用 dsh 全局 Key 走 api.deepseek.com：若全局 model 不是官方
-  // 支持的 deepseek-v4-pro / deepseek-v4-flash（例如第三方 provider 的
-  // deepseek-v4-pro-0813），强制降级为 deepseek-v4-flash，避免把第三方
-  // 模型名发到官方接口触发 400/502。
-  const gm = readGlobalModel();
-  const safeModel = gm === "deepseek-v4-pro" || gm === "deepseek-v4-flash" ? gm : DEFAULT_MODEL;
   return {
     key: readGlobalKey(),
-    model: safeModel,
+    model: readGlobalModel(),
     base: globalBase(),
     source: "global",
   };
@@ -732,17 +658,11 @@ async function handleAskMode3(req, res, body, sessionId) {
   }
   const { system, rest } = buildFinalPrompt(body);
   const parsed = parseSession(sessionId);
-  // 优先用 parseSession 解析到的 provider/model（跟随主会话窗口），其次
-  // body 显式传入，最后读全局 settings.yaml；避免把第三方模型发给官方接口。
-  const provider = String(parsed.provider || body.provider || readGlobalProvider() || DEFAULT_PROVIDER);
-  const model = String(parsed.model || body.model || readGlobalModel());
-  // reasoningEffort：优先解析值，其次全局；provider 为第三方时无值则强制 "off"。
-  let reasoningEffort = parsed.reasoningEffort || readGlobalReasoning();
-  const isThirdParty = !["deepseek-official", "deepseek-vision", "deepseek"].includes(provider);
-  if (isThirdParty && !reasoningEffort) reasoningEffort = "off";
+  const provider = String(body.provider || parsed.provider || DEFAULT_PROVIDER);
+  const model = String(body.model || parsed.model || readGlobalModel());
   const llmMessages = rest.map((m) => ({
     role: m.role,
-    content: [{ type: "text", text: msgContentText(m) }],
+    content: [{ type: "text", text: String(m.content || "") }],
   }));
 
   res.writeHead(200, {
@@ -751,7 +671,7 @@ async function handleAskMode3(req, res, body, sessionId) {
     connection: "keep-alive",
   });
   try {
-    const stream = ctxRef.llm.stream({ provider, model, system, messages: llmMessages, reasoningEffort });
+    const stream = ctxRef.llm.stream({ provider, model, system, messages: llmMessages });
     for await (const chunk of stream) {
       if (!chunk) continue;
       if (chunk.type === "text-delta" && typeof chunk.text === "string") {
