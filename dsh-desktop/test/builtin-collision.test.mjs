@@ -12,7 +12,7 @@ import { createRequire } from 'node:module';
 // 移除（保留用户自建 link: 本地链接），让内置版干净接管，并报告移除了什么。
 
 const require = createRequire(import.meta.url);
-const { removeMarketDuplicate } = require('../builtin-collision.js');
+const { removeMarketDuplicate, stripPatchRows, patchHasForeignRows } = require('../builtin-collision.js');
 
 const PATCH_TPL = [
   '- id: dsh-tool-vision',
@@ -112,4 +112,81 @@ test('removeMarketDuplicate：profile 缺失文件时静默成功', () => {
     assert.equal(r.ok, true);
     assert.equal(r.changed, false);
   } finally { rmSync(t, { recursive: true, force: true }); }
+});
+
+// patchHasForeignRows（v4.4）：应用自写的行不得算市场残留 —— 否则首次向导
+// 的取消勾选会在同一启动里被剥离后按注册表默认回写（dsh-dafeiyu 等默认
+// 启用插件被静默重新启用），且每次启动产生「剥离-回写」空转与孤儿行堆积。
+
+test('patchHasForeignRows：sync 的 insert 内层行不算市场残留', () => {
+  const patch = [
+    '- insert:',
+    "    - id: dsh-dafeiyu",
+    "      name: 'dsh-dafeiyu'",
+    '- insert:',
+    "    - id: dsh-pet",
+    "      name: 'dsh-pet'",
+    '      disabled: true',
+  ].join('\n');
+  assert.equal(patchHasForeignRows(patch, 'dsh-dafeiyu'), false, 'insert 内层行是 sync 自写形');
+  assert.equal(patchHasForeignRows(patch, 'dsh-pet'), false);
+});
+
+test('patchHasForeignRows：插件管理/向导的「关闭」标记顶层行不算市场残留', () => {
+  const patch = [
+    '# 插件管理（设置页「插件」栏）：关闭 dsh-dafeiyu',
+    '- id: dsh-dafeiyu',
+    "  name: 'dsh-dafeiyu'",
+    '  disabled: true',
+    '',
+  ].join('\n');
+  assert.equal(patchHasForeignRows(patch, 'dsh-dafeiyu'), false, '带关闭标记的顶层行是 togglePluginInPatch 写形');
+});
+
+test('patchHasForeignRows：真正的市场顶层行（无标记）算残留', () => {
+  const patch = [
+    '- insert:',
+    "    - id: dsh-pet",
+    "      name: 'dsh-pet'",
+    '      disabled: true',
+    '- id: dsh-dafeiyu',
+    "  name: 'dsh-dafeiyu'",
+    '',
+  ].join('\n');
+  assert.equal(patchHasForeignRows(patch, 'dsh-dafeiyu'), true, '顶层裸行无关闭标记 = 市场安装残留');
+  assert.equal(patchHasForeignRows(patch, 'dsh-pet'), false, 'insert 内层行不算');
+});
+
+test('patchHasForeignRows：name 命中（id 不同）的市场行算残留', () => {
+  const patch = [
+    '- id: mkt-2',
+    "  name: 'dsh-tool-vision'",
+    '',
+  ].join('\n');
+  assert.equal(patchHasForeignRows(patch, 'dsh-tool-vision'), true);
+});
+
+test('patchHasForeignRows：无关行与空 patch 不算残留', () => {
+  assert.equal(patchHasForeignRows('- id: soul-md\n  name: soul-md\n', 'dsh-dafeiyu'), false);
+  assert.equal(patchHasForeignRows('', 'dsh-dafeiyu'), false);
+  assert.equal(patchHasForeignRows('# 只有注释\n', 'dsh-dafeiyu'), false);
+});
+
+test('stripPatchRows：自写行的保护在 dupPreCheck 层，迁移命中时仍全量剥离', () => {
+  // strip 语义不变（v4.2+ 一直如此）：迁移一旦触发，顶层+内层同名行都剥。
+  // v4.4 修复点在调用侧 —— dupPreCheck 用 patchHasForeignRows 先排除自写行，
+  // 自写行根本走不到 removeMarketDuplicate。
+  const patch = [
+    '# 插件管理（设置页「插件」栏）：关闭 dsh-dafeiyu',
+    '- id: dsh-dafeiyu',
+    "  name: 'dsh-dafeiyu'",
+    '  disabled: true',
+    '- id: mkt-2',
+    "  name: 'dsh-tool-vision'",
+    '',
+  ].join('\n');
+  const { patch: out, removed } = stripPatchRows(patch, 'dsh-dafeiyu', 'dsh-dafeiyu');
+  assert.deepEqual(removed, ['dsh-dafeiyu'], '带标记的自写行也剥（strip 层不做区分）');
+  assert.ok(!/- id: dsh-dafeiyu\b/.test(out), '自写行被移除（迁移语义不变）');
+  assert.ok(/- id: mkt-2\b/.test(out), '无关行保留');
 });

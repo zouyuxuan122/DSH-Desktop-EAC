@@ -42,6 +42,44 @@ function blockEnd(lines, startIdx) {
   return j;
 }
 
+// 应用自写的登记行判定（v4.4）：
+//   · insert 内层条目 —— syncCompanionPlugins 的固定写形；
+//   · 顶层条目但正上方带「关闭 <id>」标记注释 —— 插件管理 / 选择向导
+//     togglePluginInPatch 的写形。
+// 这类行是应用自己的启停状态，不是市场安装残留：removeMarketDuplicate 与
+// 调用侧的 dupPreCheck 不得把它们当市场重复清理 —— 否则 v4.4 首次向导的
+// 取消勾选会在同一启动里被剥离后按注册表默认回写（dsh-dafeiyu 等默认启用
+// 插件被静默重新启用），且每次启动产生「剥离-回写」空转与孤儿 `- insert:`
+// 行堆积。
+function isSelfWrittenRow(lines, i) {
+  if (!/^[ \t]*- id:/.test(lines[i])) return false;
+  // 缩进的 `- id:` = sync 写的 insert 内层条目。
+  if (/^[ \t]+- id:/.test(lines[i])) return true;
+  let k = i - 1;
+  while (k >= 0 && lines[k].trim() === '') k -= 1;
+  if (k < 0) return false;
+  const idM = /^[ \t]*- id:\s*([\w.-]+)/.exec(lines[i]);
+  if (!idM) return false;
+  const esc = String(idM[1]).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  return new RegExp('^#\\s[^\\n]*关闭\\s+' + esc + '(?![A-Za-z0-9_.-])').test(lines[k]);
+}
+
+// patch 中是否存在「非应用自写」的登记行（id 或 name 命中内置包名）。
+// 供 syncCompanionPlugins 的 dupPreCheck 使用：只对真正的市场残留触发
+// 迁移（配合 package.json 的依赖/bundles 证据）。
+function patchHasForeignRows(patch, builtinName) {
+  const targetId = String(builtinName || '').split('/').pop();
+  const lines = String(patch || '').split(/\r?\n/);
+  for (let i = 0; i < lines.length; i++) {
+    const m = /^[ \t]*- id:\s*([\w.-]+)\s*$/.exec(lines[i]);
+    if (m === null) continue;
+    if (m[1] !== targetId && !(builtinName && rowNameOf(lines, i) === builtinName)) continue;
+    if (isSelfWrittenRow(lines, i)) continue;
+    return true;
+  }
+  return false;
+}
+
 // 从 patch 文本里移除 name/id 匹配 target 的 patch 行（顶层 + insert 内层）。
 // 返回 { patch, removed }。
 function stripPatchRows(patch, targetName, targetId) {
@@ -127,4 +165,4 @@ function removeMarketDuplicate(profileDir, builtinName, opts = {}) {
   }
 }
 
-module.exports = { removeMarketDuplicate, stripPatchRows };
+module.exports = { removeMarketDuplicate, stripPatchRows, patchHasForeignRows, isSelfWrittenRow };

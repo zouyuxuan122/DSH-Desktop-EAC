@@ -2665,8 +2665,8 @@ const COMPANION_PLUGINS = [
   { id: 'plugin-wizard', name: 'dsh-plugin-wizard', dir: 'dsh-plugin-wizard' },
   // 微信 ClawBot / OpenClaw 桥（openclaw-dsh-bridge v0.7.0，MIT）：设置页
   // 「ClawBot」栏（扫码绑定微信官方 ClawBot 小程序）+ OpenAI 兼容端点
-  // （/openclaw-bridge/v1/chat/completions）。前置依赖 dsh-host-apiproxy 的
-  // 设置命名空间白名单补丁（patchApiproxyBridgeNamespace，随启动幂等应用）。
+  // （/openclaw-bridge/v1/chat/completions）。设置命名空间经 dsh-host-apiproxy
+  // 的 settings.describe 全量暴露（rc.7+ 已移除 WEB_SETTINGS_NAMESPACES 白名单）。
   { id: 'openclaw-bridge', name: '@deepseek-ai/dsh-openclaw-bridge', dir: 'dsh-openclaw-bridge' },
   // 崩溃急救/撤销回退（dsh-undo-savepoint，lire1131，MIT）：配置文件 + 插件
   // 代码树快照、undo/redo、一键安全模式、密钥脱敏 vault。与插件保护中心
@@ -3225,31 +3225,6 @@ function applySessionManageFix() {
   }
 }
 
-// openclaw-bridge 的设置命名空间白名单：dsh-host-apiproxy 的
-// settings.describe/mutate 只暴露 WEB_SETTINGS_NAMESPACES 列出的命名空间，
-// 补一行 "openclaw-bridge" 让设置页 ClawBot 栏可读写（同上游 install.ps1）。
-function patchApiproxyBridgeNamespace() {
-  for (const root of runtimePatchRoots()) {
-    if (!root || !fs.existsSync(root)) continue;
-    const apiproxy = path.join(root, '@deepseek-ai', 'dsh-host-apiproxy', 'lib', 'index.js');
-    if (!fs.existsSync(apiproxy)) continue;
-    try {
-      let src = fs.readFileSync(apiproxy, 'utf8');
-      if (src.includes('"openclaw-bridge"')) continue;
-      const marker = 'const WEB_SETTINGS_NAMESPACES = [';
-      if (!src.includes(marker)) {
-        log('boot', 'apiproxy 白名单锚点未找到，跳过（' + apiproxy + '）');
-        continue;
-      }
-      src = src.replace(marker, marker + '\n\t"openclaw-bridge",\n\t');
-      fs.writeFileSync(apiproxy, src);
-      log('boot', '已补丁 apiproxy 设置命名空间白名单: ' + apiproxy);
-    } catch (err) {
-      log('boot', 'apiproxy 白名单补丁失败(' + apiproxy + '): ' + err.message);
-    }
-  }
-}
-
 // ---------------------------------------------------------------------------
 // 插件启停管理（V4，移植自上游）：设置页「插件 → 管理」标签的数据与写盘。
 // dsh:plugin-list / dsh:plugin-set-enabled 两个 IPC 驱动；写盘用纯文本手术
@@ -3460,7 +3435,7 @@ function imagePasteSave(dataUrl, name) {
 
 // 写入/移除用户层 disabled 条目（纯文本手术见 scripts/plugin-manager-patch.js）：
 // 与上游的差异 —— 「启用」保留顶层裸条目 {id, name} 而不是整条移除，这样
-// 默认禁用的配套插件（dsh-dafeiyu）被用户启用后不会被下次 sync 重新插回
+// 默认禁用的配套插件（dsh-pet）被用户启用后不会被下次 sync 重新插回
 // disabled 行（sync 的「已有行不重写」规则自然接管）。
 function pluginManagerSetEnabled(id, enabled) {
   const file = path.join(desktopProfileDir(), 'cordis.patch.yml');
@@ -3497,9 +3472,7 @@ function syncCompanionPlugins() {
     ensureDesktopProfileInit();
     // V4 运行时补丁（幂等，随启动 / 服务重启 / agent 更新后重放）：
     //  · 对话删除/归档 —— dsh-session-manager 插件的全链路前置依赖；
-    //  · ClawBot 设置命名空间 —— openclaw-bridge 的设置页读写依赖。
     applySessionManageFix();
-    patchApiproxyBridgeNamespace();
     const profileDirP = desktopProfileDir();
     // 内置社区 agent preset（anchored-standard：首请求锚定 Minimal 工具对，
     // 首次工具调用/回复后开放完整 Standard 目录）：安装到用户 preset 根。
@@ -3543,8 +3516,9 @@ function syncCompanionPlugins() {
         continue;
       }
       try {
-        const { removeMarketDuplicate } = require('./builtin-collision');
-        // 先快照（保护中心）：迁移属于配置面手术，出问题可一键回滚。
+        const { removeMarketDuplicate, patchHasForeignRows } = require('./builtin-collision');
+        // 市场同名包残留预检（v4.2，用户反馈问题 5）：只有「非应用自写」证据
+        // （package.json 依赖/bundles 或非自写 patch 行）才算残留。
         const dupPreCheck = (() => {
           try {
             const pkg = readJsonFile(path.join(profileDirP, 'package.json'));
@@ -3552,21 +3526,33 @@ function syncCompanionPlugins() {
             if (spec && !String(spec).startsWith('link:') && !String(spec).startsWith('file:')) return true;
             if (pkg && pkg.dsh && pkg.dsh.profile && Array.isArray(pkg.dsh.profile.bundles) && pkg.dsh.profile.bundles.includes(p.name)) return true;
             const patchText = fs.readFileSync(path.join(profileDirP, 'cordis.patch.yml'), 'utf8');
-            const esc = String(p.name).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-            return new RegExp("name:\\s*['\"]?" + esc + "['\"]?\\s*$", 'm').test(patchText);
+            // 只认「非应用自写」的登记行：sync 的 insert 内层行、插件管理/向导
+            // togglePluginInPatch 写的（带「关闭」标记注释的）顶层行都是应用自己
+            // 的启停状态，不是市场残留。否则 v4.4 首次向导的取消勾选会在同一启动
+            // 里被剥离后按注册表默认回写（dsh-dafeiyu 等默认启用插件被静默重新
+            // 启用），且每次启动产生「剥离-回写」空转与孤儿 `- insert:` 行堆积。
+            return patchHasForeignRows(patchText, p.name);
           } catch { return false; }
         })();
-        if (dupPreCheck) ensureGuard().snapshot('builtin-migrate:' + p.id);
-        const migrated = removeMarketDuplicate(profileDirP, p.name, { log: (m) => log('boot', m) });
-        if (migrated.changed && migrated.ok) {
-          migratedBuiltins.push({ name: p.name, dep: migrated.removedDep.length > 0, rows: migrated.removedRows });
-          log('boot', `内置插件 ${p.name} 已接管市场同名包（移除依赖 ${migrated.removedDep.length} 个、patch 行 ${migrated.removedRows.length} 个）`);
+        if (dupPreCheck) {
+          // 先快照（保护中心）：迁移属于配置面手术，出问题可一键回滚。
+          ensureGuard().snapshot('builtin-migrate:' + p.id);
+          // 只在确有市场残留证据时才动手术。v4.2 曾无条件执行迁移 —— 它的
+          // 「剥离-回写」对无重复用户是空转，且会把应用自写的行（向导/插件
+          // 管理的 disabled 行、sync 自己的 insert 行）一并剥掉后按注册表
+          // 默认回写：v4.4 首次向导的取消勾选被静默重新启用，孤儿 insert
+          // 行每次启动堆积。
+          const migrated = removeMarketDuplicate(profileDirP, p.name, { log: (m) => log('boot', m) });
+          if (migrated.changed && migrated.ok) {
+            migratedBuiltins.push({ name: p.name, dep: migrated.removedDep.length > 0, rows: migrated.removedRows });
+            log('boot', `内置插件 ${p.name} 已接管市场同名包（移除依赖 ${migrated.removedDep.length} 个、patch 行 ${migrated.removedRows.length} 个）`);
+          }
         }
       } catch (err) {
         log('boot', `内置插件同名迁移失败(${p.id}): ${String((err && err.message) || err)}`);
       }
       copyPluginPackage(profileDirP, src, p.name);
-      // p.disabled: true 的配套插件默认以禁用行注册（如 dsh-dafeiyu 桌宠），
+      // p.disabled: true 的配套插件默认以禁用行注册（如 dsh-pet 页面桌宠），
       // 用户可在「设置 → 插件 → 管理」里启用；已有行不重写，用户选择优先。
       pending.push({ id: p.id, name: p.name, disabled: p.disabled === true, config: p.config });
     }
@@ -3667,6 +3653,19 @@ function syncCompanionPlugins() {
       changed = true;
     }
     if (changed) {
+      // 顺带清理历史遗留的孤儿 `- insert:` 行（v4.2/4.3 每次启动「剥离-回写」
+      // 残留的空块；对 cordis 无效果，仅文件卫生）。强制一次写盘，之后幂等。
+      const lines = patch.split(/\r?\n/);
+      const cleaned = lines.filter((line, idx) => {
+        if (!/^[ \t]*- insert:\s*$/.test(line)) return true;
+        let k = idx + 1;
+        while (k < lines.length && lines[k].trim() === '') k += 1;
+        return k < lines.length && /^[ \t]+- /.test(lines[k]);
+      }).join('\n');
+      if (cleaned !== patch) {
+        patch = cleaned;
+        log('boot', '已清理 profile patch 中的孤儿 - insert: 行');
+      }
       fs.writeFileSync(patchFile, patch);
       log('boot', '已同步配套插件/皮肤到 web profile: ' + pending.map((p) => p.id).join(', '));
     }
@@ -4166,6 +4165,7 @@ async function runClientUpdateFlow(manual) {
         profileDir: path.join(dshHome, 'profiles', desktopProfile()),
         currentVersion: APP_VERSION,
         newVersion: release.version,
+        nodeExe: nodeExe(),
       };
       clientUpdater.applyUpdate(ctx, settings.pendingClientUpdate, clientUpdateOpts);
       setTimeout(() => app.exit(0), 400);
@@ -4225,6 +4225,7 @@ function offerPendingClientUpdate() {
       profileDir: path.join(dshHome, 'profiles', desktopProfile()),
       currentVersion: APP_VERSION,
       newVersion: pending.version,
+      nodeExe: nodeExe(),
     };
     clientUpdater.applyUpdate(ctx, pending, clientUpdateOpts2);
     setTimeout(() => app.exit(0), 400);

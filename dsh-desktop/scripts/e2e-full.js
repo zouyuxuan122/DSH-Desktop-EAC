@@ -9,7 +9,7 @@
 //      快照/回填生效；
 //   3. 【真实对话】：经 openclaw 桥发送两条消息（真实调用 DeepSeek API），
 //      断言模型回复 + inspect_image（识图）工具注册；
-//   4. 【老用户客户端更新全流程】：本地 mock 发布源提供 v4.0.1（资产为本
+//   4. 【老用户客户端更新全流程】：本地 mock 发布源提供 v999.0.0（资产为本
 //      dist exe + 真实 SHA-256）→ 菜单触发检查更新 → 自动确认（测试钩子）
 //      → 真实下载 + 哈希校验 → apply-update.cmd 替换 exe → 重启新实例 →
 //      断言旧进程退出、.bak 备份生成、新实例 boot 日志出现；
@@ -110,6 +110,11 @@ function check(name, ok, detail = '') {
 
 // --- mock 发布源（老用户「检查客户端更新」指向本地，资产为真实 dist exe） ---
 
+// 恒高于任何真实发布版本：客户端更新检查对「不高于当前版本」的发布做降级
+// 保护拒绝（client-updater.js compareVersions > 0），硬编码具体版本会在版本
+// 号追平后让更新链路静默失败，故固定为 999.0.0 永不过时。
+const MOCK_VERSION = '999.0.0';
+
 async function startMockRelease(exePath) {
   const exeHash = crypto.createHash('sha256').update(fs.readFileSync(exePath)).digest('hex');
   const size = fs.statSync(exePath).size;
@@ -118,8 +123,8 @@ async function startMockRelease(exePath) {
     if (req.url === '/api/releases') {
       res.writeHead(200, { 'content-type': 'application/json' });
       res.end(JSON.stringify([{
-        tag_name: 'v4.1.1',
-        body: 'E2E 全流程更新验证版本',
+        tag_name: 'v' + MOCK_VERSION,
+        body: 'E2E 全流程更新验证版本（mock 版本须高于当前发布版本，否则被降级保护拒绝）',
         assets: [
           { name: 'Deepseek-Harness-EAC-Portable-x64.exe', browser_download_url: `${base}/dl/portable.exe`, size, digest: `sha256:${exeHash}` },
           { name: 'SHA256SUMS.txt', browser_download_url: `${base}/dl/sums`, size: 10 },
@@ -148,7 +153,11 @@ async function main() {
   if (tasklistPids(path.basename(EXE)).size > 0) {
     console.error('[full] 已有同名 exe 在运行，先退出再跑'); process.exit(2);
   }
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'dsh-e2e-full-'));
+  // 测试根目录：默认系统临时目录；C: 空间紧张时用 DSH_E2E_ROOT 指到大盘
+  // （配套插件同步会把整个内置插件闭包拷进 DSH_HOME，数 GB 级）。
+  const rootBase = process.env.DSH_E2E_ROOT || os.tmpdir();
+  fs.mkdirSync(rootBase, { recursive: true });
+  const root = fs.mkdtempSync(path.join(rootBase, 'dsh-e2e-full-'));
   const home = path.join(root, 'dsh-home');
   fs.mkdirSync(home, { recursive: true });
   // 老用户数据（含真实凭据）：profiles 去 junction 根 + settings + key
@@ -278,7 +287,7 @@ async function main() {
   }
 
   // ── 4) 老用户客户端更新全流程（真实下载 + SHA-256 校验 + 替换 + 重启）──
-  console.log('[full] 触发「检查客户端更新」（mock v4.0.1 + 自动确认）…');
+  console.log(`[full] 触发「检查客户端更新」（mock v${MOCK_VERSION} + 自动确认）…`);
   const logBeforeUpdate = readLog().length;
   try {
     await cdpEval(page.webSocketDebuggerUrl, 'window.dshDesktop.menu.action("check-client-update")', 15000);
@@ -323,7 +332,9 @@ async function main() {
 
     // ── 更新后数据保留（用户最关心的回归：插件/向导标记一个都不能丢）──
     const profDir = path.join(home, 'profiles', 'web-desktop');
-    if (!SKIP_MARKET) {
+    // 市场步骤可能未执行（--skip-market）或插件被内置接管拒绝（builtin:true），
+    // 此时 pkgDir 未定义，跳过 node_modules 断言。
+    if (!SKIP_MARKET && pkgDir) {
       check('更新后市场插件仍在 node_modules', fs.existsSync(path.join(pkgDir, 'package.json')), pkgDir);
     }
     let bundlesAfterUpdate = [];

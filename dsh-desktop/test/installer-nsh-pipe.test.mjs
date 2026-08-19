@@ -54,3 +54,27 @@ test('installer.nsh：等待循环保留有界语义（最多约 10s 后放行�
   assert.ok(/Sleep\s+500/.test(block), '应有 Sleep 500 节流');
   assert.ok(/did not exit; continuing anyway/.test(block), '超时应放行继续安装（不卡死）');
 });
+
+// v4.4（PR79 集成回归）：customUnInstall 的「是否同时删除用户数据」
+// MessageBox 必须带 /SD IDNO。NSIS 静默模式（uninstall /S，注册表里
+// QuietUninstallString 就长这样）下 MessageBox 自动按第一按钮应答 ——
+// MB_YESNO 的第一按钮是 IDYES（MB_DEFBUTTON2 只移动 UI 焦点），静默
+// 卸载会径直走进 dshUnWipe 删掉 %APPDATA%\Deepseek Harness EAC 与
+// %USERPROFILE%\.dsh（设置、登录态、全部对话记录）。/SD IDNO 让静默
+// 卸载与 UI 默认一致：保留用户数据。
+function unInstallBlock() {
+  const start = lines.findIndex((l) => l.includes('!macro customUnInstall'));
+  const end = lines.findIndex((l, i) => i > start && l.trim() === '!macroend');
+  assert.ok(start >= 0, 'customUnInstall 宏应存在');
+  assert.ok(end > start, 'customUnInstall 宏应有结束');
+  return lines.slice(start, end + 1).join('\n');
+}
+
+test('installer.nsh：customUnInstall 的删数据确认必须带 /SD IDNO（静默卸载不删用户数据）', () => {
+  const block = unInstallBlock();
+  const mb = block.match(/MessageBox[^\n]*/);
+  assert.ok(mb, 'customUnInstall 应有 MessageBox 确认');
+  assert.ok(/MB_YESNO/.test(mb[0]), '应是 YES/NO 二选一');
+  assert.ok(/\/SD\s+IDNO/.test(block), 'MessageBox 必须带 /SD IDNO —— 否则静默卸载自动应答 IDYES 删光用户数据');
+  assert.ok(/dshUnWipe/.test(block) && /dshUnKeep/.test(block), 'YES/NO 两条分支应保留');
+});

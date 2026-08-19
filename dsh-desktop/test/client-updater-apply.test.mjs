@@ -120,6 +120,210 @@ test('spawn command line wraps the whole arg row in an extra outer quote pair', 
   assert.equal(line, '"' + [script, ...args].map((a) => `"${a}"`).join(' ') + '"');
 });
 
+// ---------------------------------------------------------------------------
+// v4.4（PR79 集成回归）：安装版 4 目录备份分支。
+//
+// PR79 的 manifest.json 生成用了裸 `node -e` —— 但目标用户机器普遍没有
+// 系统 Node（本应用自带 Node 运行时正是为此），detached cmd 里 `node`
+// 解析失败 errorlevel 9009 → BAD=2 → 「backup failed, aborting update」
+// → 永远回滚重弹旧版，更新死循环（与 v3.0.1 applyUpdate 自举陷阱同类：
+// 更新通道自身的缺陷无法借更新修复）。修复 = applyUpdate 把应用自带
+// nodeExe 作为第 10 参数传给脚本，脚本用带引号的 "%NODEEXE%" 调用；
+// nodeExe 缺失/不存在时降级 SKIP_BACKUP（回到 v4.3 无备份语义），
+// 绝不裸调 PATH 上的 node。
+// ---------------------------------------------------------------------------
+
+const FULL_BACKUP_OPTS = {
+  newExe: 'C:\\updates\\setup.exe',
+  oldExe: 'C:\\Programs\\app\\app.exe',
+  portable: false,
+  userDataDir: 'C:\\userData',
+  dshHome: 'C:\\Users\\u\\.dsh',
+  installDir: 'C:\\Programs\\app',
+  profileDir: 'C:\\Users\\u\\.dsh\\profiles\\web-desktop',
+  currentVersion: '4.3.0',
+  newVersion: '4.4.0',
+  nodeExe: 'C:\\Programs\\app\\resources\\node\\node.exe',
+};
+
+test('backup branch must not invoke bare `node` from PATH (inlines %NODEEXE% or skips backup)', () => {
+  const joined = buildApplyScript(FULL_BACKUP_OPTS).join('\n');
+  // batch 直接引用只到 %9 —— `%~10` 被解析为 `%~1` 后跟字面量 `0`
+  // （v4.4 实测 NODEEXE 接成了 "<第1参>0" → 文件不存在 → 备份被静默
+  // 跳过）。（shift 接第 10 参曾被判定「脚本静默死亡」，2x2 矩阵探针
+  // shift × 结尾 CRLF 共 32 轮已证伪 —— 纯属当年探针自身缺陷；但内联
+  // 设计无需第 10 参，本断言锁定内联方案不变。）nodeExe 由脚本生成器
+  // 直接内联进脚本体（% 转义为 %%），不经命令行参数传递。
+  assert.doesNotMatch(joined, /%~10/, 'must never reference %~10 (batch parses it as %~1 + "0")');
+  assert.doesNotMatch(joined, /^\s*shift\s*$/m, 'must not rely on shift (inline design needs no 10th arg; shift itself proven innocent by 2x2 matrix probe)');
+  const escaped = FULL_BACKUP_OPTS.nodeExe.replace(/%/g, '%%');
+  assert.ok(joined.includes(`set "NODEEXE=${escaped}"`),
+    'must inline the node exe path into the script body');
+  assert.ok(joined.includes('"%NODEEXE%" -e'), 'manifest step must invoke the passed node exe');
+  // 绝不允许裸 `node -e`（依赖 PATH —— 用户机器没有系统 Node）
+  assert.doesNotMatch(joined, /(^|[^"%\w])node\s+-e/, 'must not invoke bare `node` from PATH');
+
+  // nodeExe 缺失：降级 SKIP_BACKUP（v4.3 语义），同样不允许裸 node
+  const noNode = buildApplyScript({ ...FULL_BACKUP_OPTS, nodeExe: '' }).join('\n');
+  assert.match(noNode, /if "%NODEEXE%"=="" set SKIP_BACKUP=1/,
+    'missing nodeExe must fall back to SKIP_BACKUP, never PATH node');
+  assert.doesNotMatch(noNode, /(^|[^"%\w])node\s+-e/);
+});
+
+// 端到端（无系统 Node 的用户机器）：4 目录备份 + manifest.json + /S 静默
+// 安装 + .backup-ts marker + 成功清理，全程 PATH 剥掉 node。
+test('backup flow e2e: 4-dir backup + manifest + /S setup + marker, node stripped from PATH', { skip: process.platform !== 'win32' }, async () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'dsh-apply-bk-'));
+  try {
+    const ud = path.join(dir, 'userdata');
+    const dsh = path.join(dir, 'dshhome');
+    const inst = path.join(dir, 'install');
+    const prof = path.join(dir, 'profile');
+    for (const d of [ud, path.join(ud, 'updates'), dsh, path.join(dsh, 'profiles', 'web-desktop'), inst, prof]) {
+      fs.mkdirSync(d, { recursive: true });
+    }
+    // 各目录放真实样本文件，证明备份内容完整
+    fs.writeFileSync(path.join(ud, 'settings.json'), '{"skin":"miku"}');
+    fs.writeFileSync(path.join(dsh, 'settings.yaml'), 'model: deepseek-chat\n');
+    fs.writeFileSync(path.join(dsh, 'profiles', 'web-desktop', 'cordis.patch.yml'), '- id: dsh-pet\n');
+    fs.writeFileSync(path.join(prof, 'package.json'), '{}');
+    fs.writeFileSync(path.join(inst, 'app.exe'), 'OLD-APP-BYTES');
+    fs.writeFileSync(path.join(inst, 'resources.txt'), 'RES');
+
+    // 伪装存活应用（脚本须强杀）+ 伪装 Setup（写标记退出 0）
+    const fakeExeName = 'fake-dsh-eac-bk.exe';
+    const fakeAppExe = path.join(dir, fakeExeName);
+    fs.copyFileSync(path.join(process.env.SystemRoot || 'C:\\Windows', 'System32', 'ping.exe'), fakeAppExe);
+    const appProc = spawn(fakeAppExe, ['-n', '60', '127.0.0.1'], { stdio: 'ignore', windowsHide: true });
+    const appExited = new Promise((r) => appProc.once('exit', r));
+    const marker = path.join(dir, 'setup-ran.ok');
+    const fakeSetup = path.join(dir, 'fake-setup.cmd');
+    fs.writeFileSync(fakeSetup, `@echo off\r\necho ran> "${marker}"\r\nexit /b 0\r\n`);
+
+    const script = path.join(dir, 'apply-update.cmd');
+    fs.writeFileSync(script, buildApplyScript({
+      newExe: fakeSetup, oldExe: fakeAppExe, portable: false,
+      userDataDir: ud, dshHome: dsh, installDir: inst, profileDir: prof,
+      currentVersion: '4.3.0', newVersion: '4.4.0',
+      nodeExe: process.execPath,
+    }).join('\r\n') + '\r\n');
+    await new Promise((r) => setTimeout(r, 500)); // 等伪装应用真正跑起来
+
+    const line = buildSpawnCommandLine(script, [fakeSetup, fakeExeName, fakeAppExe, ud, dsh, inst, prof, '4.3.0', '4.4.0']);
+    // PATH 剥掉 node（保留系统工具），模拟普通用户机器
+    const sysRoot = process.env.SystemRoot || 'C:\\Windows';
+    const cleanEnv = {
+      ...process.env,
+      PATH: `${sysRoot}\\System32;${sysRoot};${sysRoot}\\System32\\WindowsPowerShell\\v1.0\\`,
+    };
+    const run = spawn('cmd.exe', ['/d', '/s', '/c', line], {
+      stdio: 'ignore', windowsHide: true, windowsVerbatimArguments: true, env: cleanEnv,
+    });
+    const code = await new Promise((resolve, reject) => {
+      const killer = setTimeout(() => {
+        try { run.kill(); } catch { /* already gone */ }
+        reject(new Error('backup apply-update script did not exit within 60s (hang regression)'));
+      }, 60000);
+      run.on('exit', (c) => { clearTimeout(killer); resolve(c); });
+    });
+
+    assert.equal(code, 0, 'script must exit 0 on the success path');
+    assert.ok(fs.existsSync(marker), 'the setup must have been executed');
+    const log = fs.readFileSync(path.join(dir, 'apply-update.log'), 'utf8');
+    assert.match(log, /running setup \/S/, 'setup must be invoked silently with /S');
+    assert.match(log, /writing manifest\.json/, 'manifest phase must run');
+
+    // 恰好一个带 manifest 的备份目录，4 个子目录内容齐全
+    const backupsRoot = path.join(ud, 'backups');
+    const withManifest = fs.readdirSync(backupsRoot).filter((e) => fs.existsSync(path.join(backupsRoot, e, 'manifest.json')));
+    assert.equal(withManifest.length, 1, 'exactly one backup dir with manifest.json, got ' + withManifest.join(','));
+    const ts = withManifest[0];
+    const manifest = JSON.parse(fs.readFileSync(path.join(backupsRoot, ts, 'manifest.json'), 'utf8'));
+    assert.equal(manifest.oldVersion, '4.3.0');
+    assert.equal(manifest.newVersion, '4.4.0');
+    assert.equal(String(manifest.installLocation.actual).toLowerCase(), inst.toLowerCase());
+    assert.ok(fs.existsSync(path.join(backupsRoot, ts, 'userdata', 'settings.json')), 'userData must be backed up');
+    assert.ok(fs.existsSync(path.join(backupsRoot, ts, 'dsh', 'settings.yaml')), 'dsh home must be backed up');
+    assert.ok(fs.existsSync(path.join(backupsRoot, ts, 'profile', 'package.json')), 'profile must be backed up');
+    assert.ok(fs.existsSync(path.join(backupsRoot, ts, 'install', 'app.exe')), 'install dir must be backed up');
+
+    // 成功 marker：内容 = 备份目录时间戳
+    const markerTs = fs.readFileSync(path.join(ud, 'updates', '.backup-ts'), 'utf8').trim();
+    assert.ok(markerTs.length > 0, '.backup-ts marker must be written on success');
+    assert.ok(fs.existsSync(path.join(ud, 'backups', markerTs, 'manifest.json')),
+      `marker ts (${markerTs}) must match the backup dir`);
+
+    if (appProc.exitCode === null) await Promise.race([appExited, new Promise((r) => setTimeout(r, 2000))]);
+    assert.ok(appProc.exitCode !== null, 'the live fake app must have been force-killed');
+    assert.ok(!fs.existsSync(fakeSetup), 'success path must delete the installer');
+    assert.ok(!fs.existsSync(script), 'success path must self-delete the script');
+  } finally {
+    try { fs.rmSync(dir, { recursive: true, force: true }); } catch { /* best effort */ }
+  }
+});
+
+// 失败路径端到端：Setup 退出 1 → 从备份 robocopy /MIR 回滚 4 目录 →
+// 被删掉的安装文件被恢复 → 不写 marker → 拉起旧版 → 脚本退出 1。
+test('backup flow e2e: setup failure rolls back the 4 directories from the backup', { skip: process.platform !== 'win32' }, async () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'dsh-apply-rb-'));
+  try {
+    const ud = path.join(dir, 'userdata');
+    const dsh = path.join(dir, 'dshhome');
+    const inst = path.join(dir, 'install');
+    const prof = path.join(dir, 'profile');
+    for (const d of [ud, path.join(ud, 'updates'), dsh, inst, prof]) fs.mkdirSync(d, { recursive: true });
+    fs.writeFileSync(path.join(ud, 'settings.json'), '{"a":1}');
+    fs.writeFileSync(path.join(inst, 'app.exe'), 'OLD-APP-BYTES');
+    fs.writeFileSync(path.join(inst, 'doomed.txt'), 'WILL-BE-DELETED-BY-SETUP');
+
+    const fakeExeName = 'fake-dsh-eac-rb.exe';
+    const fakeAppExe = path.join(dir, fakeExeName);
+    fs.copyFileSync(path.join(process.env.SystemRoot || 'C:\\Windows', 'System32', 'ping.exe'), fakeAppExe);
+    const appProc = spawn(fakeAppExe, ['-n', '60', '127.0.0.1'], { stdio: 'ignore', windowsHide: true });
+    const appExited = new Promise((r) => appProc.once('exit', r));
+
+    // 伪装 Setup：写标记 → 删安装目录文件（模拟半途失败）→ 退出 1
+    const marker = path.join(dir, 'setup-ran.ok');
+    const fakeSetup = path.join(dir, 'fake-setup.cmd');
+    fs.writeFileSync(fakeSetup, `@echo off\r\necho ran> "${marker}"\r\ndel "${path.join(inst, 'doomed.txt')}"\r\ndel "${path.join(inst, 'app.exe')}"\r\nexit /b 1\r\n`);
+
+    const script = path.join(dir, 'apply-update.cmd');
+    fs.writeFileSync(script, buildApplyScript({
+      newExe: fakeSetup, oldExe: fakeAppExe, portable: false,
+      userDataDir: ud, dshHome: dsh, installDir: inst, profileDir: prof,
+      currentVersion: '4.3.0', newVersion: '4.4.0',
+      nodeExe: process.execPath,
+    }).join('\r\n') + '\r\n');
+    await new Promise((r) => setTimeout(r, 500));
+
+    const line = buildSpawnCommandLine(script, [fakeSetup, fakeExeName, fakeAppExe, ud, dsh, inst, prof, '4.3.0', '4.4.0']);
+    const run = spawn('cmd.exe', ['/d', '/s', '/c', line], { stdio: 'ignore', windowsHide: true, windowsVerbatimArguments: true });
+    const code = await new Promise((resolve, reject) => {
+      const killer = setTimeout(() => {
+        try { run.kill(); } catch { /* already gone */ }
+        reject(new Error('rollback apply-update script did not exit within 60s (hang regression)'));
+      }, 60000);
+      run.on('exit', (c) => { clearTimeout(killer); resolve(c); });
+    });
+
+    assert.equal(code, 1, 'failure path must exit 1');
+    assert.ok(fs.existsSync(marker), 'the setup must have been executed');
+    const log = fs.readFileSync(path.join(dir, 'apply-update.log'), 'utf8');
+    assert.match(log, /rolling back 4 directories/, 'rollback phase must run');
+    assert.match(log, /rollback OK/, 'rollback must succeed');
+    // 被删除的安装文件必须从备份恢复
+    assert.ok(fs.existsSync(path.join(inst, 'app.exe')), 'deleted install file must be restored from backup');
+    assert.ok(fs.existsSync(path.join(inst, 'doomed.txt')), 'second deleted install file must be restored from backup');
+    // 失败不写成功 marker，不删安装包（诊断保留）
+    assert.ok(!fs.existsSync(path.join(ud, 'updates', '.backup-ts')), 'no success marker on failure');
+    assert.ok(fs.existsSync(fakeSetup), 'failure path must keep the installer for diagnosis');
+    if (appProc.exitCode === null) await Promise.race([appExited, new Promise((r) => setTimeout(r, 2000))]);
+    assert.ok(appProc.exitCode !== null, 'the live fake app must have been force-killed');
+  } finally {
+    try { fs.rmSync(dir, { recursive: true, force: true }); } catch { /* best effort */ }
+  }
+});
+
 // 端到端验证「能正常更新」：用生成的真实脚本 + 伪装存活应用（复制的
 // ping.exe 改名后跑 60s）+ 伪装 Setup（写标记文件退出 0），走生产同款
 // spawn 路径（cmd /d /s /c + 整行引用）。断言：强杀残留进程 → Setup 被

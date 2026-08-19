@@ -57,7 +57,11 @@ function findFileRecursive(dir, pattern, out = []) {
 
 async function main() {
   console.log(`[mario] exe=${EXE}`);
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'dsh-e2e-mario-'));
+  // 测试根目录：默认系统临时目录；C: 空间紧张时用 DSH_E2E_ROOT 指到大盘
+  // （配套插件同步会把整个内置插件闭包拷进 DSH_HOME，数 GB 级）。
+  const rootBase = process.env.DSH_E2E_ROOT || os.tmpdir();
+  fs.mkdirSync(rootBase, { recursive: true });
+  const root = fs.mkdtempSync(path.join(rootBase, 'dsh-e2e-mario-'));
   const home = path.join(root, 'dsh-home');
   fs.mkdirSync(path.join(home, 'profiles'), { recursive: true });
   const srcHome = path.join(os.homedir(), '.dsh');
@@ -80,6 +84,21 @@ async function main() {
   fs.copyFileSync(EXE, runExe);
   try { fs.rmSync(path.join(os.tmpdir(), 'deepseek-harness-eac-portable'), { recursive: true, force: true }); } catch {}
 
+  // 老用户身份预置：v4.3 起内置插件选择向导会在全新 userData 下弹出并
+  // 阻塞 boot（阻塞期间 dsh web 不会就绪，本脚本 10 分钟超时必挂）。
+  // 复制真实 ~/.dsh 属于升级场景，等价老用户，预写与 e2e-full 一致的
+  // settings.json（pluginOnboardingDone + 插件选择）即可走老用户路径。
+  const userDataDir = path.join(path.dirname(runExe), 'data');
+  fs.mkdirSync(userDataDir, { recursive: true });
+  fs.writeFileSync(path.join(userDataDir, 'settings.json'), JSON.stringify({
+    pluginOnboardingDone: true,
+    builtinPluginSelection: [
+      'balance', 'file-changes', 'client-file-changes', 'terminal',
+      'dsh-market-plugin', 'skin-switch', 'easy-setup', 'plugin-shield',
+      'plugin-manager', 'plugin-wizard',
+    ],
+  }));
+
   const child = spawn(runExe, [], {
     env: {
       ...process.env,
@@ -91,7 +110,6 @@ async function main() {
     stdio: 'ignore', windowsHide: true,
   });
   console.log(`[mario] app pid=${child.pid}`);
-  const userDataDir = path.join(path.dirname(runExe), 'data');
   const readWebLog = () => { try { return fs.readFileSync(path.join(userDataDir, 'logs', 'dsh-web.log'), 'utf8'); } catch { return ''; } };
 
   let url = null;

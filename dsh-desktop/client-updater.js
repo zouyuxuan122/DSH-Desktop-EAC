@@ -603,7 +603,7 @@ async function downloadRelease(ctx, release, { onProgress, onSourceChange, fallb
  *   4. 清理（删安装包+自删）仅在成功路径发生。
  *   5. 便携版分支保留 备份→替换→失败回滚 语义，同样有界等待并写日志。
  */
-function buildApplyScript({ newExe, oldExe, portable, userDataDir, dshHome, installDir, profileDir, currentVersion, newVersion }) {
+function buildApplyScript({ newExe, oldExe, portable, userDataDir, dshHome, installDir, profileDir, currentVersion, newVersion, nodeExe }) {
   const lines = ['@echo off'];
   if (portable) {
     lines.push(
@@ -664,6 +664,11 @@ function buildApplyScript({ newExe, oldExe, portable, userDataDir, dshHome, inst
     //      新版健康启动后主进程 cleanupClientBackupIfHealthy →
     //      offerBackupCleanupConfirm 询问是否清理备份（保留 24h，超过不自动弹）。
     //   4) 失败路径：从备份目录反向 robocopy /MIR 回 4 目录，再拉起旧版。
+    //   5) manifest.json 的内联 JS 用「应用自带 node」执行（第 10 参传入，
+    //      打包在 resources\node\node.exe）：目标用户机器普遍没有系统 Node，
+    //      裸调 PATH 上的 node 会 errorlevel 9009 → BAD=2 → 更新永远中止
+    //      回滚（更新死循环，v3.0.1 自举陷阱同类）。nodeExe 缺失/不存在时
+    //      降级 SKIP_BACKUP（回到 v4.3 无备份语义），绝不依赖 PATH。
     lines.push(
       'set "SETUP=%~1"',
       'set "EXENAME=%~2"',
@@ -674,6 +679,14 @@ function buildApplyScript({ newExe, oldExe, portable, userDataDir, dshHome, inst
       'set "PROF=%~7"',
       'set "OLDVER=%~8"',
       'set "NEWVER=%~9"',
+      // nodeExe 不能经命令行传：batch 直接引用只到 %9（`%~10` 被解析成
+      // `%~1` 后跟字面量 `0`，实测 NODEEXE 接成 "<第1参>0" → 备份被静默
+      // 跳过）。曾怀疑 shift 接第 10 参导致脚本静默死亡 —— 2x2 矩阵探针
+      // （shift × 结尾 CRLF，每组 8 轮真实 e2e）证明 shift 无辜，全部
+      // 32/32 通过；当年的「死亡」是探针自身缺陷（临时目录删除后才断言、
+      // 日志读错路径等）。仍选内联：无参数位数限制、零解析层不确定性，
+      // `%` 转义为 `%%` 防止变量展开破坏路径。
+      `set "NODEEXE=${String(nodeExe || '').replace(/%/g, '%%')}"`,
       'set "LOG=%~dp0apply-update.log"',
       'echo [%date% %time%] apply-update start > "%LOG%"',
       'echo [%date% %time%] oldVer=%OLDVER% newVer=%NEWVER% >> "%LOG%"',
@@ -687,7 +700,9 @@ function buildApplyScript({ newExe, oldExe, portable, userDataDir, dshHome, inst
       'if "%DSH%"=="" set SKIP_BACKUP=1',
       'if "%INST%"=="" set SKIP_BACKUP=1',
       'if "%PROF%"=="" set SKIP_BACKUP=1',
-      'if "%SKIP_BACKUP%"=="1" echo [%date% %time%] WARN: one of UD/DSH/INST/PROF empty, skipping backup (fallback semantics) >> "%LOG%"',
+      'if "%NODEEXE%"=="" set SKIP_BACKUP=1',
+      'if not exist "%NODEEXE%" set SKIP_BACKUP=1',
+      'if "%SKIP_BACKUP%"=="1" echo [%date% %time%] WARN: one of UD/DSH/INST/PROF/NODEEXE empty or missing, skipping backup (fallback semantics) >> "%LOG%"',
       'ping -n 4 127.0.0.1 >nul',
       'echo [%date% %time%] force-killing leftover app processes >> "%LOG%"',
       'taskkill /F /T /IM "%EXENAME%" >> "%LOG%" 2>&1',
@@ -740,7 +755,10 @@ function buildApplyScript({ newExe, oldExe, portable, userDataDir, dshHome, inst
       // --- 阶段 3：写 manifest.json（Node 内联，携带版本号 + 路径 + registry 对比 + 回滚指引）---
       'if "%SKIP_BACKUP%"=="0" if "%BAD%" == "0" (',
       '  echo [%date% %time%] writing manifest.json >> "%LOG%"',
-      '  set "MAN=%BACKUP%\\manifest.json"',
+      // 注意：node 内联脚本读 process.env.ENV_MAN —— 变量名必须是
+      // ENV_MAN（v4.4 实测 PR79 原稿写成 MAN，manifest 阶段 ENOENT: open ''
+      // → BAD=2 → 更新中止回滚；此前被 %~10 触发的 SKIP_BACKUP 掩盖）。
+      '  set "ENV_MAN=%BACKUP%\\manifest.json"',
       '  set "ENV_TS=%TS%"',
       '  set "ENV_UD=%UD%"',
       '  set "ENV_DSH=%DSH%"',
@@ -750,7 +768,7 @@ function buildApplyScript({ newExe, oldExe, portable, userDataDir, dshHome, inst
       '  set "ENV_OLD=%OLDVER%"',
       '  set "ENV_NEW=%NEWVER%"',
       '  set "ENV_BACK=%BACKUP%"',
-      '  node -e "try{const t=process.env;const fs=require(\'fs\');const p={userData:{src:t.ENV_UD||\'\',backup:pathJoin(t.ENV_BACK,\'userdata\')},dsh:{src:t.ENV_DSH||\'\',backup:pathJoin(t.ENV_BACK,\'dsh\')},profile:{src:t.ENV_PROF||\'\',backup:pathJoin(t.ENV_BACK,\'profile\')},install:{src:t.ENV_INST||\'\',backup:pathJoin(t.ENV_BACK,\'install\')}};function pathJoin(a,b){return require(\'path\').join(String(a||\'\'),String(b||\'\'));}const m={timestamp:Number(t.ENV_TS)||Date.now(),backupTs:String(t.ENV_TS||\'\'),oldVersion:t.ENV_OLD||\'\',newVersion:t.ENV_NEW||\'\',installLocation:{registry:t.ENV_REG||\'\',actual:t.ENV_INST||\'\',match:!!(t.ENV_REG&&t.ENV_INST&&String(t.ENV_REG).toLowerCase().replace(/[\\\\\\/]+$/g,\'\')===String(t.ENV_INST).toLowerCase().replace(/[\\\\\\/]+$/g,\'\'))},paths:p,rollbackGuide:\'4 directories each mirror-copied to the parallel ./userdata ./dsh ./profile ./install subdirs. Robocopy /MIR them back to paths.{userData,dsh,profile,install}.src, then launch OLD executable.\'};fs.writeFileSync(t.ENV_MAN||\'\',JSON.stringify(m,null,2));}catch(e){console.error(e.message);process.exit(1);}" >> "%LOG%" 2>&1',
+      '  "%NODEEXE%" -e "try{const t=process.env;const fs=require(\'fs\');const p={userData:{src:t.ENV_UD||\'\',backup:pathJoin(t.ENV_BACK,\'userdata\')},dsh:{src:t.ENV_DSH||\'\',backup:pathJoin(t.ENV_BACK,\'dsh\')},profile:{src:t.ENV_PROF||\'\',backup:pathJoin(t.ENV_BACK,\'profile\')},install:{src:t.ENV_INST||\'\',backup:pathJoin(t.ENV_BACK,\'install\')}};function pathJoin(a,b){return require(\'path\').join(String(a||\'\'),String(b||\'\'));}const m={timestamp:Number(t.ENV_TS)||Date.now(),backupTs:String(t.ENV_TS||\'\'),oldVersion:t.ENV_OLD||\'\',newVersion:t.ENV_NEW||\'\',installLocation:{registry:t.ENV_REG||\'\',actual:t.ENV_INST||\'\',match:!!(t.ENV_REG&&t.ENV_INST&&String(t.ENV_REG).toLowerCase().replace(/[\\\\\\/]+$/g,\'\')===String(t.ENV_INST).toLowerCase().replace(/[\\\\\\/]+$/g,\'\'))},paths:p,rollbackGuide:\'4 directories each mirror-copied to the parallel ./userdata ./dsh ./profile ./install subdirs. Robocopy /MIR them back to paths.{userData,dsh,profile,install}.src, then launch OLD executable.\'};fs.writeFileSync(t.ENV_MAN||\'\',JSON.stringify(m,null,2));}catch(e){console.error(e.message);process.exit(1);}" >> "%LOG%" 2>&1',
       '  if errorlevel 1 set BAD=2',
       ')',
       'if "%SKIP_BACKUP%"=="0" if not "%BAD%" == "0" (',
@@ -803,8 +821,14 @@ function buildApplyScript({ newExe, oldExe, portable, userDataDir, dshHome, inst
       '    robocopy "%BACKUP%\\userdata" "%UD%" /MIR /XD "%UD%\\updates" "%UD%\\backups" "%UD%\\logs" /XF "*.log" /NFL /NDL /NJH /NJS /NP /R:1 /W:1 >> "%LOG%" 2>&1',
       '    if errorlevel 8 set RBAD=1',
       '  )',
-      '  if "%RBAD%"=="0" (echo [%date% %time%] rollback OK >> "%LOG%") else (echo [%date% %time%] rollback partially failed (code %RBAD%) >> "%LOG%")',
       ')',
+      // RBAD 判定必须是括号块外的独立语句：块内 %RBAD% 在整块解析期展开
+      // （此时 set 尚未执行），恒为空串 → 永远走 else，日志字面就是
+      // "rollback partially failed (code "（v4.4 实测）。移出后本行在块
+      // 执行完才被解析，%RBAD% 已是 robocopy 的最终值；入口条件与块相同，
+      // 块没跑时本行整体跳过。不用 ENABLEDELAYEDEXPANSION —— 它会把
+      // 用户路径里的字面 ! 吃掉。与上方 BAD 的判定模式保持一致。
+      'if "%SKIP_BACKUP%"=="0" if defined TS if exist "%BACKUP%\\manifest.json" if "%RBAD%"=="0" (echo [%date% %time%] rollback OK >> "%LOG%") else (echo [%date% %time%] rollback partially failed (code %RBAD%) >> "%LOG%")',
       'if not "%OLD%" == "" if exist "%OLD%" start "" "%OLD%"',
       'exit /b 1'
     );
@@ -836,14 +860,19 @@ function applyUpdate(ctx, pending, opts) {
   const profileDir = (opts && opts.profileDir) || '';
   const currentVersion = (opts && opts.currentVersion) || '';
   const newVersion = (opts && opts.newVersion) || (pending && pending.version) || '';
+  // 应用自带的 node 运行时（打包在 resources\node\node.exe）：manifest.json
+  // 的内联 JS 用它执行 —— 用户机器没有系统 Node，绝不能依赖 PATH。
+  const nodeExe = (opts && opts.nodeExe) || '';
   const lines = buildApplyScript({
     newExe, oldExe, portable,
-    userDataDir, dshHome, installDir, profileDir, currentVersion, newVersion,
+    userDataDir, dshHome, installDir, profileDir, currentVersion, newVersion, nodeExe,
   });
-  fs.writeFileSync(script, lines.join('\r\n'));
-  ctx.log('client-update', `启动更新脚本: ${script}（新: ${newExe}，旧: ${oldExe}，备份根: ${userDataDir}\\backups\\<ts>）`);
+  // 结尾必须带 CRLF：缺行尾的最后一行在 cmd 批解析器里行为不稳定
+  // （实测 self-delete 收尾行偶发不被执行）。
+  fs.writeFileSync(script, lines.join('\r\n') + '\r\n');
+  ctx.log('client-update', `启动更新脚本: ${script}（新: ${newExe}，旧: ${oldExe}，备份根: ${userDataDir}\\backups\\<ts>，node: ${nodeExe || '(无，跳过备份)'}）`);
   const args = portable
-    ? [newExe, oldExe, '', '', '', '', '', '', '']
+    ? [newExe, oldExe]
     : [newExe, exeBase, oldExe, userDataDir, dshHome, installDir, profileDir, currentVersion, newVersion];
   const child = spawn('cmd.exe', ['/d', '/s', '/c', buildSpawnCommandLine(script, args)], {
     detached: true,

@@ -5,9 +5,10 @@
 //
 // 覆盖：
 //   A. 新用户（fresh）：空 DSH_HOME / 空 APPDATA 冷启动 —— profile 初始化、
-//      配套插件同步（含 v4 新插件）、dafeiyu 默认禁用行、运行时补丁（会话删除
-//      + apiproxy 白名单）、Web UI 就绪、CDP 驱动页面（dshDesktop 桥存在、
-//      插件市场 API 可达）。
+//      配套插件同步（含 v4 新插件）、首次向导（CDP 驱动提交核心+推荐）、
+//      dafeiyu 向导未勾选 → 禁用行、运行时补丁（会话删除）、apiproxy 设置
+//      命名空间全量暴露（rc.7+ 无白名单，ClawBot 设置可达）、
+//      Web UI 就绪、CDP 驱动页面（dshDesktop 桥存在、插件市场 API 可达）。
 //   B. 老用户（upgrade）：复制本机 ~/.dsh 既有数据后启动（升级路径）。
 //   C. 退出清理：走真实 UI 退出路径（chrome:menu quit IPC）→ 断言主进程退出、
 //      dsh web node.exe + conhost 无残留、run-state.json cleanExit=true。
@@ -123,7 +124,11 @@ async function main() {
   }
 
   // 1) 临时环境
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'dsh-e2e-v4-' + TAG + '-'));
+  // 测试根目录：默认系统临时目录；C: 空间紧张时用 DSH_E2E_ROOT 指到大盘
+// （profile 同步会把整个内置插件闭包拷进 DSH_HOME，数 GB 级）。
+const rootBase = process.env.DSH_E2E_ROOT || os.tmpdir();
+  fs.mkdirSync(rootBase, { recursive: true });
+  const root = fs.mkdtempSync(path.join(rootBase, 'dsh-e2e-v4-' + TAG + '-'));
   const home = path.join(root, 'dsh-home');
   fs.mkdirSync(home, { recursive: true });
   if (MODE === 'upgrade') {
@@ -187,6 +192,48 @@ async function main() {
   const desktopLog = () => path.join(userDataDir, 'logs', 'desktop.log');
   const readLog = () => { try { return fs.readFileSync(desktopLog(), 'utf8'); } catch { return ''; } };
 
+  // 4a) fresh 模式：首次向导在 boot 链上阻塞 dsh web 启动，必须先用 CDP
+  // 驱动提交（核心+推荐），否则「Web UI 就绪」行永远不会出现。
+  if (MODE === 'fresh') {
+    const wizardT0 = Date.now();
+    let driven = false;
+    while (Date.now() - wizardT0 < 180000 && !driven) {
+      let pages = [];
+      try {
+        const list = await new Promise((resolve, reject) => {
+          http.get(`http://127.0.0.1:${DEBUG_PORT}/json/list`, (res) => {
+            let body = '';
+            res.on('data', (c) => { body += c; });
+            res.on('end', () => { try { resolve(JSON.parse(body)); } catch (e) { reject(e); } });
+          }).on('error', reject);
+        });
+        pages = list.filter((t) => t.type === 'page' && /onboarding\.html/.test(t.url || ''));
+      } catch {}
+      if (pages.length === 0) { await sleep(2000); continue; }
+      const ws = new WebSocket(pages[0].webSocketDebuggerUrl);
+      await new Promise((res) => { ws.on('open', res); ws.on('error', res); });
+      // 只发不候：submit 成功后向导窗口立即关闭，CDP 连接随之失效。
+      ws.send(JSON.stringify({
+        id: 9, method: 'Runtime.evaluate',
+        params: {
+          expression: 'window.onboarding.list().then(c => window.onboarding.submit(c.catalog.filter(x => x.core || x.recommended).map(x => x.id))).then(() => "submitted")',
+          returnByValue: true, awaitPromise: true,
+        },
+      }));
+      setTimeout(() => { try { ws.close(); } catch {} }, 2000);
+      driven = true;
+      console.log('[e2e] 已 CDP 驱动提交首次向导（核心+推荐）');
+    }
+    check('首次向导已驱动提交（CDP）', driven, `elapsed=${Math.round((Date.now() - wizardT0) / 1000)}s`);
+    const wizardApplied = await new Promise((resolve) => {
+      const t = setInterval(() => {
+        if (/插件选择向导已应用：\d+ 个插件状态变更/.test(readLog())) { clearInterval(t); resolve(true); }
+      }, 2000);
+      setTimeout(() => { clearInterval(t); resolve(false); }, 120000);
+    });
+    check('向导已应用（boot 日志确认）', wizardApplied);
+  }
+
   // 4) 等待就绪：桌面日志出现就绪行（boot 链的「Web UI 就绪」或 dsh web 的
   // 「dsh web:」）+ CDP 主窗页面（fresh 首装最长 12 分钟，含解压+装依赖）。
   const waitMs = MODE === 'fresh' ? 12 * 60 * 1000 : 8 * 60 * 1000;
@@ -208,7 +255,7 @@ async function main() {
     return finish(1);
   }
 
-  // 5) 文件系统断言：profile 初始化 + v4 新插件同步 + dafeiyu 默认禁用
+  // 5) 文件系统断言：profile 初始化 + v4 新插件同步 + dafeiyu 启停行
   const profDir = path.join(home, 'profiles', 'web-desktop');
   const profPkg = (() => { try { return JSON.parse(fs.readFileSync(path.join(profDir, 'package.json'), 'utf8')); } catch { return null; } })();
   check('桌面专属 profile 已初始化', !!profPkg && Array.isArray(profPkg.dsh?.profile?.bundles));
@@ -231,10 +278,18 @@ async function main() {
   check('patch 行: change-review / dsh-undo / openclaw-bridge 已注册',
     /id:\s*change-review\b/.test(patch) && /id:\s*dsh-undo\b/.test(patch) && /id:\s*openclaw-bridge\b/.test(patch));
   const dafeiyuBlock = (patch.match(/- id:\s*dsh-dafeiyu\n(?:[ \t]+[^\n]*\n)*/) || [''])[0];
-  check('dafeiyu 默认禁用（disabled: true）', /disabled:\s*true/.test(dafeiyuBlock), JSON.stringify(dafeiyuBlock));
+  // v4.3+ dafeiyu 注册表默认启用（裸 insert 行）；fresh 向导未勾选它 → 顶层
+  // disabled 行（插件管理/向导写形）。upgrade 老用户 profile 无向导 → 启用。
+  const expectDafeiyuDisabled = MODE === 'fresh';
+  check('dafeiyu ' + (expectDafeiyuDisabled ? '向导未勾选 → 禁用行' : '默认启用（v4.3+，无 disabled 行）'),
+    !!dafeiyuBlock && /disabled:\s*true/.test(dafeiyuBlock) === expectDafeiyuDisabled,
+    JSON.stringify(dafeiyuBlock));
 
-  // 6) 运行时补丁断言：补丁在构建时已烘焙进内置闭包（运行时幂等重放为
-  // no-op、无日志），因此接受「日志行」或「闭包文件已带补丁标记」任一。
+  // 6) 运行时补丁断言：会话删除补丁在构建时已烘焙进内置闭包（运行时幂等
+  // 重放为 no-op、无日志），因此接受「日志行」或「闭包文件已带补丁标记」任一。
+  // ClawBot 设置命名空间不再需要补丁：上游 dsh-host-apiproxy rc.7 已移除
+  // WEB_SETTINGS_NAMESPACES 白名单（settings.describe 全量暴露）——断言闭包
+  // 里确实已无该白名单，openclaw-bridge 设置页天然可读写。
   const log1 = readLog();
   const junctionNm = path.join(home, 'profiles', 'node_modules');
   const hasBakedSessionPatch = (() => {
@@ -245,7 +300,14 @@ async function main() {
   })();
   check('会话删除补丁生效（烘焙或运行时应用）', /对话删除补丁/.test(log1) || hasBakedSessionPatch,
     `log=${/对话删除补丁/.test(log1)} baked=${hasBakedSessionPatch}`);
-  check('apiproxy ClawBot 命名空间白名单已补丁', /apiproxy 设置命名空间白名单/.test(log1) || /已补丁 apiproxy/.test(log1));
+  const apiproxyIdx = (() => {
+    try {
+      return fs.readFileSync(path.join(junctionNm, '@deepseek-ai', 'dsh-host-apiproxy', 'lib', 'index.js'), 'utf8');
+    } catch { return false; }
+  })();
+  check('apiproxy 设置命名空间全量暴露（rc.7+ 无白名单，ClawBot 设置可达）',
+    !!apiproxyIdx && apiproxyIdx.includes('settings.describe') && !apiproxyIdx.includes('WEB_SETTINGS_NAMESPACES'),
+    `describe=${!!apiproxyIdx && apiproxyIdx.includes('settings.describe')} whitelist=${!!apiproxyIdx && apiproxyIdx.includes('WEB_SETTINGS_NAMESPACES')}`);
 
   // 7) 页面侧断言（CDP，真实渲染进程）
   try {
