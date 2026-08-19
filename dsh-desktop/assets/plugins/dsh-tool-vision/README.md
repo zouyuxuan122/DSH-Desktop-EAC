@@ -4,6 +4,10 @@
 
 **GitHub**: [Scorp1o117/dsh-tool-vision](https://github.com/Scorp1o117/dsh-tool-vision) · **npm**: [dsh-tool-vision](https://www.npmjs.com/package/dsh-tool-vision)
 
+[![Enhancement Suite](https://img.shields.io/badge/part%20of-Enhancement%20Suite-3964fe)](https://github.com/Scorp1o117/dsh-enhancement-suite) [![npm](https://img.shields.io/npm/v/dsh-enhancement-suite)](https://www.npmjs.com/package/dsh-enhancement-suite)
+
+Part of the [DeepSeek Harness Enhancement Suite](https://github.com/Scorp1o117/dsh-enhancement-suite) — Vision · Soul/Persona · Long-term Memory · Plugin Marketplace.
+
 External vision model for [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness).
 
 DeepSeek's own models are text-only, and the harness derives every model
@@ -124,6 +128,63 @@ Example endpoints (`baseURL`):
 - **Zhipu (GLM-4V)**: `https://open.bigmodel.cn/api/paas/v4` — `glm-4v-flash` (free tier), `glm-4v-plus`
 - **Moonshot (Kimi)**: `https://api.moonshot.cn/v1` — `moonshot-v1-8k-vision-preview`
 - **Ollama local**: `http://localhost:11434/v1` — `llama3.2-vision` (no key)
+
+
+> **Note for users**
+> - This plugin is a standard **profile bundle** (`dsh.bundle.patch`):
+>   `dsh plugin --profile web add dsh-tool-vision` installs and mounts it in
+>   one step — no manual `cordis.patch.yml` edits needed.
+> - The settings section needs the `dsh-host-apiproxy` namespace allowlist;
+>   the plugin patches it automatically on first start — **restart `dsh web`
+>   once more** and the section appears. A dsh update overwrites the patch;
+>   the next plugin start re-applies it.
+> - Settings changes hot-apply (no restart needed).
+> - Tested against DSH `0.1.0-rc.6`.
+
+
+## Pixel-level vision tools (v0.4.0, ported from dsh-vision-router)
+
+14 `vision_*` tools driven by the **same** configured endpoint as
+`inspect_image` (baseURL/apiKey/model) — no provider chain, no local models,
+no extra settings:
+
+| Tool | Purpose |
+|---|---|
+| `vision_describe` | Image Q&A / multi-image comparison (optional structured JSON) |
+| `vision_ground` | Locate a target and return its ORIGINAL-pixel bounding box |
+| `vision_detect` | Enumerate elements (buttons, inputs, icons…) with numbered boxes |
+| `vision_crop` | Crop a pixel region to a PNG artifact |
+| `vision_pixel_diff` | Per-pixel comparison: ratio, worst regions, heatmap, report |
+| `vision_colors` | Dominant-color quantization for palette matching |
+| `vision_ocr` | Verbatim text transcription (letters only — not scene analysis) |
+| `vision_long_screenshot_ocr` | Chunked long-screenshot transcription into Markdown |
+| `vision_trace` | Potrace vectorization into colored SVG (worker-thread, safe) |
+| `vision_extract_foreground` | Solid-background removal → transparent PNG |
+| `vision_html_screenshot` | Headless render of a local .html (network blocked) |
+| `vision_screenshot` | Desktop capture (Win: PowerShell; macOS: screencapture; Linux: import/scrot) |
+| `vision_present` | Publish a generated image to the user via the host attachment store |
+| `vision_materialize` | Copy an attachment/local image into the workspace as a real path |
+
+Quality & safety details:
+
+- **Content-hash cache** keyed by endpoint+model+image+question (no stale
+  answers across model switches, failures are never cached).
+- **Uniform 4MP downscale** before every model call; oversized inputs are
+  rejected with a clear error (stat pre-check, 20MB cap on both file and
+  attachment paths).
+- **Rate-limit / 5xx auto-retry** with Retry-After-aware backoff; endpoint
+  **content-safety rejections** are surfaced as `VISION_CONTENT_FILTERED`
+  instead of a generic backend error.
+- **Long-OCR bounds**: 120s total budget, 40-chunk cap, cancellation checks,
+  stop-on-first-backend-failure.
+- **Path containment** for relative inputs; artifacts land in
+  `<workspace>/.dsh-tool-vision/`.
+- **Bridge marker**: pasted images become a short `[图片: <path>]` marker and
+  the usage rule lives in a system-prompt section (clean transcript, same
+  model behavior).
+
+Requires `sharp` / `potrace` / `puppeteer-core` (declared in dependencies;
+missing ones degrade lazily with an install hint and never break other tools).
 
 ## Limitations
 

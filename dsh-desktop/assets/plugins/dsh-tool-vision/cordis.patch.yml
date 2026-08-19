@@ -1,0 +1,8 @@
+# dsh-tool-vision — bundle patch layer
+#
+# Declares the plugin as a Cordis loader entry, making the package a standard
+# profile bundle: `dsh plugin --profile <p> add dsh-tool-vision` installs and
+# mounts it without manual cordis.patch.yml edits.
+- insert:
+    - id: tool-vision
+      name: 'dsh-tool-vision'

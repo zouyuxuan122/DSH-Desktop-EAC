@@ -30,14 +30,10 @@ window.__ModuleLoader__.load({
       ".__tv_btn{border:1px solid var(--dsw-alias-border-l2);background:var(--dsw-alias-bg-layer-3);color:var(--dsw-alias-label-primary);border-radius:8px;padding:6px 14px;font:inherit;font-size:13px;cursor:pointer}" +
       ".__tv_btn:hover:not(:disabled){border-color:var(--dsw-alias-state-business-primary)}" +
       ".__tv_btn:disabled{opacity:.5;cursor:default}" +
-      ".__tv_btnPrimary{border-color:var(--dsw-alias-state-business-primary);background:var(--dsw-alias-state-business-primary);color:var(--dsw-alias-label-on-accent)}" +
+      ".__tv_btnPrimary{border-color:var(--dsw-alias-state-business-primary, #3964fe);background:var(--dsw-alias-state-business-primary, #3964fe);color:#fff}" +
       ".__tv_status{font-size:12px;color:var(--dsw-alias-label-tertiary)}" +
       ".__tv_error{font-size:12px;color:var(--dsw-alias-state-error-primary)}" +
-      ".__tv_unavailable{font-size:13px;color:var(--dsw-alias-label-tertiary)}" +
-      ".__tv_advanced{margin-top:8px;border-top:1px solid var(--dsw-alias-border-l2);padding-top:6px}" +
-      ".__tv_advancedSummary{cursor:pointer;font-size:13px;font-weight:600;color:var(--dsw-alias-label-secondary);user-select:none;display:flex;align-items:center;gap:5px}" +
-      ".__tv_advancedArrow{display:inline-block;transition:transform .18s ease;font-size:18px;line-height:1;color:var(--dsw-alias-label-secondary);margin-top:-1px}" +
-      ".__tv_advanced[open] .__tv_advancedArrow{transform:rotate(90deg)}";
+      ".__tv_unavailable{font-size:13px;color:var(--dsw-alias-label-tertiary)}";
     var tagId = "dsh-tool-vision/main.css";
     if (typeof document !== "undefined" && document.querySelector("style[data-plugin-css=" + JSON.stringify(tagId) + "]") === null) {
       var tag = document.createElement("style");
@@ -60,8 +56,16 @@ window.__ModuleLoader__.load({
       bridgeTextOnly: "图片桥接（文本模型贴图自动转 inspect_image 指引）",
       bridgeExportDir: "桥接图片导出目录（空 = 系统临时目录）",
       multimodalModels: "多模态白名单（逗号分隔，这些模型直收图片块）",
-      requestGuard: "请求兜底（发往文本模型的图片块在请求发出前自动降级为 inspect_image 指引，避免整轮失败）",
-      advanced: "高级设置",
+      fieldBaseUrl: "API Base URL",
+      fieldApiKey: "API Key",
+      fieldApiKeyEnv: "API Key 环境变量（apiKey 为空时读取）",
+      fieldModel: "视觉模型",
+      fieldMaxTokens: "最大输出 Tokens",
+      fieldTimeoutMs: "请求超时（毫秒）",
+      fieldMaxImageBytes: "图片大小上限（字节）",
+      fieldBridgeTextOnly: "图片桥接开关",
+      fieldBridgeExportDir: "桥接导出目录",
+      fieldMultimodalModels: "多模态白名单（逗号分隔）",
       save: "保存",
       reset: "恢复默认",
       saved: "已保存",
@@ -81,8 +85,16 @@ window.__ModuleLoader__.load({
       bridgeTextOnly: "Image bridge (pasted images on text-only models become inspect_image hints)",
       bridgeExportDir: "Bridge export dir (empty = system temp)",
       multimodalModels: "Multimodal whitelist (comma-separated; these models receive image blocks directly)",
-      requestGuard: "Request guard (image blocks headed to a text-only model are downgraded to inspect_image hints before dispatch, so the turn never hard-fails)",
-      advanced: "Advanced settings",
+      fieldBaseUrl: "API Base URL",
+      fieldApiKey: "API Key",
+      fieldApiKeyEnv: "API key env var (read when apiKey is empty)",
+      fieldModel: "Vision model",
+      fieldMaxTokens: "Max output tokens",
+      fieldTimeoutMs: "Request timeout (ms)",
+      fieldMaxImageBytes: "Max image size (bytes)",
+      fieldBridgeTextOnly: "Image bridge",
+      fieldBridgeExportDir: "Bridge export dir",
+      fieldMultimodalModels: "Multimodal whitelist (comma-separated)",
       save: "Save",
       reset: "Reset",
       saved: "Saved",
@@ -95,17 +107,16 @@ window.__ModuleLoader__.load({
 
     // ── field spec ────────────────────────────────────────────────────────
     var FIELDS = [
-      { key: "baseURL", label: "API Base URL", type: "text", placeholder: "https://api.openai.com/v1" },
-      { key: "apiKey", label: "API Key", type: "password", secret: true },
-      { key: "apiKeyEnv", label: "API Key 环境变量（apiKey 为空时读取）", type: "text" },
-      { key: "model", label: "视觉模型", type: "text", placeholder: "gpt-4o-mini" },
-      { key: "maxTokens", label: "最大输出 Tokens", type: "number" },
-      { key: "timeoutMs", label: "请求超时（毫秒）", type: "number" },
-      { key: "maxImageBytes", label: "图片大小上限（字节）", type: "number" },
-      { key: "bridgeTextOnly", label: "图片桥接开关", type: "checkbox" },
-      { key: "bridgeExportDir", label: "桥接导出目录", type: "text" },
-      { key: "multimodalModels", label: "多模态白名单（逗号分隔）", type: "csv" },
-      { key: "requestGuard", label: "请求兜底开关", type: "checkbox" }
+      { key: "baseURL", label: "fieldBaseUrl", type: "text", placeholder: "https://api.openai.com/v1" },
+      { key: "apiKey", label: "fieldApiKey", type: "password", secret: true },
+      { key: "apiKeyEnv", label: "fieldApiKeyEnv", type: "text" },
+      { key: "model", label: "fieldModel", type: "text", placeholder: "gpt-4o-mini" },
+      { key: "maxTokens", label: "fieldMaxTokens", type: "number" },
+      { key: "timeoutMs", label: "fieldTimeoutMs", type: "number" },
+      { key: "maxImageBytes", label: "fieldMaxImageBytes", type: "number" },
+      { key: "bridgeTextOnly", label: "fieldBridgeTextOnly", type: "checkbox" },
+      { key: "bridgeExportDir", label: "fieldBridgeExportDir", type: "text" },
+      { key: "multimodalModels", label: "fieldMultimodalModels", type: "csv" }
     ];
     var ZH_HINTS = {
       apiKey: "apiKeyHint",
@@ -114,12 +125,11 @@ window.__ModuleLoader__.load({
       maxImageBytes: "maxImageBytes",
       bridgeTextOnly: "bridgeTextOnly",
       bridgeExportDir: "bridgeExportDir",
-      multimodalModels: "multimodalModels",
-      requestGuard: "requestGuard"
+      multimodalModels: "multimodalModels"
     };
 
-    function labelOf(f) {
-      return f.label;
+    function labelOf(f, t) {
+      return t(f.label);
     }
 
     // ── component ─────────────────────────────────────────────────────────
@@ -230,48 +240,35 @@ window.__ModuleLoader__.load({
         });
       }
 
-      var renderField = function (f) {
-        var overridden = f.key in user;
-        if (f.type === "checkbox") {
-          return h("label", { key: f.key, className: "__tv_field" },
-            h("span", { className: "__tv_row" },
-              h("input", { className: "__tv_check", type: "checkbox", checked: Boolean(fieldDraft(f)), onChange: function (e) { setField(f, e.target.checked); } }),
-              h("span", { className: "__tv_label" }, labelOf(f)),
-              overridden ? h("span", { className: "__tv_override" }, t("overridden")) : null
-            ),
-            f.key in ZH_HINTS ? h("span", { className: "__tv_hint" }, t(ZH_HINTS[f.key])) : null
-          );
-        }
-        return h("label", { key: f.key, className: "__tv_field" },
-          h("span", { className: "__tv_label" },
-            labelOf(f),
-            overridden ? h("span", { className: "__tv_override" }, t("overridden")) : null
-          ),
-          h("input", {
-            className: "__tv_input",
-            type: f.type === "password" ? "password" : f.type === "number" ? "number" : "text",
-            value: fieldDraft(f),
-            placeholder: f.type === "password" ? (overridden ? "••••••••" : t("apiKeyHint")) : (f.placeholder || ""),
-            onChange: function (e) { setField(f, e.target.value); }
-          }),
-          f.key in ZH_HINTS ? h("span", { className: "__tv_hint" }, t(ZH_HINTS[f.key])) : null
-        );
-      };
-      // 基础字段（URL/模型/密钥）常显；其余归入默认折叠的"高级设置"。
-      var primaryKeys = ["baseURL", "model", "apiKey"];
-      var primary = FIELDS.filter(function (f) { return primaryKeys.indexOf(f.key) >= 0; });
-      var advanced = FIELDS.filter(function (f) { return primaryKeys.indexOf(f.key) < 0; });
-
       return h("div", { className: "__tv_root" },
         h("p", { className: "__tv_hint", style: { margin: "0 0 4px" } }, t("intro")),
-        primary.map(renderField),
-        advanced.length ? h("details", { className: "__tv_advanced" },
-          h("summary", { className: "__tv_advancedSummary" },
-            h("span", null, t("advanced")),
-            h("span", { className: "__tv_advancedArrow" }, "\u25b8")
-          ),
-          advanced.map(renderField)
-        ) : null,
+        FIELDS.map(function (f) {
+          var overridden = f.key in user;
+          if (f.type === "checkbox") {
+            return h("label", { key: f.key, className: "__tv_field" },
+              h("span", { className: "__tv_row" },
+                h("input", { className: "__tv_check", type: "checkbox", checked: Boolean(fieldDraft(f)), onChange: function (e) { setField(f, e.target.checked); } }),
+                h("span", { className: "__tv_label" }, labelOf(f, t)),
+                overridden ? h("span", { className: "__tv_override" }, t("overridden")) : null
+              ),
+              f.key in ZH_HINTS ? h("span", { className: "__tv_hint" }, t(ZH_HINTS[f.key])) : null
+            );
+          }
+          return h("label", { key: f.key, className: "__tv_field" },
+            h("span", { className: "__tv_label" },
+              labelOf(f, t),
+              overridden ? h("span", { className: "__tv_override" }, t("overridden")) : null
+            ),
+            h("input", {
+              className: "__tv_input",
+              type: f.type === "password" ? "password" : f.type === "number" ? "number" : "text",
+              value: fieldDraft(f),
+              placeholder: f.type === "password" ? (overridden ? "••••••••" : t("apiKeyHint")) : (f.placeholder || ""),
+              onChange: function (e) { setField(f, e.target.value); }
+            }),
+            f.key in ZH_HINTS ? h("span", { className: "__tv_hint" }, t(ZH_HINTS[f.key])) : null
+          );
+        }),
         h("div", { className: "__tv_actions" },
           h("button", { type: "button", className: "__tv_btn __tv_btnPrimary", onClick: onSave, disabled: busy || !snapshot.writable }, t("save")),
           h("button", { type: "button", className: "__tv_btn", onClick: onReset, disabled: busy || !snapshot.writable }, t("reset")),

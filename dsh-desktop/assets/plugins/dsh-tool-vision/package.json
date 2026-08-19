@@ -1,15 +1,19 @@
 {
     "name":  "dsh-tool-vision",
-    "version":  "0.3.7",
-    "description":  "DeepSeek Harness 外置视觉模型插件：inspect_image 把本地图片或 http(s) 图片 URL 发给任意 OpenAI 兼容端点，视觉模型看图的文字回答直接带回对话；附 Web UI 设置栏。",
+    "version":  "0.4.0",
+    "description":  "DeepSeek Harness 外置视觉模型插件：inspect_image 与 14 个像素级视觉工具（看图问答/定位/检测/裁剪/像素对比/OCR/矢量化/取色/抠图/截图）全部走同一 OpenAI 兼容端点（baseURL/apiKey/model），视觉模型看图的文字回答直接带回对话；附 Web UI 设置栏。",
     "type":  "module",
     "main":  "index.js",
     "exports":  {
                     ".":  "./index.js",
                     "./client":  "./client.js",
-                    "./package.json":  "./package.json"
+                    "./package.json":  "./package.json",
+                    "./lib/vision-tools":  "./lib/vision-tools.js"
                 },
     "dsh":  {
+                "bundle":  {
+                               "patch":  "./cordis.patch.yml"
+                           },
                 "client":  {
                                "platform":  "web"
                            }
@@ -17,9 +21,11 @@
     "files":  [
                   "index.js",
                   "client.js",
+                  "cordis.patch.yml",
                   "README.md",
                   "README.zh.md",
                   "LICENSE",
+                  "lib",
                   "vendor"
               ],
     "homepage":  "https://github.com/Scorp1o117/dsh-tool-vision",
@@ -33,7 +39,9 @@
                      "openai-compatible",
                      "qwen-vl",
                      "glm-4v",
-                     "ollama"
+                     "pixel-tools",
+                     "ocr",
+                     "screenshot"
                  ],
     "license":  "MIT",
     "engines":  {
@@ -47,7 +55,10 @@
                  "url":  "https://github.com/Scorp1o117/dsh-tool-vision/issues"
              },
     "dependencies":  {
-                         "@deepseek-ai/schemastery":  "^3.18.1"
+                         "@deepseek-ai/schemastery":  "^3.18.1",
+                         "potrace":  "^2.1.8",
+                         "puppeteer-core":  "^25.6.0",
+                         "sharp":  ">=0.35.3 <1"
                      },
     "peerDependencies":  {
                              "react":  "^18.2.0",
