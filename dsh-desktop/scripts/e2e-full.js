@@ -310,16 +310,16 @@ async function main() {
     check('真实对话：模型回复正常', r1.ok && /好的/.test(r1.text), r1.text || '');
     // 识图链路验证用结构化证据而非模型自由文本（v4.4 实测模型对“列出工具”
     // 请求两轮均回复“好的”——上下文粘滞，自由文本断言不稳定）：
-    // dsh-tool-vision 已内置分发，验证 profile patch 注册行 + node_modules 落盘。
+    // picturereader 已内置分发，验证 profile patch 注册行 + node_modules 落盘。
     let visionOk = false;
     let visionDetail = '';
     try {
       const patch = fs.readFileSync(path.join(home, 'profiles', 'web-desktop', 'cordis.patch.yml'), 'utf8');
-      const inTree = fs.existsSync(path.join(home, 'profiles', 'web-desktop', 'node_modules', 'dsh-tool-vision', 'package.json'));
-      visionOk = /tool-vision/.test(patch) && inTree;
-      visionDetail = `patch行=${/tool-vision/.test(patch)} node_modules=${inTree}`;
+      const inTree = fs.existsSync(path.join(home, 'profiles', 'web-desktop', 'node_modules', 'picturereader', 'package.json'));
+      visionOk = /picturereader/.test(patch) && inTree;
+      visionDetail = `patch行=${/picturereader/.test(patch)} node_modules=${inTree}`;
     } catch (err) { visionDetail = err.message; }
-    check('识图链路：dsh-tool-vision 已注册（patch 行 + node_modules）', visionOk, visionDetail);
+    check('识图链路：picturereader 已注册（patch 行 + node_modules）', visionOk, visionDetail);
   } else {
     console.log('  ⚠ 无 API Key，真实对话/识图运行时验证跳过（插件加载已由前序 E2E 覆盖）');
   }

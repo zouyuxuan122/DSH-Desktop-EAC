@@ -2629,7 +2629,7 @@ const COMPANION_PLUGINS = [
   // 拉取后随应用内置分发。绝不能写进 profile package.json 依赖 ——
   // pnpm 安装会 hoist @deepseek-ai 核心包形成模块双实例（Symbol 冲突，
   // 插件命名空间注册失效，即 "设置命名空间不可用" 故障的根因）。
-  { id: 'tool-vision', name: 'dsh-tool-vision', dir: 'dsh-tool-vision' },
+  { id: 'picturereader', name: 'picturereader', dir: 'picturereader' },
   // config.path 必须随行写入：v2.0.0 只写了 id+name，而当时插件 schema 的
   // path 是 required 无默认值，全新安装校验失败拖垮整个插件树（dsh web
   // 退出码 1，应用持续闪退“启动失败”）。schema 现已带默认值，这里显式
@@ -2759,7 +2759,7 @@ const COMPANION_PLUGINS = [
 // 运行时 npm 404（未上架/改名）优雅降级为「无上游」，绝不阻塞。
 // ---------------------------------------------------------------------------
 const PLUGIN_UPDATE_SOURCES = {
-  'tool-vision': { npm: 'dsh-tool-vision' },
+  'picturereader': { npm: 'picturereader' },
   'soul-md': { npm: 'dsh-soul-md' },
   'tdai-memory': { npm: 'dsh-tdai-memory' },
   'dsh-pet': { npm: 'dsh-pet' },

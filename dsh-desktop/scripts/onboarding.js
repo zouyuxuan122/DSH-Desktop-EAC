@@ -27,7 +27,7 @@ const CORE_PLUGIN_IDS = new Set([
 const RECOMMENDED_PLUGIN_IDS = new Set([
   'skin-switch',
   'easy-setup',
-  'tool-vision',
+  'picturereader',
   'soul-md',
   'tdai-memory',
   'mobile-fix',
