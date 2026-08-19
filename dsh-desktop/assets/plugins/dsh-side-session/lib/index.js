@@ -725,6 +725,40 @@ function resolveKeyForMode(mode, settings) {
   };
 }
 
+function hostErrorDetail(value) {
+  if (!value) return "宿主 LLM 返回未知错误";
+  if (typeof value === "string") return value;
+  const failure = value.failure;
+  return String(
+    value.message ||
+      value.detail ||
+      value.error ||
+      (failure && (failure.message || failure.detail || failure.code)) ||
+      value.code ||
+      JSON.stringify(value)
+  );
+}
+
+function isRetryableHostError(value) {
+  let serialized = "";
+  try {
+    serialized = JSON.stringify(value);
+  } catch {}
+  const detail = (hostErrorDetail(value) + " " + serialized).toLowerCase();
+  return (
+    detail.includes("overloaded") ||
+    detail.includes("try again later") ||
+    detail.includes("rate limit") ||
+    detail.includes("too many requests") ||
+    /(^|\D)429(\D|$)/.test(detail) ||
+    /(^|\D)50[234](\D|$)/.test(detail)
+  );
+}
+
+function wait(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
 async function handleAskMode3(req, res, body, sessionId) {
   if (!ctxRef || !ctxRef.llm || typeof ctxRef.llm.stream !== "function") {
     sendJson(res, 500, { error: "宿主 LLM 服务(ctx.llm)当前不可用" });
@@ -754,26 +788,42 @@ async function handleAskMode3(req, res, body, sessionId) {
     const globalReasoning = readGlobalReasoning();
     const reasoning = parsedReasoning || globalReasoning || (isOfficial ? "" : "off");
     llmOptions.reasoningEffort = reasoning || undefined;
-    const stream = ctxRef.llm.stream(llmOptions);
-    for await (const chunk of stream) {
-      if (!chunk) continue;
-      if (chunk.type === "text-delta" && typeof chunk.text === "string") {
-        res.write(
-          "data: " + JSON.stringify({ choices: [{ delta: { content: chunk.text } }] }) + "\n\n"
-        );
-      } else if (chunk.type === "error") {
-        const detail = chunk.message || chunk.error || chunk.code || String(chunk);
-        res.write(
-          "data: " + JSON.stringify({ error: String(detail) }) + "\n\n"
-        );
-      } else if (chunk.type === "finish" && chunk.reason && chunk.reason.kind === "error") {
-        const detail =
-          (chunk.reason && (chunk.reason.message || chunk.reason.detail || chunk.reason.reason)) ||
-          JSON.stringify(chunk.reason);
-        res.write(
-          "data: " + JSON.stringify({ error: "宿主 LLM 流结束于错误：" + String(detail) }) + "\n\n"
-        );
+
+    const maxAttempts = 3;
+    for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+      let wroteText = false;
+      let terminalError = null;
+      try {
+        const stream = ctxRef.llm.stream(llmOptions);
+        for await (const chunk of stream) {
+          if (!chunk) continue;
+          if (chunk.type === "text-delta" && typeof chunk.text === "string") {
+            wroteText = true;
+            res.write(
+              "data: " + JSON.stringify({ choices: [{ delta: { content: chunk.text } }] }) + "\n\n"
+            );
+          } else if (chunk.type === "error") {
+            terminalError = chunk.error || chunk;
+          } else if (chunk.type === "finish" && chunk.reason && chunk.reason.kind === "error") {
+            terminalError = chunk.reason;
+          }
+        }
+      } catch (err) {
+        terminalError = err;
       }
+
+      if (!terminalError) break;
+      const canRetry = !wroteText && attempt < maxAttempts && isRetryableHostError(terminalError);
+      if (canRetry && !res.destroyed) {
+        await wait(1000 * 2 ** (attempt - 1));
+        continue;
+      }
+      res.write(
+        "data: " +
+          JSON.stringify({ error: "宿主 LLM 请求失败：" + hostErrorDetail(terminalError) }) +
+          "\n\n"
+      );
+      break;
     }
     res.write("data: [DONE]\n\n");
     res.end();
