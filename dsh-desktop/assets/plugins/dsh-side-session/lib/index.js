@@ -23,6 +23,10 @@ import { readFileSync, readdirSync, statSync, promises as fsp } from "node:fs";
 import { join, isAbsolute } from "node:path";
 import { homedir } from "node:os";
 import { zstdDecompressSync } from "node:zlib";
+import {
+  normalizeReasoningEffort,
+  shouldRetryWithoutReasoning,
+} from "./reasoning-compat.js";
 
 const NS = "dsh-side-session";
 const CONTEXT_ROUTE = "/api/dsh-side-session/context";
@@ -784,12 +788,13 @@ async function handleAskMode3(req, res, body, sessionId) {
   });
   try {
     const llmOptions = { provider, model, system, messages: llmMessages };
-    const isOfficial = provider === "deepseek-official" || provider === "deepseek-vision" || provider === "deepseek";
+
     const globalReasoning = readGlobalReasoning();
-    const reasoning = parsedReasoning || globalReasoning || (isOfficial ? "" : "off");
-    llmOptions.reasoningEffort = reasoning || undefined;
+    const reasoning = normalizeReasoningEffort(parsedReasoning || globalReasoning);
+    if (reasoning !== undefined) llmOptions.reasoningEffort = reasoning;
 
     const maxAttempts = 3;
+    let retriedWithoutReasoning = false;
     for (let attempt = 1; attempt <= maxAttempts; attempt++) {
       let wroteText = false;
       let terminalError = null;
@@ -813,6 +818,15 @@ async function handleAskMode3(req, res, body, sessionId) {
       }
 
       if (!terminalError) break;
+      const canRetryWithoutReasoning =
+        !retriedWithoutReasoning &&
+        attempt < maxAttempts &&
+        shouldRetryWithoutReasoning(terminalError, wroteText, llmOptions);
+      if (canRetryWithoutReasoning) {
+        delete llmOptions.reasoningEffort;
+        retriedWithoutReasoning = true;
+        continue;
+      }
       const canRetry = !wroteText && attempt < maxAttempts && isRetryableHostError(terminalError);
       if (canRetry && !res.destroyed) {
         await wait(1000 * 2 ** (attempt - 1));

@@ -49,6 +49,7 @@ const {
 } = require('./koffi-preflight');
 const { configLinesFor, healSoulMdPatchRow, healRowConfig, removeBundledRowDuplicates, collectBundleEntryIds } = require('./patch-row-heal');
 const { syncBundledPresets, ensureDefaultAgentPreset } = require('./preset-sync');
+const { healUnsupportedOffReasoning } = require('./reasoning-settings-heal');
 const { buildErrorDetail } = require('./error-detail');
 const { SessionWatcher, scanZstdFrames } = require('./session-watcher');
 const { isEncodingMismatch, healSessionEncodingConflicts } = require('./session-encoding-heal');
@@ -3511,6 +3512,9 @@ function syncCompanionPlugins() {
   if (!IS_WIN) return;
   try {
     const home = dshHome || path.join(os.homedir(), '.dsh');
+    // 第三方模型的 "off" 是选择器语义。旧版本会把它持久化后原样发给
+    // provider；启动时移除该遗留值，让主会话和临时会话都回落为省略参数。
+    healUnsupportedOffReasoning(home, (m) => log('boot', m));
     // 桌面专属 profile 必须先存在（未知 profile 不会被 dsh 自动初始化）。
     ensureDesktopProfileInit();
     // V4 运行时补丁（幂等，随启动 / 服务重启 / agent 更新后重放）：

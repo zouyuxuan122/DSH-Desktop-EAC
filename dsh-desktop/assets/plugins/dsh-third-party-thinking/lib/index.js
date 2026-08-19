@@ -72,6 +72,11 @@ function wrapStream(adapter) {
 		const enabled = cfg.enabled === true;
 		const wireField = String(cfg.wireField ?? "reasoning_effort").trim();
 		const effort = options && options.reasoningEffort;
+		// "off" 是选择器语义，不是 OpenAI-compatible wire 值。必须在
+		// adapter.stream 之前删除，否则严格 provider 会在 fetch 前直接拒绝。
+		if (typeof effort === "string" && effort.toLowerCase() === "off") {
+			delete options.reasoningEffort;
+		}
 		if (!enabled || effort === void 0 || effort === "off" || wireField === "") {
 			yield* adapter.stream.apply(adapter, args);
 			return;
