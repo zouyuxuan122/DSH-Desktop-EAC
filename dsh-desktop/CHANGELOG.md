@@ -18,6 +18,21 @@ DeepSeek Harness（dsh）的 Windows 桌面客户端：内置独立 Node 运行�
 
 ## [4.4.0] — 2026-08-19
 
+### 修复：会话目录同时存在 session.jsonl 与 session.jsonl.zstd 时启动失败（#77）
+- 根因：会话持久化后端（`@deepseek-ai/dsh-session-persistence-jsonl`，
+  `DEFAULT_COMPRESSION = "zstd"`）加载时 `listArtifacts()` → `checkRootEncoding()`
+  发现某会话目录同时存在相反物理编码的文件（zstd 后端下的明文 `session.jsonl`）
+  即抛 `encodingMismatch`，整棵插件树加载失败、`dsh web` 退出码 1，桌面端表现
+  为「Web UI 未在预期时间内就绪」；这是数据层问题，plugin-guard 只看插件/配置
+  层，陷入「体检 → 回滚 → 重试」的无效循环，救不回来。
+- 修复：新增 `session-encoding-heal.js`，接入守护启动的 preRetry 钩子——启动
+  确因该错误失败时，扫描 `<DSH_HOME>/sessions`，对两种编码并存的会话目录把
+  相反格式（明文）文件改名归档为 `session.jsonl.bak-<时间戳>`（**数据无损、不
+  删除**），保留后端在用的权威 zstd 日志后自动重试一次。只在命中该错误时触发，
+  不做任何常态化会话目录写操作。
+- 验证：`test/session-encoding-heal.test.mjs` 覆盖错误识别、并存归档、仅 zstd
+  不动、目录缺失安全返回、多会话独立处理。
+
 ### 修复：设置页「Skills 与 MCP → 打开目录」在文件视图打不开
 - 根因：`dsh:file-open` IPC 校验只放行会话工作区路径（`isUnderFileRoots`），
   而 Skills 根目录（`~/.dsh/skills`、`~/.agents/skills`）是全局目录、永远不在

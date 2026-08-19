@@ -43,6 +43,7 @@ const { configLinesFor, healSoulMdPatchRow, healRowConfig, removeBundledRowDupli
 const { syncBundledPresets, ensureDefaultAgentPreset } = require('./preset-sync');
 const { buildErrorDetail } = require('./error-detail');
 const { SessionWatcher, scanZstdFrames } = require('./session-watcher');
+const { isEncodingMismatch, healSessionEncodingConflicts } = require('./session-encoding-heal');
 const { patchSessionManage } = require('./scripts/patch-session-manage');
 const { togglePluginInPatch, removePluginFromPatch, hasEntryId } = require('./scripts/plugin-manager-patch');
 const { collectPluginRows } = require('./plugin-manager-state');
@@ -919,8 +920,42 @@ async function startAndShowGuarded(overlays = []) {
     () => '日志文件：' + path.join(logsDir, 'dsh-web.log'),
     // V4.2：pnpm 封锁构建脚本会让整棵 profile 起不来 —— 这是配置级问题，
     // 体检（只扫插件层）发现不了，必须走 preRetry 钩子自动放行后重试。
-    { preRetry: allowBuildsPreRetry }
+    // V4.4：会话目录同时存在 zstd + 明文两种编码时，会话持久化后端会抛
+    // encodingMismatch 让整棵插件树起不来（Issue #77）—— 同样是体检看不到
+    // 的数据层问题，一并走 preRetry 归档相反格式文件后重试。
+    { preRetry: bootRescuePreRetry }
   );
+}
+
+// V4.4：守护启动 preRetry 汇聚 —— 把两类「体检看不到的数据/配置层修复」
+// 合并为一次钩子调用（guardedBoot 只调用 preRetry 一次）。任一命中即返回
+// 合并后的 { applied }，均未命中返回 false（走原失败链路）。
+async function bootRescuePreRetry(errText) {
+  const applied = [];
+  // 1) 会话编码冲突（Issue #77）：归档相反格式的遗留日志文件（数据无损）。
+  try {
+    let text = String(errText || '');
+    if (!isEncodingMismatch(text)) {
+      // 报错详情常只落在 dsh-web.log 里，补充解析尾部。
+      try { text += '\n' + fs.readFileSync(path.join(logsDir, 'dsh-web.log'), 'utf8').slice(-40000); } catch {}
+    }
+    if (isEncodingMismatch(text)) {
+      const home = process.env.DSH_HOME || path.join(os.homedir(), '.dsh');
+      const archived = healSessionEncodingConflicts(path.join(home, 'sessions'), { compression: 'zstd', log });
+      if (archived.length) applied.push('会话编码冲突自愈：已归档 ' + archived.length + ' 个相反格式的遗留会话日志');
+    }
+  } catch (err) {
+    log('session-heal', 'preRetry 会话编码自愈失败: ' + String((err && err.message) || err));
+  }
+  // 2) pnpm allowBuilds 自动放行（原 V4.2 逻辑）。
+  try {
+    const ab = await allowBuildsPreRetry(errText);
+    if (ab && Array.isArray(ab.applied)) applied.push(...ab.applied);
+    else if (ab) applied.push('pnpm allowBuilds 自动放行');
+  } catch (err) {
+    log('guard', 'preRetry allowBuilds 失败: ' + String((err && err.message) || err));
+  }
+  return applied.length ? { applied } : false;
 }
 
 // V4.2：启动失败链的 pnpm allowBuilds 自动放行钩子（preRetry）。

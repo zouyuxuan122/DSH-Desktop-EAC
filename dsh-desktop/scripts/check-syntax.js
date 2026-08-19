@@ -19,6 +19,7 @@ const entryFiles = [
   'client-updater.js',
   'balance.js',
   'session-watcher.js',
+  'session-encoding-heal.js',
   'renderer-recovery.js',
   'watchdog.js',
   'stable-port.js',
