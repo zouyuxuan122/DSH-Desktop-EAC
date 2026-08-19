@@ -112,40 +112,23 @@ function readGlobalModel() {
   return DEFAULT_MODEL;
 }
 
+// 锚定 agent-default-model 段取 provider（与 readGlobalModel 同源，供 mode3
+// 跟随主会话窗口的 provider，避免临时会话发到错误接口）。
 function readGlobalProvider() {
   try {
     const text = readFileSync(join(dshHome(), "settings.yaml"), "utf8");
-    const NL = String.fromCharCode(10);
-    const lines = text.split(NL);
-    for (let i = 0; i < lines.length; i++) {
-      if (lines[i].trim() === "agent-default-model:") {
-        for (let j = i + 1; j < lines.length; j++) {
-          const nest = lines[j].trim();
-          if (nest.startsWith("provider:")) return nest.slice("provider:".length).trim();
-          if (nest && !(lines[j].startsWith(" ") || lines[j].startsWith(String.fromCharCode(9)))) break;
-        }
-        break;
-      }
-    }
+    const anchored = text.match(/agent-default-model:[\s\S]*?^\s*provider:\s*(\S+)/m);
+    if (anchored) return anchored[1];
   } catch {}
   return DEFAULT_PROVIDER;
 }
 
+// 锚定 agent-default-model 段取 reasoningEffort（供 mode3 透传思考强度）。
 function readGlobalReasoning() {
   try {
     const text = readFileSync(join(dshHome(), "settings.yaml"), "utf8");
-    const NL = String.fromCharCode(10);
-    const lines = text.split(NL);
-    for (let i = 0; i < lines.length; i++) {
-      if (lines[i].trim() === "agent-default-model:") {
-        for (let j = i + 1; j < lines.length; j++) {
-          const nest = lines[j].trim();
-          if (nest.startsWith("reasoningEffort:")) return nest.slice("reasoningEffort:".length).trim();
-          if (nest && !(lines[j].startsWith(" ") || lines[j].startsWith(String.fromCharCode(9)))) break;
-        }
-        break;
-      }
-    }
+    const anchored = text.match(/agent-default-model:[\s\S]*?^\s*reasoningEffort:\s*(\S+)/m);
+    if (anchored) return anchored[1];
   } catch {}
   return "";
 }
@@ -345,12 +328,12 @@ function parseEventsInto(state, lines) {
       if (cfg) {
         if (cfg.provider) state.provider = String(cfg.provider);
         if (cfg.model) state.model = String(cfg.model);
-        if (cfg.reasoningEffort !== undefined) state.reasoningEffort = String(cfg.reasoningEffort);
+        if (cfg.reasoningEffort) state.reasoningEffort = String(cfg.reasoningEffort);
       }
     } else if (ev.type === "request/context" && ev.data) {
       if (ev.data.provider) state.provider = String(ev.data.provider);
       if (ev.data.model) state.model = String(ev.data.model);
-      if (ev.data.reasoningEffort !== undefined) state.reasoningEffort = String(ev.data.reasoningEffort);
+      if (ev.data.reasoningEffort) state.reasoningEffort = String(ev.data.reasoningEffort);
     }
 
     // 文件捕获：tool/code-dispatch* 事件
@@ -572,41 +555,58 @@ function buildFileContext(sessionId) {
   );
 }
 
-// 将客户端消息拆分为「客户端 system」+「其余消息」，并拼上文件上下文块
+// 取消息文本（content 为 string 或 [{type:"text",text}] 数组均兼容）
+function msgContentText(m) {
+  const c = m && m.content;
+  if (typeof c === "string") return c;
+  if (Array.isArray(c)) return c.map((p) => (p && typeof p.text === "string" ? p.text : "")).join("");
+  return "";
+}
+
+// 把临时会话历史折叠进 system，只把「最后一条 user 消息」作为真正发给
+// ctx.llm.stream 的消息数组 —— 避免 assistant 历史以消息数组形态进入
+// dsh 宿主 LLM 而触发 knife 错误「Cannot read properties of undefined
+// (reading 'kind')」。历史以纯文本上下文块注入 system。
 function buildFinalPrompt(body) {
   const msgs = Array.isArray(body.messages) ? body.messages : [];
   const firstIsSystem = msgs.length && msgs[0] && msgs[0].role === "system";
   const clientSystem = firstIsSystem ? String(msgs[0].content || "") : "";
-  const isBlank = (c) => {
-    if (typeof c === "string") return c.trim().length === 0;
-    if (Array.isArray(c)) return !c.some((p) => p && typeof p.text === "string" && p.text.trim().length > 0);
-    return true;
-  };
-  const restAll = (firstIsSystem ? msgs.slice(1) : msgs).filter((m) => m && !isBlank(m.content));
-  // 找到最后一条用户消息；它之前的全部临时会话消息作为「临时会话上下文」折叠进 system，
-  // 避免把助手历史再以消息数组回灌给宿主 LLM（某些 provider 在多轮 assistant 回灌时
-  // 会触发 DSH LLM 流协议 bug：finish chunk 缺 reason）。
-  let lastUserIndex = -1;
-  for (let i = restAll.length - 1; i >= 0; i--) {
-    if (restAll[i] && restAll[i].role === "user") { lastUserIndex = i; break; }
-  }
-  const rest = lastUserIndex >= 0 ? [restAll[lastUserIndex]] : [];
-  const textOf = (m) => {
-    const c = m && m.content;
-    if (typeof c === "string") return c;
-    if (Array.isArray(c)) return c.map((p) => (p && typeof p.text === "string" ? p.text : "")).join("");
-    return "";
-  };
-  const tempHistory = restAll.slice(0, lastUserIndex).map((m) => {
-    const who = m.role === "assistant" ? "助手" : "用户";
-    return "[" + who + "] " + textOf(m).slice(0, 4000);
-  }).join("\n");
-  const tempBlock = tempHistory
-    ? "==== 临时会话上下文 ====\n" + tempHistory + "\n"
-
-    : "";
   const fileBlock = buildFileContext(String(body.sessionId || "").trim());
-  const system = (fileBlock ? fileBlock + "\n\n" : "") + (tempBlock ? tempBlock + "\n" : "") + clientSystem;
+
+  // 去掉首条 system 后，过滤掉空消息（content 为空串或全部 text 块为空）
+  const restAll = (firstIsSystem ? msgs.slice(1) : msgs).filter((m) => msgContentText(m).length > 0);
+
+  // 找最后一条 role==="user" 的消息作为唯一要发送的 rest
+  let lastUserIdx = -1;
+  for (let i = restAll.length - 1; i >= 0; i--) {
+    if (restAll[i] && restAll[i].role === "user") { lastUserIdx = i; break; }
+  }
+
+  let rest = [];
+  let contextBlock = "";
+  let prior = [];
+  if (lastUserIdx >= 0) {
+    rest = [restAll[lastUserIdx]];
+    prior = restAll.slice(0, lastUserIdx);
+  } else if (restAll.length) {
+    // 无 user 消息时退化为最后一条，其余作为上下文
+    rest = [restAll[restAll.length - 1]];
+    prior = restAll.slice(0, -1);
+  }
+  if (prior.length) {
+    const lines = prior.map((m) => {
+      const tag = m.role === "assistant" ? "助手" : m.role === "user" ? "用户" : (m.role || "消息");
+      return "[" + tag + "] " + msgContentText(m);
+    });
+    contextBlock = "==== 临时会话上下文 ====\n" + lines.join("\n");
+  }
+
+  // system 顺序：文件上下文 + 临时会话上下文 + 客户端 system
+  const systemParts = [];
+  if (fileBlock) systemParts.push(fileBlock);
+  if (contextBlock) systemParts.push(contextBlock);
+  if (clientSystem) systemParts.push(clientSystem);
+  const system = systemParts.join("\n\n");
   return { system, rest };
 }
 
@@ -702,12 +702,6 @@ async function handleContext(req, res) {
 // ---------------------------------------------------------------------------
 // 路由：/ask（mode1 / mode2 流式代理；mode3 走 ctx.llm）
 // ---------------------------------------------------------------------------
-function officialMode1Model() {
-  const m = (readGlobalModel() || "").trim();
-  if (m === "deepseek-v4-pro" || m === "deepseek-v4-flash") return m;
-  return DEFAULT_MODEL;
-}
-
 function resolveKeyForMode(mode, settings) {
   if (mode === "2") {
     const key = (settings && settings.apiKey ? String(settings.apiKey) : "").trim();
@@ -717,9 +711,15 @@ function resolveKeyForMode(mode, settings) {
     ).replace(/\/+$/, "") || DEFAULT_BASE;
     return { key, model, base: endpoint, source: "plugin" };
   }
+  // mode 1 复用 dsh 全局 Key 走 api.deepseek.com：若全局 model 不是官方
+  // 支持的 deepseek-v4-pro / deepseek-v4-flash（例如第三方 provider 的
+  // deepseek-v4-pro-0813），强制降级为 deepseek-v4-flash，避免把第三方
+  // 模型名发到官方接口触发 400/502。
+  const gm = readGlobalModel();
+  const safeModel = gm === "deepseek-v4-pro" || gm === "deepseek-v4-flash" ? gm : DEFAULT_MODEL;
   return {
     key: readGlobalKey(),
-    model: officialMode1Model(),
+    model: safeModel,
     base: globalBase(),
     source: "global",
   };
@@ -732,15 +732,17 @@ async function handleAskMode3(req, res, body, sessionId) {
   }
   const { system, rest } = buildFinalPrompt(body);
   const parsed = parseSession(sessionId);
-  const parsedProvider = parsed.provider || "";
-  const parsedModel = parsed.model || "";
-  const parsedReasoning = parsed.reasoningEffort || "";
-  const globalProvider = readGlobalProvider();
-  const provider = String(parsedProvider || body.provider || globalProvider || DEFAULT_PROVIDER);
-  const model = String(parsedModel || body.model || readGlobalModel() || DEFAULT_MODEL);
+  // 优先用 parseSession 解析到的 provider/model（跟随主会话窗口），其次
+  // body 显式传入，最后读全局 settings.yaml；避免把第三方模型发给官方接口。
+  const provider = String(parsed.provider || body.provider || readGlobalProvider() || DEFAULT_PROVIDER);
+  const model = String(parsed.model || body.model || readGlobalModel());
+  // reasoningEffort：优先解析值，其次全局；provider 为第三方时无值则强制 "off"。
+  let reasoningEffort = parsed.reasoningEffort || readGlobalReasoning();
+  const isThirdParty = !["deepseek-official", "deepseek-vision", "deepseek"].includes(provider);
+  if (isThirdParty && !reasoningEffort) reasoningEffort = "off";
   const llmMessages = rest.map((m) => ({
     role: m.role,
-    content: [{ type: "text", text: String(m.content || "") }],
+    content: [{ type: "text", text: msgContentText(m) }],
   }));
 
   res.writeHead(200, {
@@ -749,12 +751,7 @@ async function handleAskMode3(req, res, body, sessionId) {
     connection: "keep-alive",
   });
   try {
-    const llmOptions = { provider, model, system, messages: llmMessages };
-    const isOfficial = provider === "deepseek-official" || provider === "deepseek-vision" || provider === "deepseek";
-    const globalReasoning = readGlobalReasoning();
-    const reasoning = parsedReasoning || globalReasoning || (isOfficial ? "" : "off");
-    llmOptions.reasoningEffort = reasoning || undefined;
-    const stream = ctxRef.llm.stream(llmOptions);
+    const stream = ctxRef.llm.stream({ provider, model, system, messages: llmMessages, reasoningEffort });
     for await (const chunk of stream) {
       if (!chunk) continue;
       if (chunk.type === "text-delta" && typeof chunk.text === "string") {
@@ -762,16 +759,12 @@ async function handleAskMode3(req, res, body, sessionId) {
           "data: " + JSON.stringify({ choices: [{ delta: { content: chunk.text } }] }) + "\n\n"
         );
       } else if (chunk.type === "error") {
-        const detail = chunk.message || chunk.error || chunk.code || String(chunk);
         res.write(
-          "data: " + JSON.stringify({ error: String(detail) }) + "\n\n"
+          "data: " + JSON.stringify({ error: String(chunk.message || chunk.error || "宿主 LLM 错误") }) + "\n\n"
         );
       } else if (chunk.type === "finish" && chunk.reason && chunk.reason.kind === "error") {
-        const detail =
-          (chunk.reason && (chunk.reason.message || chunk.reason.detail || chunk.reason.reason)) ||
-          JSON.stringify(chunk.reason);
         res.write(
-          "data: " + JSON.stringify({ error: "宿主 LLM 流结束于错误：" + String(detail) }) + "\n\n"
+          "data: " + JSON.stringify({ error: String((chunk.reason && chunk.reason.message) || "宿主 LLM 流结束于错误") }) + "\n\n"
         );
       }
     }
