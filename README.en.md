@@ -80,8 +80,8 @@ More versions on the [Releases page](https://github.com/zouyuxuan122/Deepseek-Ha
 
 ### UI Skins (EAC signature)
 
-- The Settings → Skins tab ships **10 Web UI skins** as cards (name / description / accent color / author / source & license badges).
-- 9 from the community [dsh-web-ui](https://github.com/zhu1090093659/dsh-web-ui) (BSD-3-Clause) + 1 [dsh-deep-whale maid-atelier](https://github.com/Small-tailqwq/dsh-deep-whale) (CC BY-NC-SA 4.0, non-commercial).
+- The Settings → Skins tab ships **11 Web UI skins** as cards (name / description / accent color / author / source & license badges).
+- 9 from the community [dsh-web-ui](https://github.com/zhu1090093659/dsh-web-ui) (BSD-3-Clause) + 1 [dsh-deep-whale maid-atelier](https://github.com/Small-tailqwq/dsh-deep-whale) (CC BY-NC-SA 4.0, non-commercial) + 1 [deep-whale-day-night](https://github.com/GGBond2424648901/deep-whale-day-night-theme) (CC BY-NC-SA 4.0, non-commercial).
 - **No skin is enabled by default** (native look); picking one disables the others (mutual exclusion), "restore default skin" resets it; the web service restarts automatically to apply.
 - Skins are browser-only dsh client plugins synced into the web profile and idempotently registered in `cordis.patch.yml`; full attribution ships with each bundle.
 
@@ -97,6 +97,7 @@ More versions on the [Releases page](https://github.com/zouyuxuan122/Deepseek-Ha
 | whale-song | same | BSD-3-Clause |
 | miku (Hatsune Miku) | same | BSD-3-Clause |
 | maid-atelier (Deep-Sea Maid Workshop) | [dsh-deep-whale](https://github.com/Small-tailqwq/dsh-deep-whale) | **CC BY-NC-SA 4.0** (non-commercial) |
+| deep-whale-day-night (Deep Whale Day & Night) | [deep-whale-day-night](https://github.com/GGBond2424648901/deep-whale-day-night-theme) | **CC BY-NC-SA 4.0** (non-commercial) |
 
 ### Out of the box
 

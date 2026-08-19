@@ -1,0 +1,5 @@
+# Deep Whale day/night skin bundle patch (EAC-compatible).
+# Install into EAC web-desktop profile and toggle via Settings → 皮肤.
+- insert:
+    - id: ui-skin-deep-whale-day-night
+      name: '@dsh-external/dsh-client-ui-skin-deep-whale-day-night'

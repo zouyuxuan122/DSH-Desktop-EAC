@@ -1,0 +1,48 @@
+{
+  "name": "@dsh-external/dsh-client-ui-skin-deep-whale-day-night",
+  "description": "Deep Whale Day & Night theme (EAC-compatible): day/night character UI skin for Deepseek Harness EAC",
+  "version": "0.1.10-eac.1",
+  "private": true,
+  "type": "module",
+  "main": "lib/index.js",
+  "exports": {
+    ".": "./lib/index.js",
+    "./client": "./lib/client.js",
+    "./skin.json": "./skin.json",
+    "./package.json": "./package.json"
+  },
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    },
+    "client": {
+      "inject": [
+        "@deepseek-ai/dsh-client-ui-theme"
+      ],
+      "platform": "web"
+    }
+  },
+  "scripts": {
+    "build": "node scripts/embed-deep-whale-art.mjs && tsdown --config tsdown.config.ts",
+    "embed:assets": "node scripts/embed-deep-whale-art.mjs",
+    "test": "vitest run --config vitest.config.ts",
+    "typecheck": "tsc -p tsconfig.json"
+  },
+  "license": "CC-BY-NC-SA-4.0",
+  "peerDependencies": {
+    "@deepseek-ai/cordis": "^4.0.1",
+    "@deepseek-ai/dsh-client-ui-theme": "^0.1.0-rc.5"
+  },
+  "files": [
+    "lib/index.js",
+    "lib/client.js",
+    "cordis.patch.yml",
+    "skin.json",
+    "preview",
+    "src",
+    "tests",
+    "LICENSE",
+    "NOTICE",
+    "README.md"
+  ]
+}

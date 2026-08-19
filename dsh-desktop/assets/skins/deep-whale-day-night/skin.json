@@ -1,0 +1,37 @@
+{
+  "id": "deep-whale-day-night",
+  "name": "鲸鱼娘昼夜工坊",
+  "nameEn": "Deep Whale Day & Night",
+  "author": "Small-tailqwq",
+  "tagline": "水晶白昼、月潮夜晚与会换装的 Q 版鲸鱼娘",
+  "description": "一套面向 DeepSeek Harness WebUI 的完整鲸鱼娘昼夜皮肤。白昼使用水晶工坊、陶瓷白与海雾蓝，夜晚使用月潮观测室、深海蓝与柔金；原生主题按钮同步切换场景、角色、宠物、控件和轻量环境动效。",
+  "tags": [
+    "anime",
+    "maid",
+    "whale",
+    "navy",
+    "ornate",
+    "glass",
+    "day-night",
+    "animated"
+  ],
+  "accent": "#c5a468",
+  "bodyAttr": "data-dsh-maid-atelier",
+  "package": "@dsh-external/dsh-client-ui-skin-deep-whale-day-night",
+  "wiring": {
+    "id": "ui-skin-deep-whale-day-night",
+    "bundleWired": false
+  },
+  "preview": {
+    "light": "preview/light.webp",
+    "dark": "preview/dark.webp"
+  },
+  "order": 5,
+  "source": "https://github.com/GGBond2424648901/deep-whale-day-night-theme",
+  "license": "CC BY-NC-SA 4.0",
+  "originalAuthors": [
+    "上善",
+    "zipzip",
+    "Small-tailqwq"
+  ]
+}

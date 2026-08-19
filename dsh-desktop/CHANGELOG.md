@@ -69,6 +69,13 @@ DeepSeek Harness（dsh）的 Windows 桌面客户端：内置独立 Node 运行�
 
 ## [4.3.0] — 2026-08-18
 
+### 新增：内置鲸鱼娘昼夜工坊皮肤（deep-whale-day-night）
+- 在保留 maid-atelier（深海女仆工坊）的同时，新增「鲸鱼娘昼夜工坊」为第 11 款内置皮肤，两者并列展示、互斥切换。
+- 来源：[GGBond2424648901/deep-whale-day-night-theme](https://github.com/GGBond2424648901/deep-whale-day-night-theme)
+- 原作者：上善（角色原作）、ZipZipPipe（DeepSeek 女仆再设计）、Small-tailqwq（主题适配与 UI）。
+- 许可：CC BY-NC-SA 4.0（仅限个人及其他非商业用途，禁止商用；衍生作品须以相同许可证共享）。
+
+
 ### 新增：内置插件可直接更新（「设置 → 插件 → 更新」）
 - 背景：内置插件（assets/plugins）随应用分发、版本固定，不升级应用就拿不到
   上游修复；部分插件上游（npm / GitHub）持续发布新版本。

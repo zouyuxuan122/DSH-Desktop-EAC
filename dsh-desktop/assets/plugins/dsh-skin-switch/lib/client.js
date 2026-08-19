@@ -52,12 +52,17 @@ window.__ModuleLoader__.load({
 			licMaid: "许可：CC BY-NC-SA 4.0（署名-非商业性使用-相同方式共享，禁止商业使用）",
 			creditMaid: "角色原作：上善（Pixiv 62155430 · B站「上善无形」）；DeepSeek 元素二次设计：ZipZipPipe（Pixiv 18604994 · B站「ZipZipPipe」）",
 			noticeMaid: "完整版权链见皮肤包 NOTICE（assets/skins/maid-atelier/）。",
+			srcDeepWhale: "deep-whale-day-night · 鲸鱼娘昼夜工坊",
+			licDeepWhale: "许可：CC BY-NC-SA 4.0（署名-非商业性使用-相同方式共享，禁止商业使用）",
+			creditDeepWhale: "角色原作：上善（Pixiv 62155430）；DeepSeek 女仆再设计：ZipZipPipe（Pixiv 18604994）；主题适配与 UI：Small-tailqwq",
+			noticeDeepWhale: "完整版权链见皮肤包 NOTICE（assets/skins/deep-whale-day-night/）。",
 			srcUnknown: "出处见皮肤包内 LICENSE",
 			creditsTitle: "来源与版权",
 			creditsIntro: "以下皮肤均为第三方开源作品，版权归原作者所有，DSH Desktop 仅负责内置分发与切换管理：",
 			repoDshWebUi: "dsh-web-ui（zhu1090093659）· https://github.com/zhu1090093659/dsh-web-ui",
 			repoMaid: "dsh-deep-whale（Small-tailqwq）· https://github.com/Small-tailqwq/dsh-deep-whale",
-			creditsNote: "皮肤内容遵循各自许可；maid-atelier 禁止商业使用。"
+			repoDeepWhale: "deep-whale-day-night（GGBond2424648901）· https://github.com/GGBond2424648901/deep-whale-day-night-theme",
+			creditsNote: "皮肤内容遵循各自许可；maid-atelier 与 deep-whale-day-night 禁止商业使用。"
 		};
 		const en = {
 			tab: "Skins",
@@ -86,12 +91,17 @@ window.__ModuleLoader__.load({
 			licMaid: "License: CC BY-NC-SA 4.0 (Attribution-NonCommercial-ShareAlike, no commercial use)",
 			creditMaid: "Character original: 上善 (Pixiv 62155430 · Bilibili “上善无形”); DeepSeek-flavored redesign: ZipZipPipe (Pixiv 18604994 · Bilibili “ZipZipPipe”)",
 			noticeMaid: "Full credit chain is in the skin package NOTICE (assets/skins/maid-atelier/).",
+			srcDeepWhale: "deep-whale-day-night · Deep Whale Day & Night",
+			licDeepWhale: "License: CC BY-NC-SA 4.0 (Attribution-NonCommercial-ShareAlike, no commercial use)",
+			creditDeepWhale: "Character original: 上善 (Pixiv 62155430); DeepSeek maid redesign: ZipZipPipe (Pixiv 18604994); theme adaptation & UI: Small-tailqwq",
+			noticeDeepWhale: "Full credit chain is in the skin package NOTICE (assets/skins/deep-whale-day-night/).",
 			srcUnknown: "See LICENSE inside the skin package",
 			creditsTitle: "Sources & Credits",
 			creditsIntro: "The skins below are third-party open-source works. All rights belong to their original authors; DSH Desktop only bundles and manages them:",
 			repoDshWebUi: "dsh-web-ui (zhu1090093659) · https://github.com/zhu1090093659/dsh-web-ui",
 			repoMaid: "dsh-deep-whale (Small-tailqwq) · https://github.com/Small-tailqwq/dsh-deep-whale",
-			creditsNote: "Each skin follows its own license; maid-atelier is non-commercial."
+			repoDeepWhale: "deep-whale-day-night (GGBond2424648901) · https://github.com/GGBond2424648901/deep-whale-day-night-theme",
+			creditsNote: "Each skin follows its own license; maid-atelier and deep-whale-day-night are non-commercial."
 		};
 		const NS = "settings.dshSkinSwitch";
 		//#endregion
@@ -107,7 +117,8 @@ window.__ModuleLoader__.load({
 			"ui-skin-ths": "dsh-web-ui",
 			"ui-skin-dragon-heir": "dsh-web-ui",
 			"ui-skin-miku": "dsh-web-ui",
-			"ui-skin-maid-atelier": "maid"
+			"ui-skin-maid-atelier": "maid",
+			"ui-skin-deep-whale-day-night": "deep-whale-day-night"
 		};
 		//#endregion
 		//#region remote face
@@ -211,7 +222,18 @@ window.__ModuleLoader__.load({
 						(0, react_jsx_runtime.jsxs)("div", {
 							className: s.src,
 							children: [
-								kind === "maid" ? (0, react_jsx_runtime.jsxs)("span", {
+								kind === "deep-whale-day-night" ? (0, react_jsx_runtime.jsxs)("span", {
+									children: [
+										t("srcDeepWhale") + " · " + t("byAuthor") + " Small-tailqwq · ",
+										(0, react_jsx_runtime.jsx)("a", {
+											href: "https://github.com/GGBond2424648901/deep-whale-day-night-theme",
+											target: "_blank",
+											rel: "noreferrer noopener",
+											children: t("openRepo")
+										}),
+										" · " + t("licDeepWhale")
+									]
+								}) : kind === "maid" ? (0, react_jsx_runtime.jsxs)("span", {
 									children: [
 										t("srcMaid") + " · " + t("byAuthor") + " Small-tailqwq · ",
 										(0, react_jsx_runtime.jsx)("a", {
@@ -234,6 +256,8 @@ window.__ModuleLoader__.load({
 										" · " + t("licBsd")
 									]
 								}) : (0, react_jsx_runtime.jsx)("span", { children: t("srcUnknown") }),
+								kind === "deep-whale-day-night" ? (0, react_jsx_runtime.jsx)("span", { className: s.credit, children: t("creditDeepWhale") }) : null,
+								kind === "deep-whale-day-night" ? (0, react_jsx_runtime.jsx)("small", { children: t("noticeDeepWhale") }) : null,
 								kind === "maid" ? (0, react_jsx_runtime.jsx)("span", { className: s.credit, children: t("creditMaid") }) : null,
 								kind === "maid" ? (0, react_jsx_runtime.jsx)("small", { children: t("noticeMaid") }) : null
 							]
@@ -363,6 +387,17 @@ window.__ModuleLoader__.load({
 							(0, react_jsx_runtime.jsx)("p", { children: t("licMaid") }),
 							(0, react_jsx_runtime.jsx)("p", { className: s.credit, children: t("creditMaid") }),
 							(0, react_jsx_runtime.jsx)("small", { children: t("noticeMaid") }),
+							(0, react_jsx_runtime.jsx)("p", {
+								children: (0, react_jsx_runtime.jsx)("a", {
+									href: "https://github.com/GGBond2424648901/deep-whale-day-night-theme",
+									target: "_blank",
+									rel: "noreferrer noopener",
+									children: t("repoDeepWhale")
+								})
+							}),
+							(0, react_jsx_runtime.jsx)("p", { children: t("licDeepWhale") }),
+							(0, react_jsx_runtime.jsx)("p", { className: s.credit, children: t("creditDeepWhale") }),
+							(0, react_jsx_runtime.jsx)("small", { children: t("noticeDeepWhale") }),
 							(0, react_jsx_runtime.jsx)("small", { children: t("creditsNote") })
 						]
 					})

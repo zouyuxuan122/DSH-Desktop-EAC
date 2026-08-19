@@ -30,7 +30,7 @@
 | 运行方式 | 需先安装 Node.js，`npx @deepseek-ai/dsh web` + 浏览器访问 | **免装 Node**：内置独立 Node 运行时与 npm CLI，双击即用 |
 | 与 CLI 共存 | —（本体） | **桌面专属 profile（web-desktop）**：插件树/pnpm/patch 层与原生 CLI 完全隔离，会话与 API Key 依旧共享；共享 junction 归属自动守卫修复，互不打扰 |
 | 插件安全 | 手动 npm，装坏自负 | **内置插件保护中心**：安装/启动前自动快照、启动失败自动体检修复、必要时回滚到最后良好快照，事故报告全程留痕（融合三大社区保护插件并内置升华） |
-| 界面皮肤 | 仅官方默认外观 | **内置 10 款 Web UI 皮肤**（XP / QQ98 / 初音未来 / 我的世界 / 同花顺 / 鲸歌…），设置页一键互斥切换，默认不启用保持原生 |
+| 界面皮肤 | 仅官方默认外观 | **内置 11 款 Web UI 皮肤**（XP / QQ98 / 初音未来 / 我的世界 / 同花顺 / 鲸歌…），设置页一键互斥切换，默认不启用保持原生 |
 | 字体外观 | 无 | 设置页「外观 · 字体与颜色」：**字体家族/字号/文字与代码颜色**实时自定义，与皮肤同体系 |
 | 窗口体验 | 浏览器标签页 | **原生无边框窗口**（自绘玻璃栏）+ **系统托盘常驻**，关闭不打断任务 |
 | 便携性 | 无 | **便携版**数据跟随 exe，拷到 U 盘即用 |
@@ -84,7 +84,7 @@ Linux 打包由社区开发者 [@Luoye-hb](https://github.com/Luoye-hb) 贡献�
 
 1. 双击运行，显示启动动画，随后自动加载 DeepSeek Harness Web UI（原生窗口，仅本机回环访问）。
 2. 如尚未配置 API Key，在界面「设置」内完成配置即可开始使用（与命令行 dsh 完全一致）。
-3. 常用入口：设置 → 皮肤（10 款内置皮肤切换）/ 插件市场 / 模型一键选择；对话区 → 终端 / 文件标签页。
+3. 常用入口：设置 → 皮肤（11 款内置皮肤切换）/ 插件市场 / 模型一键选择；对话区 → 终端 / 文件标签页。
 
 > 便携版数据目录在 exe 旁的 `data\`；安装版在 `%APPDATA%\Deepseek Harness EAC\`。
 > 想强制指定 DSH 配置目录？启动前设置环境变量 `DSH_HOME` 即可（与 dsh CLI 行为一致）。
@@ -101,8 +101,8 @@ Linux 打包由社区开发者 [@Luoye-hb](https://github.com/Luoye-hb) 贡献�
 
 ### 界面皮肤自定义（EAC 特色）
 
-- 设置页「皮肤」标签页内置 **10 款 Web UI 皮肤**，卡片式网格展示（名称/简介/主色/作者/出处与许可角标）。
-- 9 款来自社区 [dsh-web-ui](https://github.com/zhu1090093659/dsh-web-ui)（BSD-3-Clause）+ 1 款 [dsh-deep-whale 深海女仆工坊](https://github.com/Small-tailqwq/dsh-deep-whale)（CC BY-NC-SA 4.0，禁止商用）。
+- 设置页「皮肤」标签页内置 **11 款 Web UI 皮肤**，卡片式网格展示（名称/简介/主色/作者/出处与许可角标）。
+- 9 款来自社区 [dsh-web-ui](https://github.com/zhu1090093659/dsh-web-ui)（BSD-3-Clause）+ 1 款 [dsh-deep-whale 深海女仆工坊](https://github.com/Small-tailqwq/dsh-deep-whale)（CC BY-NC-SA 4.0，禁止商用）、1 款 [deep-whale-day-night 鲸鱼娘昼夜工坊](https://github.com/GGBond2424648901/deep-whale-day-night-theme)（CC BY-NC-SA 4.0，禁止商用）。
 - **默认不启用任何皮肤**（原生外观）；选中某款后其余自动禁用（互斥切换），「恢复默认皮肤」一键还原；切换后自动重启 Web 服务生效。
 - 皮肤是 browser-only 的 dsh client 插件，由桌面端同步进 web profile 并幂等注册到 `cordis.patch.yml`，完整版权署名随包分发。
 
@@ -118,6 +118,7 @@ Linux 打包由社区开发者 [@Luoye-hb](https://github.com/Luoye-hb) 贡献�
 | whale-song（鲸歌） | 同上 | BSD-3-Clause |
 | miku（初音未来） | 同上 | BSD-3-Clause |
 | maid-atelier（深海女仆工坊） | [dsh-deep-whale](https://github.com/Small-tailqwq/dsh-deep-whale) | **CC BY-NC-SA 4.0**（禁止商用） |
+| deep-whale-day-night（鲸鱼娘昼夜工坊） | [deep-whale-day-night](https://github.com/GGBond2424648901/deep-whale-day-night-theme) | **CC BY-NC-SA 4.0**（禁止商用） |
 
 ### 开箱即用
 
@@ -230,7 +231,7 @@ dsh-desktop/                  # Electron 桌面端
 ├── profile-module-heal.js    # profile 模块遮蔽自愈（真实目录 + pnpm 链接）
 ├── preload.js                # 沙箱预加载
 ├── assets/                   # 加载页、更新进度页、图标、皮肤、配套插件
-│   ├── skins/                # 10 款内置 Web UI 皮肤
+│   ├── skins/                # 11 款内置 Web UI 皮肤
 │   └── plugins/              # 桌面壳配套：dsh-balance / dsh-file-changes / dsh-terminal
 │                             # / dsh-easy-setup / dsh-skin-switch
 │                             # 内置社区插件：dsh-webui-market / dsh-tool-vision
