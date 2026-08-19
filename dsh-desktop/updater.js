@@ -22,6 +22,7 @@
 const { spawn } = require('node:child_process');
 const path = require('node:path');
 const fs = require('node:fs');
+const os = require('node:os');
 
 const PKG = '@deepseek-ai/dsh';
 const IS_WIN = process.platform === 'win32';
@@ -307,6 +308,38 @@ async function applyUpdate(ctx, version, { onProgress = null, stallMs = NPM_STAL
   // 启动失败时用户可一键回退到上一版本。
   const overlay = overlayDir(ctx);
   const backup = path.join(ctx.userDataDir, 'agent-old-' + Date.now());
+  // V4.3 PR（独有价值，review 保留项）：配置全量快照 + profile 精简。
+  // swap 前把关键配置文件拷到 backup/config/ 目录；backup 随后会被
+  // rename 到 agent-previous（固定名），快照也随之保留到健康确认前；
+  // 若 swap 失败，backup 目录最终会被 overlay 回滚 + 删除，快照随之丢弃，
+  // 不污染 userData。
+  try {
+    const cfgDir = path.join(backup, 'config');
+    fs.mkdirSync(cfgDir, { recursive: true });
+    // 1) userData/settings.json（桌面端配置：端口、皮肤、已跳过版本等）
+    const setSrc = settingsPath(ctx);
+    if (fs.existsSync(setSrc)) fs.copyFileSync(setSrc, path.join(cfgDir, 'settings.json'));
+    // 2) dsh 自身 settings.yaml（CLI 同构：模型、代理、API key、默认 profile 等）
+    const dshHome = process.env.DSH_HOME || path.join(os.homedir(), '.dsh');
+    const dshSet = path.join(dshHome, 'settings.yaml');
+    if (fs.existsSync(dshSet)) fs.copyFileSync(dshSet, path.join(cfgDir, 'dsh-settings.yaml'));
+    // 3) web-desktop / web 两个 profile 的 cordis.patch.yml（用户 patch 行记录；
+    //    插件行写入规则「已有行不重写」：只追加 insert 块，不覆盖用户手工改动）
+    //    —— 两个 profile 都快照一份：shareWebProfile=true 用户用 web；
+    //    默认情况用 web-desktop。多一份 ≈ 几 KB，可忽略。
+    for (const profName of ['web-desktop', 'web']) {
+      const patch = path.join(dshHome, 'profiles', profName, 'cordis.patch.yml');
+      if (fs.existsSync(patch)) {
+        const profDir = path.join(cfgDir, 'profiles', profName);
+        fs.mkdirSync(profDir, { recursive: true });
+        fs.copyFileSync(patch, path.join(profDir, 'cordis.patch.yml'));
+      }
+    }
+    ctx.log('update', `配置快照写入 ${cfgDir}`);
+  } catch (snapErr) {
+    ctx.log('update', '配置快照写入失败（不影响更新主体）: ' + String(snapErr && snapErr.message));
+    // 快照是「锦上添花」：失败不阻塞 swap 主流程。
+  }
   try {
     if (fs.existsSync(overlay)) fs.renameSync(overlay, backup);
     fs.renameSync(staging, overlay);

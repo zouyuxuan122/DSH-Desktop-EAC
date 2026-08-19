@@ -603,7 +603,7 @@ async function downloadRelease(ctx, release, { onProgress, onSourceChange, fallb
  *   4. 清理（删安装包+自删）仅在成功路径发生。
  *   5. 便携版分支保留 备份→替换→失败回滚 语义，同样有界等待并写日志。
  */
-function buildApplyScript({ newExe, oldExe, portable }) {
+function buildApplyScript({ newExe, oldExe, portable, userDataDir, dshHome, installDir, profileDir, currentVersion, newVersion }) {
   const lines = ['@echo off'];
   if (portable) {
     lines.push(
@@ -652,27 +652,130 @@ function buildApplyScript({ newExe, oldExe, portable }) {
     // 控制台下偶发挂死（黑窗反馈的根源）。固定短等待给主进程留优雅退出
     // 时间，然后无条件兜底强杀（正常情况下进程已不在，taskkill 记一条
     // not found 到日志即通过），线性推进到 Setup，全程无管道无循环。
+    //
+    // V4.3 增量更新 PR（独有价值保留）：
+    //   1) 备份 4 目录（userData / dshHome / profile / installDir）到
+    //      <userData>/backups/<unix-ts>/ ，同时从注册表查询 InstallLocation
+    //      并与实际 installDir 对比，两者都写入 manifest.json（安装目录被
+    //      用户手动移动过时，备份/回滚以实际路径为准，注册表值仅记录）。
+    //   2) Setup 调用添加 /S：oneClick: false 下 NSIS 静默走完所有步骤到原
+    //      路径（读注册表 InstallLocation）。
+    //   3) 成功路径写 <userData>/updates/.backup-ts marker（内容就是时间戳），
+    //      新版健康启动后主进程 cleanupClientBackupIfHealthy →
+    //      offerBackupCleanupConfirm 询问是否清理备份（保留 24h，超过不自动弹）。
+    //   4) 失败路径：从备份目录反向 robocopy /MIR 回 4 目录，再拉起旧版。
     lines.push(
       'set "SETUP=%~1"',
       'set "EXENAME=%~2"',
       'set "OLD=%~3"',
+      'set "UD=%~4"',
+      'set "DSH=%~5"',
+      'set "INST=%~6"',
+      'set "PROF=%~7"',
+      'set "OLDVER=%~8"',
+      'set "NEWVER=%~9"',
       'set "LOG=%~dp0apply-update.log"',
       'echo [%date% %time%] apply-update start > "%LOG%"',
+      'echo [%date% %time%] oldVer=%OLDVER% newVer=%NEWVER% >> "%LOG%"',
+      'echo [%date% %time%] userData=%UD% >> "%LOG%"',
+      'echo [%date% %time%] dsh=%DSH% >> "%LOG%"',
+      'echo [%date% %time%] install=%INST% >> "%LOG%"',
+      'echo [%date% %time%] profile=%PROF% >> "%LOG%"',
+      // --- 关键路径是否齐全：只要有一个为空就跳过备份（单测/开发回退到原语义）---
+      'set "SKIP_BACKUP=0"',
+      'if "%UD%"=="" set SKIP_BACKUP=1',
+      'if "%DSH%"=="" set SKIP_BACKUP=1',
+      'if "%INST%"=="" set SKIP_BACKUP=1',
+      'if "%PROF%"=="" set SKIP_BACKUP=1',
+      'if "%SKIP_BACKUP%"=="1" echo [%date% %time%] WARN: one of UD/DSH/INST/PROF empty, skipping backup (fallback semantics) >> "%LOG%"',
       'ping -n 4 127.0.0.1 >nul',
       'echo [%date% %time%] force-killing leftover app processes >> "%LOG%"',
       'taskkill /F /T /IM "%EXENAME%" >> "%LOG%" 2>&1',
       'ping -n 2 127.0.0.1 >nul',
-      'echo [%date% %time%] running setup >> "%LOG%"',
+      // --- 阶段 0：查注册表 InstallLocation（供 manifest 对比，不影响实际动作）---
+      'if "%SKIP_BACKUP%"=="0" set "REG_INST="',
+      'if "%SKIP_BACKUP%"=="0" for /f "tokens=2*" %%a in (\'reg query "HKCU\\Software\\Deepseek Harness EAC" /v InstallLocation 2^>nul ^| findstr /i InstallLocation\') do set "REG_INST=%%b"',
+      'if "%SKIP_BACKUP%"=="0" if not defined REG_INST for /f "tokens=2*" %%a in (\'reg query "HKLM\\Software\\Deepseek Harness EAC" /v InstallLocation 2^>nul ^| findstr /i InstallLocation\') do set "REG_INST=%%b"',
+      'if "%SKIP_BACKUP%"=="0" if not defined REG_INST for /f "tokens=2*" %%a in (\'reg query "HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\Deepseek Harness EAC" /v InstallLocation 2^>nul ^| findstr /i InstallLocation\') do set "REG_INST=%%b"',
+      'if "%SKIP_BACKUP%"=="0" if not defined REG_INST for /f "tokens=2*" %%a in (\'reg query "HKLM\\Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\Deepseek Harness EAC" /v InstallLocation 2^>nul ^| findstr /i InstallLocation\') do set "REG_INST=%%b"',
+      'if "%SKIP_BACKUP%"=="0" if not defined REG_INST for /f "tokens=2*" %%a in (\'reg query "HKCU\\Software\\WOW6432Node\\Deepseek Harness EAC" /v InstallLocation 2^>nul ^| findstr /i InstallLocation\') do set "REG_INST=%%b"',
+      'if "%SKIP_BACKUP%"=="0" if not defined REG_INST for /f "tokens=2*" %%a in (\'reg query "HKLM\\Software\\WOW6432Node\\Deepseek Harness EAC" /v InstallLocation 2^>nul ^| findstr /i InstallLocation\') do set "REG_INST=%%b"',
+      'if "%SKIP_BACKUP%"=="0" echo [%date% %time%] InstallLocation(registry)=%REG_INST% >> "%LOG%"',
+      'if "%SKIP_BACKUP%"=="0" if /i not "%REG_INST%" == "" if /i not "%REG_INST%" == "%INST%" echo [%date% %time%] WARN: InstallLocation registry vs actual mismatch (backup/rollback use actual path) >> "%LOG%"',
+      // --- 阶段 1：生成时间戳 + 建备份根目录 ---
+      'if "%SKIP_BACKUP%"=="0" set "TS="',
+      'if "%SKIP_BACKUP%"=="0" for /f %%t in (\'powershell -NoProfile -Command "[DateTimeOffset]::Now.ToUnixTimeSeconds()" 2^>nul\') do set "TS=%%t"',
+      'if "%SKIP_BACKUP%"=="0" if not defined TS set "TS=%date:~-10,4%%date:~-5,2%%date:~-2,2%%time:~0,2%%time:~3,2%%time:~6,2%"',
+      'if "%SKIP_BACKUP%"=="0" set "TS=%TS: =0%"',
+      'if "%SKIP_BACKUP%"=="0" set "BACKUP=%UD%\\backups\\%TS%"',
+      'if "%SKIP_BACKUP%"=="0" echo [%date% %time%] backup root=%BACKUP% >> "%LOG%"',
+      'if "%SKIP_BACKUP%"=="0" if not exist "%BACKUP%\\." mkdir "%BACKUP%" 2>nul',
+      // robocopy 成功码 0..7（0=无复制/1=成功/2=额外文件/3=成功+额外/...7=成功+额外+不匹配），
+      // errorlevel>=8 才是失败。/MIR=/E+/PURGE，/R:1 /W:1，不写日志头。
+      'if "%SKIP_BACKUP%"=="0" set "BAD=0"',
+      // --- 阶段 2a：备份 userData（除 updates/ 自身和 backups/ 自身外都复制）---
+      'if "%SKIP_BACKUP%"=="0" if exist "%UD%\\." (',
+      '  echo [%date% %time%] backing up userData =%UD% >> "%LOG%"',
+      '  robocopy "%UD%" "%BACKUP%\\userdata" /MIR /XD "%UD%\\updates" "%UD%\\backups" "%UD%\\logs" /XF "*.log" /NFL /NDL /NJH /NJS /NP /R:1 /W:1 >> "%LOG%" 2>&1',
+      '  if errorlevel 8 set BAD=1',
+      ')',
+      // --- 阶段 2b：备份 .dsh 目录（不含 sessions/ 大文件与 node_modules/.cache）---
+      'if "%SKIP_BACKUP%"=="0" if exist "%DSH%\\." (',
+      '  echo [%date% %time%] backing up dsh =%DSH% >> "%LOG%"',
+      '  robocopy "%DSH%" "%BACKUP%\\dsh" /MIR /XD "%DSH%\\sessions" /NFL /NDL /NJH /NJS /NP /R:1 /W:1 >> "%LOG%" 2>&1',
+      '  if errorlevel 8 set BAD=1',
+      ')',
+      // --- 阶段 2c：备份 web-desktop profile ---
+      'if "%SKIP_BACKUP%"=="0" if exist "%PROF%\\." (',
+      '  echo [%date% %time%] backing up profile =%PROF% >> "%LOG%"',
+      '  robocopy "%PROF%" "%BACKUP%\\profile" /MIR /XD "%PROF%\\node_modules\\.cache" /NFL /NDL /NJH /NJS /NP /R:1 /W:1 >> "%LOG%" 2>&1',
+      '  if errorlevel 8 set BAD=1',
+      ')',
+      // --- 阶段 2d：备份安装目录（含 exe + resources 等；排除 node_modules/.cache 加速）---
+      'if "%SKIP_BACKUP%"=="0" if exist "%INST%\\." (',
+      '  echo [%date% %time%] backing up install =%INST% >> "%LOG%"',
+      '  robocopy "%INST%" "%BACKUP%\\install" /MIR /XD "%INST%\\resources\\app\\node_modules\\.cache" /NFL /NDL /NJH /NJS /NP /R:1 /W:1 >> "%LOG%" 2>&1',
+      '  if errorlevel 8 set BAD=1',
+      ')',
+      // --- 阶段 3：写 manifest.json（Node 内联，携带版本号 + 路径 + registry 对比 + 回滚指引）---
+      'if "%SKIP_BACKUP%"=="0" if "%BAD%" == "0" (',
+      '  echo [%date% %time%] writing manifest.json >> "%LOG%"',
+      '  set "MAN=%BACKUP%\\manifest.json"',
+      '  set "ENV_TS=%TS%"',
+      '  set "ENV_UD=%UD%"',
+      '  set "ENV_DSH=%DSH%"',
+      '  set "ENV_PROF=%PROF%"',
+      '  set "ENV_INST=%INST%"',
+      '  set "ENV_REG=%REG_INST%"',
+      '  set "ENV_OLD=%OLDVER%"',
+      '  set "ENV_NEW=%NEWVER%"',
+      '  set "ENV_BACK=%BACKUP%"',
+      '  node -e "try{const t=process.env;const fs=require(\'fs\');const p={userData:{src:t.ENV_UD||\'\',backup:pathJoin(t.ENV_BACK,\'userdata\')},dsh:{src:t.ENV_DSH||\'\',backup:pathJoin(t.ENV_BACK,\'dsh\')},profile:{src:t.ENV_PROF||\'\',backup:pathJoin(t.ENV_BACK,\'profile\')},install:{src:t.ENV_INST||\'\',backup:pathJoin(t.ENV_BACK,\'install\')}};function pathJoin(a,b){return require(\'path\').join(String(a||\'\'),String(b||\'\'));}const m={timestamp:Number(t.ENV_TS)||Date.now(),backupTs:String(t.ENV_TS||\'\'),oldVersion:t.ENV_OLD||\'\',newVersion:t.ENV_NEW||\'\',installLocation:{registry:t.ENV_REG||\'\',actual:t.ENV_INST||\'\',match:!!(t.ENV_REG&&t.ENV_INST&&String(t.ENV_REG).toLowerCase().replace(/[\\\\\\/]+$/g,\'\')===String(t.ENV_INST).toLowerCase().replace(/[\\\\\\/]+$/g,\'\'))},paths:p,rollbackGuide:\'4 directories each mirror-copied to the parallel ./userdata ./dsh ./profile ./install subdirs. Robocopy /MIR them back to paths.{userData,dsh,profile,install}.src, then launch OLD executable.\'};fs.writeFileSync(t.ENV_MAN||\'\',JSON.stringify(m,null,2));}catch(e){console.error(e.message);process.exit(1);}" >> "%LOG%" 2>&1',
+      '  if errorlevel 1 set BAD=2',
+      ')',
+      'if "%SKIP_BACKUP%"=="0" if not "%BAD%" == "0" (',
+      '  echo [%date% %time%] backup failed with code %BAD%, aborting update >> "%LOG%"',
+      '  goto failed',
+      ')',
+      // --- 阶段 4：启动 NSIS 静默安装（oneClick: false，/S 下走到原路径）---
+      'echo [%date% %time%] running setup /S >> "%LOG%"',
       // call 而非 start /wait：隐藏控制台下 start /wait 偶发不返回（实测
       // 子进程已退出、父脚本仍停滞，黑窗卡死的共因）；批处理直接调用另一
       // 个批处理则是 tail-call 语义不返回。call 对 .cmd/.exe 都同步等待、
       // 返回控制权并保留退出码。
-      'call "%SETUP%"',
+      'call "%SETUP%" /S',
       'echo [%date% %time%] setup exit code %errorlevel% >> "%LOG%"',
       'if errorlevel 1 goto failed',
       'goto success',
       ':success',
+      // --- 成功：落 .backup-ts marker（新版主进程读取后弹清理确认）；
+      // SKIP_BACKUP 时跳过写 marker（没有备份目录要确认）
       'echo [%date% %time%] update applied >> "%LOG%"',
+      'if "%SKIP_BACKUP%"=="0" (',
+      '  echo [%date% %time%] writing backup-ts marker=%TS% >> "%LOG%"',
+      '  if not exist "%UD%\\updates\\." mkdir "%UD%\\updates" 2>nul',
+      '  echo %TS% > "%UD%\\updates\\.backup-ts"',
+      ')',
       'del "%SETUP%" >nul 2>&1',
       // (goto) 2>nul 先终止批处理上下文，其后的 del/exit 在批处理之外
       // 执行：直接 del 自身再写 exit /b 0 的话，cmd 自删后读不到下一行，
@@ -680,6 +783,28 @@ function buildApplyScript({ newExe, oldExe, portable }) {
       '(goto) 2>nul & del "%~f0" >nul 2>&1 & exit /b 0',
       ':failed',
       'echo [%date% %time%] update failed, installer kept for diagnosis >> "%LOG%"',
+      // --- 失败：从备份目录反向 robocopy /MIR 回原路径（如果备份已生成）---
+      'if "%SKIP_BACKUP%"=="0" if defined TS if exist "%BACKUP%\\manifest.json" (',
+      '  echo [%date% %time%] rolling back 4 directories from %BACKUP% >> "%LOG%"',
+      '  set "RBAD=0"',
+      '  if exist "%BACKUP%\\install\\." (',
+      '    robocopy "%BACKUP%\\install" "%INST%" /MIR /NFL /NDL /NJH /NJS /NP /R:1 /W:1 >> "%LOG%" 2>&1',
+      '    if errorlevel 8 set RBAD=1',
+      '  )',
+      '  if exist "%BACKUP%\\dsh\\." (',
+      '    robocopy "%BACKUP%\\dsh" "%DSH%" /MIR /NFL /NDL /NJH /NJS /NP /R:1 /W:1 >> "%LOG%" 2>&1',
+      '    if errorlevel 8 set RBAD=1',
+      '  )',
+      '  if exist "%BACKUP%\\profile\\." (',
+      '    robocopy "%BACKUP%\\profile" "%PROF%" /MIR /NFL /NDL /NJH /NJS /NP /R:1 /W:1 >> "%LOG%" 2>&1',
+      '    if errorlevel 8 set RBAD=1',
+      '  )',
+      '  if exist "%BACKUP%\\userdata\\." (',
+      '    robocopy "%BACKUP%\\userdata" "%UD%" /MIR /XD "%UD%\\updates" "%UD%\\backups" "%UD%\\logs" /XF "*.log" /NFL /NDL /NJH /NJS /NP /R:1 /W:1 >> "%LOG%" 2>&1',
+      '    if errorlevel 8 set RBAD=1',
+      '  )',
+      '  if "%RBAD%"=="0" (echo [%date% %time%] rollback OK >> "%LOG%") else (echo [%date% %time%] rollback partially failed (code %RBAD%) >> "%LOG%")',
+      ')',
       'if not "%OLD%" == "" if exist "%OLD%" start "" "%OLD%"',
       'exit /b 1'
     );
@@ -699,16 +824,27 @@ function buildSpawnCommandLine(script, args) {
   return '"' + [script, ...args].map((a) => `"${a}"`).join(' ') + '"';
 }
 
-function applyUpdate(ctx, pending) {
+function applyUpdate(ctx, pending, opts) {
   const newExe = pending.path;
   const portable = isPortable();
   const oldExe = process.env.PORTABLE_EXECUTABLE_FILE || process.execPath;
   const exeBase = path.basename(oldExe);
   const script = path.join(ctx.userDataDir, 'updates', 'apply-update.cmd');
-  const lines = buildApplyScript({ newExe, oldExe, portable });
+  const userDataDir = (opts && opts.userDataDir) || ctx.userDataDir || '';
+  const dshHome = (opts && opts.dshHome) || process.env.DSH_HOME || '';
+  const installDir = (opts && opts.installDir) || path.dirname(oldExe);
+  const profileDir = (opts && opts.profileDir) || '';
+  const currentVersion = (opts && opts.currentVersion) || '';
+  const newVersion = (opts && opts.newVersion) || (pending && pending.version) || '';
+  const lines = buildApplyScript({
+    newExe, oldExe, portable,
+    userDataDir, dshHome, installDir, profileDir, currentVersion, newVersion,
+  });
   fs.writeFileSync(script, lines.join('\r\n'));
-  ctx.log('client-update', `启动更新脚本: ${script}（新: ${newExe}，旧: ${oldExe}）`);
-  const args = [newExe, portable ? oldExe : exeBase, portable ? '' : oldExe];
+  ctx.log('client-update', `启动更新脚本: ${script}（新: ${newExe}，旧: ${oldExe}，备份根: ${userDataDir}\\backups\\<ts>）`);
+  const args = portable
+    ? [newExe, oldExe, '', '', '', '', '', '', '']
+    : [newExe, exeBase, oldExe, userDataDir, dshHome, installDir, profileDir, currentVersion, newVersion];
   const child = spawn('cmd.exe', ['/d', '/s', '/c', buildSpawnCommandLine(script, args)], {
     detached: true,
     stdio: 'ignore',
