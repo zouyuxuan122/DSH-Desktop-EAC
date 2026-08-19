@@ -7897,6 +7897,7 @@ window.__ModuleLoader__.load({
 		function PluginListBody(props) {
 			const { service, kind } = props;
 			const [copiedId, setCopiedId] = (0, react.useState)(null);
+            const [isCopying, setIsCopying] = (0, react.useState)(false);
 			/** Copy the entry's install script to the clipboard and flash the button's
 			*  "已复制" label for a moment. The feedback ONLY appears after a
 			*  successful write — when the clipboard is unavailable or denied
@@ -7904,6 +7905,27 @@ window.__ModuleLoader__.load({
 			*  told to paste a command that was not placed on the clipboard. Never
 			*  closes anything, never throws outward. */
 			const copy = async (entry) => {
+                // 防止快速连续点击
+                if (isCopying || copiedId === entry.id) return;
+                
+                setIsCopying(true);
+                
+                try {
+                    const success = await (0, _deepseek_ai_dsh_client_ui_primitives.writeClipboard)(entry.install);
+                    if (success) {
+                        setCopiedId(entry.id);
+                        window.setTimeout(() => {
+                            setCopiedId((current) => current === entry.id ? null : current);
+                            setIsCopying(false);
+                        }, COPIED_FEEDBACK_MS);
+                    } else {
+                        setIsCopying(false);
+                    }
+                } catch (error) {
+                    console.error("复制失败:", error);
+                    setIsCopying(false);
+                }
+            };			};
 				if (!await (0, _deepseek_ai_dsh_client_ui_primitives.writeClipboard)(entry.install)) return;
 				setCopiedId(entry.id);
 				window.setTimeout(() => {
@@ -7968,7 +7990,7 @@ window.__ModuleLoader__.load({
 											onClick: () => {
 												copy(entry);
 											},
-											children: copiedId === entry.id ? t("copied") : t("copy")
+											children: copiedId === entry.id ? t("copied") : isCopying ? t("copying") : t("copy")
 										})]
 									})]
 								}),
