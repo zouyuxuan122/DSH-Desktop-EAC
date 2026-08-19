@@ -2616,6 +2616,8 @@ const COMPANION_PLUGINS = [
   // 社区插件市场（awesome-dsh-plugin.com 目录）：内置分发，替换早期 npm 检索版市场。
   { id: 'dsh-market-plugin', name: '@sanqi-normal/dsh-webui-market-plugin', dir: 'dsh-webui-market' },
   { id: 'skin-switch', name: '@deepseek-ai/dsh-skin-switch' },
+  // 外观皮肤（dsh-skin, wei-806206088, MIT）：调色盘按钮 + 主题/主色/文字色/图片/GIF/视频背景 + 预设。纯客户端。
+  { id: 'dsh-skin', name: 'dsh-skin', dir: 'dsh-skin' },
   { id: 'easy-setup', name: '@deepseek-ai/dsh-easy-setup' },
   // 社区功能插件（视觉 / 人设 / 长期记忆 / 移动端布局修复）：npm registry
   // 拉取后随应用内置分发。绝不能写进 profile package.json 依赖 ——
@@ -2758,6 +2760,7 @@ const PLUGIN_UPDATE_SOURCES = {
   'dsh-session-manager': { npm: 'dsh-session-manager' },
   // GitHub 分发（npm 未发布）：dsh-undo-savepoint。
   'dsh-undo': { github: 'lire1131/dsh-undo-savepoint' },
+  'dsh-skin': { github: 'wei-806206088/dsh-skin' },
 };
 
 /** 把内置插件表 + 更新源注册表合并成 plugin-updater 的 sources 输入。 */

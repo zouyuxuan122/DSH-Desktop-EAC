@@ -1,0 +1,24 @@
+{
+  "name": "dsh-skin",
+  "version": "1.0.0",
+  "private": true,
+  "description": "DeepSeek Harness appearance skin: minimal themes, accent/text/region colors, image skins, named presets, durable settings.",
+  "type": "module",
+  "main": "lib/index.js",
+  "exports": {
+    ".": "./lib/index.js",
+    "./client": "./lib/client.js",
+    "./package.json": "./package.json"
+  },
+  "dsh": {
+    "client": {
+      "inject": [
+        "@deepseek-ai/dsh-client-runtime",
+        "@deepseek-ai/dsh-client-ui-theme",
+        "@deepseek-ai/dsh-client-ui-settings"
+      ],
+      "platform": "web",
+      "immediately": true
+    }
+  }
+}
