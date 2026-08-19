@@ -31,6 +31,7 @@ files:
   - plugin-updater.js
   - balance.js
   - session-watcher.js
+  - session-encoding-heal.js
   - profile-module-heal.js
   - patch-row-heal.js
   - builtin-collision.js
@@ -43,6 +44,7 @@ files:
   - koffi-preflight.js
   - renderer-recovery.js
   - watchdog.js
+  - shortcut-maintenance.js
   - preload.js
   - assets/**/*
   # 运行时脚本：koffi 预检探针（scripts/koffi-preflight.cjs）、会话删除补丁与

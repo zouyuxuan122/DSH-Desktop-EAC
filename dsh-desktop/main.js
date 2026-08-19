@@ -34,6 +34,14 @@ const bundleIntegrity = require('./bundle-integrity');
 const { RendererRecovery } = require('./renderer-recovery');
 const { restrictedPortOf, chooseStableWebPort } = require('./stable-port');
 const {
+  STANDARD_SHORTCUT_NAME,
+  RUNTIME_SHORTCUT_DESCRIPTION,
+  shortcutTargetsApp,
+  desktopShortcutDirs,
+  classifyManagedShortcut,
+  planDesktopShortcutMaintenance,
+} = require('./shortcut-maintenance');
+const {
   runKoffiPreflight,
   runKoffiPreflightAsync,
   enablePickerBrowseOverlay,
@@ -43,6 +51,7 @@ const { configLinesFor, healSoulMdPatchRow, healRowConfig, removeBundledRowDupli
 const { syncBundledPresets, ensureDefaultAgentPreset } = require('./preset-sync');
 const { buildErrorDetail } = require('./error-detail');
 const { SessionWatcher, scanZstdFrames } = require('./session-watcher');
+const { isEncodingMismatch, healSessionEncodingConflicts } = require('./session-encoding-heal');
 const { patchSessionManage } = require('./scripts/patch-session-manage');
 const { togglePluginInPatch, removePluginFromPatch, hasEntryId } = require('./scripts/plugin-manager-patch');
 const { collectPluginRows } = require('./plugin-manager-state');
@@ -919,8 +928,42 @@ async function startAndShowGuarded(overlays = []) {
     () => '日志文件：' + path.join(logsDir, 'dsh-web.log'),
     // V4.2：pnpm 封锁构建脚本会让整棵 profile 起不来 —— 这是配置级问题，
     // 体检（只扫插件层）发现不了，必须走 preRetry 钩子自动放行后重试。
-    { preRetry: allowBuildsPreRetry }
+    // V4.4：会话目录同时存在 zstd + 明文两种编码时，会话持久化后端会抛
+    // encodingMismatch 让整棵插件树起不来（Issue #77）—— 同样是体检看不到
+    // 的数据层问题，一并走 preRetry 归档相反格式文件后重试。
+    { preRetry: bootRescuePreRetry }
   );
+}
+
+// V4.4：守护启动 preRetry 汇聚 —— 把两类「体检看不到的数据/配置层修复」
+// 合并为一次钩子调用（guardedBoot 只调用 preRetry 一次）。任一命中即返回
+// 合并后的 { applied }，均未命中返回 false（走原失败链路）。
+async function bootRescuePreRetry(errText) {
+  const applied = [];
+  // 1) 会话编码冲突（Issue #77）：归档相反格式的遗留日志文件（数据无损）。
+  try {
+    let text = String(errText || '');
+    if (!isEncodingMismatch(text)) {
+      // 报错详情常只落在 dsh-web.log 里，补充解析尾部。
+      try { text += '\n' + fs.readFileSync(path.join(logsDir, 'dsh-web.log'), 'utf8').slice(-40000); } catch {}
+    }
+    if (isEncodingMismatch(text)) {
+      const home = process.env.DSH_HOME || path.join(os.homedir(), '.dsh');
+      const archived = healSessionEncodingConflicts(path.join(home, 'sessions'), { compression: 'zstd', log });
+      if (archived.length) applied.push('会话编码冲突自愈：已归档 ' + archived.length + ' 个相反格式的遗留会话日志');
+    }
+  } catch (err) {
+    log('session-heal', 'preRetry 会话编码自愈失败: ' + String((err && err.message) || err));
+  }
+  // 2) pnpm allowBuilds 自动放行（原 V4.2 逻辑）。
+  try {
+    const ab = await allowBuildsPreRetry(errText);
+    if (ab && Array.isArray(ab.applied)) applied.push(...ab.applied);
+    else if (ab) applied.push('pnpm allowBuilds 自动放行');
+  } catch (err) {
+    log('guard', 'preRetry allowBuilds 失败: ' + String((err && err.message) || err));
+  }
+  return applied.length ? { applied } : false;
 }
 
 // V4.2：启动失败链的 pnpm allowBuilds 自动放行钩子（preRetry）。
@@ -3725,9 +3768,7 @@ function readLnkSafe(p) {
 }
 
 function lnkTargetsApp(lnkPath, target) {
-  const link = readLnkSafe(lnkPath);
-  if (!link || !link.target) return false;
-  return path.resolve(String(link.target)).toLowerCase() === path.resolve(target).toLowerCase();
+  return shortcutTargetsApp(readLnkSafe(lnkPath), target);
 }
 
 function lnkUsesManagedIcon(lnkPath, ico) {
@@ -3737,6 +3778,16 @@ function lnkUsesManagedIcon(lnkPath, ico) {
   // 无自定义图标（icon 为空，用 target 自带）视为可接管。
   if (!link.icon) return true;
   return path.resolve(String(link.icon)).toLowerCase() === path.resolve(ico).toLowerCase();
+}
+
+function collectDesktopShortcutEntries(dirs) {
+  const rows = [];
+  for (const { scope, dir } of dirs) {
+    for (const filePath of listLnkFiles(dir)) {
+      rows.push({ scope, dir, filePath, link: readLnkSafe(filePath) });
+    }
+  }
+  return rows;
 }
 
 function maintainShortcuts() {
@@ -3750,39 +3801,53 @@ function maintainShortcuts() {
     const policy = settings.shortcutPolicy === 'never' ? 'never' : 'auto';
     const linksDir = path.join(app.getPath('appData'), 'Microsoft', 'Windows', 'Start Menu', 'Programs');
     const APP_TITLE = 'Deepseek Harness EAC';
-    const desktopDir = app.getPath('desktop');
+    const userDesktopDir = app.getPath('desktop');
+    const desktopDirs = desktopShortcutDirs(userDesktopDir, process.env.PUBLIC);
     const startMenu = path.join(linksDir, APP_TITLE + '.lnk');
-    const desktop = path.join(desktopDir, APP_TITLE + '.lnk');
+    const desktop = path.join(userDesktopDir, STANDARD_SHORTCUT_NAME);
     const ico = shortcutIconPath();
     const opts = {
       target,
-      description: 'DeepSeek Harness 桌面客户端',
+      description: RUNTIME_SHORTCUT_DESCRIPTION,
       ...(ico ? { icon: ico, iconIndex: 0 } : {}),
       appUserModelId: 'com.deepseek.dsh.desktop',
     };
+    const portable = Boolean(process.env.PORTABLE_EXECUTABLE_FILE);
     let changed = false;
     // 清理旧名称（DSH Desktop）快捷方式：改名后它们指向的 exe 已不存在。
-    for (const legacy of [
-      path.join(linksDir, 'DSH Desktop.lnk'),
-      path.join(desktopDir, 'DSH Desktop.lnk'),
-    ]) {
+    const legacyShortcuts = [path.join(linksDir, 'DSH Desktop.lnk')];
+    for (const { dir } of desktopDirs) legacyShortcuts.push(path.join(dir, 'DSH Desktop.lnk'));
+    for (const legacy of legacyShortcuts) {
       try { if (fs.existsSync(legacy)) { fs.rmSync(legacy); changed = true; } } catch {}
     }
-    // exe 被移动过或图标设计更新：只刷新「确认属于本应用」的快捷方式。
-    // 归属判定：target 指向当前 exe，或指向上次记录的 exe 位置（搬家后
-    // 的旧快捷方式）；指向其它程序的 .lnk 绝不动。
+    let desktopEntries = collectDesktopShortcutEntries(desktopDirs);
+    // exe 被移动过或图标设计更新：开始菜单照常维护；桌面仅刷新便携版
+    // 运行时原样生成的快捷方式。安装版桌面快捷方式统一交给 NSIS，用户
+    // 改名/换图标/加参数后的快捷方式也不再覆盖。
     const targetMoved = settings.shortcutTarget && settings.shortcutTarget !== target;
     const iconOutdated = settings.shortcutIcon !== SHORTCUT_ICON_VERSION;
     if (targetMoved || iconOutdated) {
-      const isOurs = (p) => fs.existsSync(p)
-        && (lnkTargetsApp(p, target) || (targetMoved && lnkTargetsApp(p, settings.shortcutTarget)));
-      const candidates = [startMenu].concat(policy === 'never' ? [] : listLnkFiles(desktopDir));
-      for (const p of candidates) {
-        if (!isOurs(p)) continue;
-        // 仅图标过时且用户自定义了图标：尊重用户选择，跳过；target 移动
-        // 时即使图标被自定义也要修指向（否则快捷方式失效）。
-        if (!targetMoved && !lnkUsesManagedIcon(p, ico)) continue;
-        try { shell.writeShortcutLink(p, 'replace', opts); changed = true; } catch {}
+      const startMenuOwn = fs.existsSync(startMenu)
+        && shortcutTargetsApp(readLnkSafe(startMenu), target, targetMoved ? settings.shortcutTarget : null);
+      if (startMenuOwn && (targetMoved || lnkUsesManagedIcon(startMenu, ico))) {
+        try { shell.writeShortcutLink(startMenu, 'replace', opts); changed = true; } catch {}
+      }
+      if (portable && policy !== 'never') {
+        let desktopRefreshed = false;
+        for (const entry of desktopEntries) {
+          const kind = classifyManagedShortcut(entry, {
+            target,
+            previousTarget: targetMoved ? settings.shortcutTarget : null,
+            managedIcon: ico,
+          });
+          if (kind !== 'runtime') continue;
+          try {
+            shell.writeShortcutLink(entry.filePath, 'replace', opts);
+            changed = true;
+            desktopRefreshed = true;
+          } catch {}
+        }
+        if (desktopRefreshed) desktopEntries = collectDesktopShortcutEntries(desktopDirs);
       }
     }
     // 开始菜单快捷方式：系统通知（Toast）的前置条件，按 target 匹配维护。
@@ -3790,15 +3855,28 @@ function maintainShortcuts() {
     if (!startMenuOk) {
       try { shell.writeShortcutLink(startMenu, 'create', opts); changed = true; } catch {}
     }
-    // 桌面快捷方式：policy=never 不创建；已有任意名称指向本应用的 .lnk
-    // （用户自定义/改名/换图标后的产物）即视为存在，绝不重复新建。
-    if (policy !== 'never' && !fs.existsSync(desktop)) {
-      const hasOursOnDesktop = listLnkFiles(desktopDir).some((p) => lnkTargetsApp(p, target));
-      if (!hasOursOnDesktop) {
-        try { shell.writeShortcutLink(desktop, 'create', opts); changed = true; } catch {}
-      } else {
-        log('boot', '检测到用户自定义的桌面快捷方式（指向本应用），不再重复创建');
+    // 桌面快捷方式采用单一创建者：安装版只由 NSIS 创建，便携版才由
+    // 运行时创建。扫描个人桌面 + 公共桌面，旧版留下的重复项只删除可
+    // 明确识别为软件原样生成的 .lnk；用户改名/换图标/加参数的一律保留。
+    const desktopPlan = planDesktopShortcutMaintenance({
+      entries: desktopEntries,
+      target,
+      previousTarget: targetMoved ? settings.shortcutTarget : null,
+      managedIcon: ico,
+      portable,
+      policy,
+    });
+    for (const duplicate of desktopPlan.removals) {
+      try {
+        fs.rmSync(duplicate);
+        changed = true;
+        log('boot', '已清理软件生成的重复桌面快捷方式: ' + duplicate);
+      } catch (err) {
+        log('boot', '清理重复桌面快捷方式失败（已保留）: ' + duplicate + ': ' + err.message);
       }
+    }
+    if (desktopPlan.create) {
+      try { shell.writeShortcutLink(desktop, 'create', opts); changed = true; } catch {}
     }
     if (changed) {
       settings.shortcutTarget = target;

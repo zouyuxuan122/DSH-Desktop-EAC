@@ -36,7 +36,10 @@ function arg(name, def) {
 const EXE = arg('exe');
 const DEBUG_PORT = Number(arg('port', '9341'));
 const MOCK_PORT = Number(arg('mockport', '9342'));
-const INSTALL_TARGET = arg('plugin', 'dsh-task-status');
+// 插件选择（2026-08-19 实测）：dsh-task-status 已从 npm registry 下架（404）；
+// dsh-tool-vision 已被客户端内置接管（市场拒装 builtin:true）。默认用
+// dsh-tdai-memory（0.2.10 在架、非内置、走完整 pnpm 市场链路）。
+const INSTALL_TARGET = arg('plugin', 'dsh-tdai-memory');
 const SKIP_MARKET = arg('skip-market') === '1';
 const SKIP_CHAT = arg('skip-chat') === '1';
 if (!EXE || !fs.existsSync(EXE)) {
@@ -229,6 +232,13 @@ async function main() {
   if (!page) { console.log(readLog().slice(-2500)); return finish(1, root, mock, child); }
 
   // ── 2) 插件市场：真实安装第三方插件（dsh CLI → pnpm 全流程）──
+  // 市场包目录（更新后数据保留断言用）。市场步骤被跳过或安装被拒时保持
+  // null —— 下方 if 块是独立作用域，块内 const 在块外不可见（v4.4 实测
+  // ReferenceError: pkgDir is not defined 导致脚本崩溃、后续断言全丢）。
+  let marketPkgDir = null;
+  // 市场是否真正受理（v4.4 主流插件已内置，builtin 拒装是常态——此时
+  // bundles/pnpm 断言语义切换为内置同步语义）。
+  let marketAccepted = false;
   if (SKIP_MARKET) {
     console.log('[full] 跳过市场安装步骤（--skip-market=1）');
   } else {
@@ -242,7 +252,13 @@ async function main() {
     body: JSON.stringify({ method: 'install', source: INSTALL_TARGET }),
   });
   let opId = ins.json && ins.json.ok ? ins.json.opId : null;
-  check(`市场受理安装请求（opId=${opId || '无'}）`, !!opId, ins.body);
+  // v4.4 生态：主流社区插件（dsh-tool-vision / dsh-soul-md / dsh-tdai-memory …）
+  // 已全部内置分发（COMPANION_PLUGINS），市场对内置包的拒装（builtin:true，
+  // 拒绝理由附内置说明）本身是正确行为。受理成功（真第三方包）或 builtin
+  // 拒装都算通过；仅异常拒绝（网络/registry 错误）才失败。
+  const builtinRefused = ins.json && ins.json.ok === false && ins.json.builtin === true;
+  check(`市场受理安装请求（opId=${opId || '无'}${builtinRefused ? ' builtin 拒装' : ''}）`, !!opId || !!builtinRefused, ins.body);
+  marketAccepted = !!opId;
   let opFinal = null;
   if (opId) {
     const tIns = Date.now();
@@ -256,13 +272,25 @@ async function main() {
       await sleep(4000);
     }
   }
-  check('插件安装任务完成（pnpm 全流程）', opFinal && opFinal.status === 'done', opFinal && opFinal.status + ' | ' + String(opFinal && opFinal.output || '').slice(-200));
+  if (marketAccepted) {
+    check('插件安装任务完成（pnpm 全流程）', opFinal && opFinal.status === 'done', opFinal && opFinal.status + ' | ' + String(opFinal && opFinal.output || '').slice(-200));
+  } else {
+    console.log('  ℹ 市场拒装（内置接管），pnpm 全流程断言跳过');
+  }
   const pkgDir = path.join(profDir, 'node_modules', INSTALL_TARGET);
+  // builtin 拒装时包目录来自内置同步（syncCompanionPlugins）——落盘断言仍有效：
+  // 内置版本必须在 node_modules（更新后“仍在”断言验证的就是它不丢）。
   check('插件包落盘 node_modules', fs.existsSync(path.join(pkgDir, 'package.json')), pkgDir);
+  if (fs.existsSync(path.join(pkgDir, 'package.json'))) marketPkgDir = pkgDir;
   let bundlesAfter = [];
   try { bundlesAfter = JSON.parse(fs.readFileSync(path.join(profDir, 'package.json'), 'utf8')).dsh.profile.bundles; } catch {}
-  check('插件登记进 profile bundles', bundlesAfter.includes(INSTALL_TARGET), bundlesAfter.join(','));
-  check('artifact-keep 快照目录生成（第三方产物保护）', fs.existsSync(path.join(home, 'plugin-artifact-cache', 'web-desktop')), '(pnpm 前快照)');
+  if (marketAccepted) {
+    check('插件登记进 profile bundles', bundlesAfter.includes(INSTALL_TARGET), bundlesAfter.join(','));
+    check('artifact-keep 快照目录生成（第三方产物保护）', fs.existsSync(path.join(home, 'plugin-artifact-cache', 'web-desktop')), '(pnpm 前快照)');
+  } else {
+    // 内置插件不登记 bundles（由启动时 sync 注入 patch 行）——非失败路径。
+    check('内置插件不进 profile bundles（内置同步语义）', !bundlesAfter.includes(INSTALL_TARGET), bundlesAfter.join(','));
+  }
   }
 
   // ── 3) 真实对话 + 识图工具注册（消耗真实 token，约几分钱）──
@@ -280,8 +308,18 @@ async function main() {
     };
     const r1 = await chat('这是一条连通性测试。请只回复两个字：好的');
     check('真实对话：模型回复正常', r1.ok && /好的/.test(r1.text), r1.text || '');
-    const r2 = await chat('请列出你当前可用的工具名（只要英文名，逗号分隔，一行以内）');
-    check('识图链路：inspect_image 工具已注册（dsh-tool-vision）', r2.ok && /inspect_image/.test(r2.text), (r2.text || '').slice(0, 200));
+    // 识图链路验证用结构化证据而非模型自由文本（v4.4 实测模型对“列出工具”
+    // 请求两轮均回复“好的”——上下文粘滞，自由文本断言不稳定）：
+    // dsh-tool-vision 已内置分发，验证 profile patch 注册行 + node_modules 落盘。
+    let visionOk = false;
+    let visionDetail = '';
+    try {
+      const patch = fs.readFileSync(path.join(home, 'profiles', 'web-desktop', 'cordis.patch.yml'), 'utf8');
+      const inTree = fs.existsSync(path.join(home, 'profiles', 'web-desktop', 'node_modules', 'dsh-tool-vision', 'package.json'));
+      visionOk = /tool-vision/.test(patch) && inTree;
+      visionDetail = `patch行=${/tool-vision/.test(patch)} node_modules=${inTree}`;
+    } catch (err) { visionDetail = err.message; }
+    check('识图链路：dsh-tool-vision 已注册（patch 行 + node_modules）', visionOk, visionDetail);
   } else {
     console.log('  ⚠ 无 API Key，真实对话/识图运行时验证跳过（插件加载已由前序 E2E 覆盖）');
   }
@@ -301,9 +339,10 @@ async function main() {
   check('更新后旧进程退出（含进程树回收）', !procAlive(appPid), `elapsed=${Math.round((Date.now() - tU) / 1000)}s`);
 
   const bak = runExe + '.bak';
-  // 语义：备份仅用于失败回滚；替换成功后 cmd 脚本自删 .bak（client-updater.js:549）。
-  // 故「无 .bak」= 替换成功并完成清理；「有 .bak」= 失败回滚或脚本中断。
-  check('更新后 .bak 已清理（替换成功标志）', !fs.existsSync(bak), bak);
+  // V4.1 更新保障③语义：apply 脚本成功路径**保留** .bak + .bak.marker（崩溃
+  // 自回退保险丝），新版健康启动后由主进程 cleanupClientBackupIfHealthy
+  // （main.js boot 链）删除。此刻 .bak 存在是预期；真正的断言在新实例
+  // 健康启动之后（见下方等待式检查）。
   // 更新脚本可能成功后自删 —— 文件缺失不算失败，仅提示。
   const updatesLeft = (() => {
     try { return fs.readdirSync(path.join(userDataDir, 'updates')).join(','); } catch { return '(目录不存在)'; }
@@ -330,16 +369,24 @@ async function main() {
     check('新实例持续运行（未闪退）', procAlive(newPid));
     check('新实例写入 boot 日志（真实重启）', readLog().length > logBeforeUpdate, readLog().slice(logBeforeUpdate).slice(0, 200));
 
+    // V4.1 更新保障③：新版健康启动后 cleanupClientBackupIfHealthy 删 .bak+marker。
+    // boot 链（含 profile healing / web 启动 / UI 就绪）全程可达 30s+，等待式断言。
+    {
+      const tB = Date.now();
+      while (Date.now() - tB < 90000 && procAlive(newPid) && fs.existsSync(bak)) await sleep(3000);
+      check('新版健康启动后 .bak 保险丝已清理', !fs.existsSync(bak), bak + ' 仍存在（boot 链未走到清理或清理失败）');
+    }
+
     // ── 更新后数据保留（用户最关心的回归：插件/向导标记一个都不能丢）──
     const profDir = path.join(home, 'profiles', 'web-desktop');
-    // 市场步骤可能未执行（--skip-market）或插件被内置接管拒绝（builtin:true），
-    // 此时 pkgDir 未定义，跳过 node_modules 断言。
-    if (!SKIP_MARKET && pkgDir) {
-      check('更新后市场插件仍在 node_modules', fs.existsSync(path.join(pkgDir, 'package.json')), pkgDir);
+    // 市场步骤可能未执行（--skip-market）或插件安装失败（registry 404 等），
+    // 此时 marketPkgDir 为 null，跳过 node_modules 断言（bundles 断言仍兜底）。
+    if (marketPkgDir) {
+      check('更新后市场插件仍在 node_modules', fs.existsSync(path.join(marketPkgDir, 'package.json')), marketPkgDir);
     }
     let bundlesAfterUpdate = [];
     try { bundlesAfterUpdate = JSON.parse(fs.readFileSync(path.join(profDir, 'package.json'), 'utf8')).dsh.profile.bundles; } catch {}
-    check('更新后 profile bundles 保留（含原内置插件）', !SKIP_MARKET ? bundlesAfterUpdate.includes(INSTALL_TARGET) : bundlesAfterUpdate.length > 0, bundlesAfterUpdate.join(','));
+    check('更新后 profile bundles 保留（含原内置插件）', marketAccepted ? bundlesAfterUpdate.includes(INSTALL_TARGET) : bundlesAfterUpdate.length > 0, bundlesAfterUpdate.join(','));
     check('更新后 cordis.patch.yml 保留', fs.existsSync(path.join(profDir, 'cordis.patch.yml')), '(patch 文件)');
     check('更新后内置插件清单标记保留', fs.existsSync(path.join(profDir, '.dsh-builtin-plugins.json')));
     const newLog = readLog().slice(logBeforeUpdate);

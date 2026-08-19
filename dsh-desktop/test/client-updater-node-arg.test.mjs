@@ -41,8 +41,7 @@ test('applyUpdate inlines the bundled node exe into the script body', () => {
   // 生产环境中 updates/ 由下载器创建（Setup 就躺在里面）；applyUpdate 只写文件不建目录
   fs.mkdirSync(path.join(dir, 'updates'), { recursive: true });
   const prevFile = process.env.PORTABLE_EXECUTABLE_FILE;
-  // oldExe 取 PORTABLE_EXECUTABLE_FILE → taskkill 只会打不存在的假名，
-  // 不会误杀正在跑测试的 node.exe（process.execPath 默认值的风险）。
+  // oldExe 取 PORTABLE_EXECUTABLE_FILE，便于断言安装版参数与脚本内容。
   process.env.PORTABLE_EXECUTABLE_FILE = path.join(dir, 'FakeOldApp.exe');
   try {
     const ctx = { userDataDir: dir, log() {} };
@@ -59,7 +58,12 @@ test('applyUpdate inlines the bundled node exe into the script body', () => {
     });
     assert.ok(recordedSpawns.length >= 1, 'spawn must have been called');
     const last = recordedSpawns[recordedSpawns.length - 1];
-    assert.equal(last.cmd, 'cmd.exe');
+    assert.equal(path.basename(last.cmd).toLowerCase(), 'powershell.exe');
+    assert.equal(last.args[last.args.indexOf('-WindowStyle') + 1], 'Hidden');
+    assert.equal(
+      last.args[last.args.indexOf('-ActionScriptPath') + 1],
+      path.join(dir, 'updates', 'apply-update.cmd')
+    );
     // 写盘的脚本必须内联 node 路径（% 转义 %%），且不得依赖 PATH node，
     // 也不得用 %~10 / shift 接参数（两条均已实测会坏）。
     const scriptText = fs.readFileSync(path.join(dir, 'updates', 'apply-update.cmd'), 'utf8');
