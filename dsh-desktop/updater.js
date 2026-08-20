@@ -147,9 +147,20 @@ function runNpm(ctx, args, { timeoutMs = 30 * 60 * 1000, logStream = null, onOut
     let settled = false;
     let stdoutBuf = '';
     const finish = (fn, value) => { if (!settled) { settled = true; clearTimeout(timer); clearTimeout(stallTimer); activeProc = null; fn(value); } };
-    const timer = setTimeout(async () => {
+    const finishAfterKill = async (error) => {
+      if (settled) return;
+      // Lock the result before taskkill: on Windows the child can emit
+      // `exit` while taskkill is still completing, which must not replace a
+      // timeout/stall error with a generic npm exit-code error.
+      settled = true;
+      clearTimeout(timer);
+      clearTimeout(stallTimer);
+      activeProc = null;
       await killProc(proc);
-      finish(reject, new Error('npm 执行超时（' + Math.round(timeoutMs / 1000) + ' 秒）'));
+      reject(error);
+    };
+    const timer = setTimeout(async () => {
+      await finishAfterKill(new Error('npm 执行超时（' + Math.round(timeoutMs / 1000) + ' 秒）'));
     }, timeoutMs);
     // 停滞检测：stallMs > 0 时，超过阈值没有产生任何输出即判死（触发
     // 调用方切换镜像源），避免「卡住但没到整体超时」的长时间空转。
@@ -158,8 +169,7 @@ function runNpm(ctx, args, { timeoutMs = 30 * 60 * 1000, logStream = null, onOut
       if (!stallMs) return;
       if (stallTimer) clearTimeout(stallTimer);
       stallTimer = setTimeout(async () => {
-        await killProc(proc);
-        finish(reject, new Error('下载停滞（' + Math.round(stallMs / 1000) + ' 秒无进展），将切换镜像源重试'));
+        await finishAfterKill(new Error('下载停滞（' + Math.round(stallMs / 1000) + ' 秒无进展），将切换镜像源重试'));
       }, stallMs);
     };
     const onChunk = (c) => {
