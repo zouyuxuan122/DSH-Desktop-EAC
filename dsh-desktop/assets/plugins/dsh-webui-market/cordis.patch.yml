@@ -1,0 +1,7 @@
+# dsh-webui-market-plugin bundle patch: mounts the plugin market over the web
+# profile. The host half registers the /api/dsh-market HTTP route; the client
+# half contributes the "Plugin Market" tab under Settings → Plugins.
+
+- insert:
+    - id: dsh-market-plugin
+      name: '@sanqi-normal/dsh-webui-market-plugin'

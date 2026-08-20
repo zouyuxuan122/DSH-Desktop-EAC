@@ -1,0 +1,61 @@
+{
+  "name": "@sanqi-normal/dsh-webui-market-plugin",
+  "description": "In-harness community plugin market for the dsh web GUI: browse awesome-dsh-plugin.com, install and uninstall plugins into a profile",
+  "version": "0.1.2",
+  "type": "module",
+  "main": "lib/host.js",
+  "exports": {
+    ".": "./lib/host.js",
+    "./client": "./lib/client.js",
+    "./cordis.patch.yml": "./cordis.patch.yml",
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "lib/",
+    "data/",
+    "cordis.patch.yml",
+    "README.md",
+    "LICENSE"
+  ],
+  "keywords": [
+    "dsh",
+    "agent-harness",
+    "plugin",
+    "market",
+    "web",
+    "ui"
+  ],
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Sanqi-normal/dsh-webui-market-plugin.git"
+  },
+  "homepage": "https://github.com/Sanqi-normal/dsh-webui-market-plugin",
+  "bugs": {
+    "url": "https://github.com/Sanqi-normal/dsh-webui-market-plugin/issues"
+  },
+  "engines": {
+    "node": "^22.19.0 || >=24.0.0"
+  },
+  "scripts": {
+    "test": "node --test tests/*.test.mjs",
+    "snapshot": "node scripts/snapshot.mjs"
+  },
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    },
+    "client": {
+      "platform": "web"
+    }
+  },
+  "peerDependencies": {
+    "react": "^18.2.0",
+    "@deepseek-ai/cordis": "*",
+    "@deepseek-ai/dsh-client-runtime": "*",
+    "@deepseek-ai/dsh-client-ui-slots": "*"
+  },
+  "publishConfig": {
+    "access": "public"
+  }
+}

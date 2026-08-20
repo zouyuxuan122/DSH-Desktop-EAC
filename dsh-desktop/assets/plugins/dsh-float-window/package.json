@@ -1,0 +1,20 @@
+{
+  "name": "@deepseek-ai/dsh-float-window",
+  "version": "0.1.0",
+  "private": true,
+  "description": "DSH Desktop 配套浮窗：把会话弹出到独立窗口，实现分屏多任务",
+  "type": "module",
+  "main": "lib/index.js",
+  "exports": {
+    ".": { "default": "./lib/index.js" },
+    "./client": { "default": "./lib/client.js" },
+    "./package.json": "./package.json"
+  },
+  "license": "MIT",
+  "dsh": {
+    "client": {
+      "inject": ["@deepseek-ai/dsh-client-ui-conversation"],
+      "platform": "web"
+    }
+  }
+}

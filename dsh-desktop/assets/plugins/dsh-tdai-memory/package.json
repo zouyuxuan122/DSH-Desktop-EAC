@@ -1,0 +1,68 @@
+{
+    "name":  "dsh-tdai-memory",
+    "version":  "0.2.7",
+    "description":  "DeepSeek Harness 的 TencentDB Agent Memory 移植：L0 对话捕获 → L1 结构化记忆提取 → L2 场景/L3 画像，自动召回注入 + 记忆/对话搜索工具；复用现有 ~/.memory-tencentdb/memory-tdai 数据；附 Web UI 设置栏。",
+    "type":  "module",
+    "main":  "index.js",
+    "exports":  {
+                    ".":  "./index.js",
+                    "./client":  "./client.js",
+                    "./package.json":  "./package.json"
+                },
+    "dsh":  {
+                "client":  {
+                               "platform":  "web"
+                           }
+            },
+    "homepage":  "https://github.com/Scorp1o117/dsh-tdai-memory",
+    "files":  [
+                  "index.js",
+                  "recall-inject.js",
+                  "client.js",
+                  "vendor",
+                  "README.md",
+                  "README.zh.md",
+                  "LICENSE",
+                  "THIRD-PARTY-NOTICES.md"
+              ],
+    "keywords":  [
+                     "dsh",
+                     "dsh-plugin",
+                     "deepseek-harness",
+                     "memory",
+                     "tencentdb",
+                     "agent-memory",
+                     "rag",
+                     "vector-search",
+                     "persona"
+                 ],
+    "license":  "MIT",
+    "engines":  {
+                    "node":  "\u003e=22.18"
+                },
+    "repository":  {
+                       "type":  "git",
+                       "url":  "git+https://github.com/Scorp1o117/dsh-tdai-memory.git"
+                   },
+    "bugs":  {
+                 "url":  "https://github.com/Scorp1o117/dsh-tdai-memory/issues"
+             },
+    "dependencies":  {
+                         "@ai-sdk/openai":  "^3.0.53",
+                         "@deepseek-ai/schemastery":  "^3.18.1",
+                         "@node-rs/jieba":  "^2.0.1",
+                         "@tencentdb-agent-memory/tcvdb-text":  "^0.1.1",
+                         "ai":  "^6.0.164",
+                         "json5":  "^2.2.3",
+                         "sqlite-vec":  "0.1.7-alpha.2",
+                         "undici":  "^8.1.0"
+                     },
+    "optionalDependencies":  {
+                                 "node-llama-cpp":  "^3.19.1"
+                             },
+    "peerDependencies":  {
+                             "react":  "^18.2.0",
+                             "@deepseek-ai/dsh-tools":  "^0.1.0-rc.6",
+                             "@deepseek-ai/dsh-settings":  "^0.1.0-rc.6"
+                         }
+}

@@ -1,0 +1,124 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8" />
+<title>DSH Desktop</title>
+<style>
+  :root { color-scheme: dark; }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body { height: 100%; }
+  body {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 18px;
+    background: radial-gradient(1200px 600px at 50% -10%, #2a1b4d 0%, #0b1220 55%);
+    color: #e6ecff;
+    font-family: "Segoe UI", "Microsoft YaHei", system-ui, sans-serif;
+    user-select: none;
+  }
+  .card {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 14px;
+    max-width: 520px;
+    padding: 30px 36px;
+    border: 1px solid rgba(255, 255, 255, 0.09);
+    border-radius: 16px;
+    background: rgba(255, 255, 255, 0.03);
+  }
+  .mark {
+    width: 56px; height: 56px; border-radius: 50%;
+    display: grid; place-items: center;
+    background: rgba(255, 122, 133, 0.14);
+    color: #ff7a85; font-size: 30px; line-height: 1;
+  }
+  h1 { font-size: 20px; font-weight: 600; letter-spacing: 0.5px; }
+  .desc { font-size: 13px; color: #a9b8de; line-height: 22px; text-align: center; }
+  .note { font-size: 12px; color: #6f82b8; line-height: 20px; text-align: center; }
+  .details {
+    font-size: 11.5px; color: #5f6f9c; line-height: 18px; text-align: center;
+    font-family: Consolas, "Courier New", monospace;
+  }
+  .actions { display: flex; gap: 10px; margin-top: 4px; flex-wrap: wrap; justify-content: center; }
+  button {
+    appearance: none; border: 1px solid rgba(255, 255, 255, 0.16);
+    background: rgba(255, 255, 255, 0.06); color: #e6ecff;
+    font: inherit; font-size: 13px; line-height: 20px;
+    padding: 8px 18px; border-radius: 9px; cursor: pointer;
+    transition: background 0.12s, border-color 0.12s;
+  }
+  button:hover { background: rgba(255, 255, 255, 0.12); border-color: rgba(255, 255, 255, 0.3); }
+  button.primary {
+    background: #3d5ce6; border-color: #4d6bf0;
+  }
+  button.primary:hover { background: #4d6bf0; }
+  button.danger { color: #ffb3ba; }
+  button.danger:hover { background: rgba(232, 17, 35, 0.25); border-color: rgba(255, 122, 133, 0.5); }
+  .status { font-size: 12px; color: #8b9ac4; min-height: 16px; }
+</style>
+</head>
+<body>
+  <div class="card">
+    <div class="mark">⚠</div>
+    <h1>界面遇到问题</h1>
+    <p class="desc">界面渲染进程多次异常退出，已暂停自动恢复。</p>
+    <p class="note">你的数据与后台任务不受影响，仍在继续运行。<br>可以先尝试重新加载界面；若问题持续，请重启客户端。</p>
+    <p class="details" id="details"></p>
+    <div class="actions">
+      <button class="primary" id="reload" type="button">重新加载界面</button>
+      <button id="openLogs" type="button">打开日志目录</button>
+      <button class="danger" id="restart" type="button">重启客户端</button>
+    </div>
+    <p class="status" id="status"></p>
+  </div>
+  <script>
+    (function () {
+      var $ = function (id) { return document.getElementById(id); };
+      var setStatus = function (text) { $('status').textContent = text || ''; };
+      var esc = function (s) {
+        return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) {
+          return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
+        });
+      };
+      var bridge = window.dshDesktop && window.dshDesktop.recovery;
+      if (!bridge) {
+        setStatus('无法连接桌面客户端桥接，请重启客户端。');
+        return;
+      }
+      bridge.getState().then(function (info) {
+        if (!info) return;
+        var lines = [];
+        if (info.appVersion) lines.push('DSH Desktop v' + esc(info.appVersion));
+        var st = info.state;
+        if (st && st.lastFailure) {
+          var f = st.lastFailure;
+          lines.push('最近异常: ' + esc(f.reason) + (f.exitCode != null ? ' (exitCode=' + esc(f.exitCode) + ')' : ''));
+          lines.push('发生时间: ' + esc(String(f.at || '').replace('T', ' ').slice(0, 19)));
+          lines.push('尝试次数: ' + esc(st.failures));
+        }
+        if (info.logsDir) lines.push('日志目录: ' + esc(info.logsDir));
+        if (info.crashDumpsDir) lines.push('崩溃转储: ' + esc(info.crashDumpsDir));
+        $('details').textContent = lines.join('\n');
+      }).catch(function () {});
+
+      $('reload').addEventListener('click', function () {
+        setStatus('正在重新加载…');
+        bridge.reload().then(function (r) {
+          if (r && r.ok) setStatus('正在加载界面…');
+          else setStatus('重新加载失败：' + ((r && r.error) || '未知错误'));
+        }).catch(function (e) { setStatus('重新加载失败：' + String(e && e.message || e)); });
+      });
+      $('restart').addEventListener('click', function () {
+        setStatus('正在重启客户端…');
+        bridge.restart();
+      });
+      $('exportLogs').addEventListener('click', function () {
+        bridge.exportLogs();
+      });
+    })();
+  </script>
+</body>
+</html>

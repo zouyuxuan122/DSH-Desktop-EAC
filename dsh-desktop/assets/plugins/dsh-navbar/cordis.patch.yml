@@ -1,0 +1,4 @@
+# dsh-navbar bundle：向组合挂 Node half（空 apply，行为全在 client）
+- insert:
+    - id: dsh-navbar
+      name: '@vlln/dsh-navbar'

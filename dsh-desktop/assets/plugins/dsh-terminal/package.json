@@ -1,0 +1,20 @@
+{
+  "name": "@deepseek-ai/dsh-terminal",
+  "version": "0.1.0",
+  "private": true,
+  "description": "DSH Desktop 配套终端：与对话/轨迹/文件并列的会话内交互式命令行（SSE 流式，非 PTY）",
+  "type": "module",
+  "main": "lib/index.js",
+  "exports": {
+    ".": { "default": "./lib/index.js" },
+    "./client": { "default": "./lib/client.js" },
+    "./package.json": "./package.json"
+  },
+  "license": "MIT",
+  "dsh": {
+    "client": {
+      "inject": ["@deepseek-ai/dsh-client-ui-conversation"],
+      "platform": "web"
+    }
+  }
+}

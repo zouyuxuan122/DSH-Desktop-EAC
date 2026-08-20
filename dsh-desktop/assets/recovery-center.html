@@ -1,0 +1,185 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>恢复中心 — Deepseek Harness EAC</title>
+<style>
+  :root { color-scheme: dark; }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; font: 13px/1.6 "Segoe UI", "Microsoft YaHei", sans-serif;
+    background: #0b1220; color: #dbe4f0;
+  }
+  header {
+    display: flex; align-items: center; gap: 10px;
+    padding: 10px 16px; border-bottom: 1px solid #1d2a44;
+    position: sticky; top: 0; background: #0b1220; z-index: 2;
+  }
+  header h1 { font-size: 15px; margin: 0; flex: 1; }
+  header .sub { color: #7c8db0; font-size: 12px; }
+  main { padding: 12px 16px 24px; }
+  .banner {
+    padding: 8px 12px; border-radius: 6px; margin-bottom: 12px; font-size: 12px;
+    background: #16233c; border: 1px solid #243756;
+  }
+  .banner.err { background: #3a1620; border-color: #5c2433; color: #ffb3c0; }
+  .banner.ok { background: #122f1e; border-color: #1f4d31; color: #a9e8c0; }
+  table { width: 100%; border-collapse: collapse; }
+  th, td { text-align: left; padding: 6px 8px; border-bottom: 1px solid #1a2740; vertical-align: top; }
+  th { color: #8ea3c8; font-weight: 600; font-size: 12px; white-space: nowrap; }
+  td.id { font-family: Consolas, monospace; white-space: nowrap; }
+  .risk { font-size: 11px; padding: 1px 7px; border-radius: 9px; white-space: nowrap; }
+  .risk.legacy-cordis { background: #4a2f16; color: #ffcf9e; }
+  .risk.trusted-core { background: #163a2a; color: #9fe6c0; }
+  .risk.isolated-sdk { background: #16334a; color: #9fd2f0; }
+  .state { font-size: 11px; white-space: nowrap; }
+  .state.failed, .state.quarantined { color: #ff9db0; }
+  .state.installed, .state.running { color: #9fe6c0; }
+  .state.disabled { color: #8ea3c8; }
+  .err-line { color: #ff9db0; font-size: 12px; max-width: 420px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; display: inline-block; }
+  .btns button {
+    margin: 2px 4px 2px 0; padding: 3px 10px; font-size: 12px; cursor: pointer;
+    background: #1b2c4a; color: #dbe4f0; border: 1px solid #2c4370; border-radius: 5px;
+  }
+  .btns button:hover { background: #24375c; }
+  .btns button.danger { border-color: #6b2a3c; color: #ffb3c0; }
+  section h2 { font-size: 13px; color: #8ea3c8; margin: 18px 0 6px; }
+  pre#logtail {
+    background: #070d18; border: 1px solid #1a2740; border-radius: 6px;
+    padding: 10px; max-height: 220px; overflow: auto; font-size: 11.5px; white-space: pre-wrap;
+  }
+  .toolbar { margin-bottom: 10px; display: flex; gap: 8px; flex-wrap: wrap; }
+  .toolbar button {
+    padding: 5px 12px; font-size: 12px; cursor: pointer;
+    background: #1b2c4a; color: #dbe4f0; border: 1px solid #2c4370; border-radius: 5px;
+  }
+  .toolbar button.warn { border-color: #6b5a2a; color: #ffe2a9; }
+  .empty { color: #7c8db0; padding: 16px 0; }
+</style>
+</head>
+<body>
+<header>
+  <h1>恢复中心</h1>
+  <span class="sub" id="meta">加载中…</span>
+</header>
+<main>
+  <div class="banner" id="banner">本页独立于 Web UI 运行：可在此停用、移除、回滚或隔离问题插件后重试启动。</div>
+  <div class="toolbar">
+    <button id="btn-retry">重试启动 Web 服务</button>
+    <button id="btn-safemode" class="warn" title="重启应用并禁用全部非核心外置插件">安全模式重启</button>
+    <button id="btn-snapshot">创建配置快照</button>
+    <button id="btn-rollback" class="warn" title="回滚到最后良好快照并重启 Web 服务">回滚最后良好快照</button>
+    <button id="btn-export">导出诊断包</button>
+  </div>
+  <section>
+    <h2>已安装插件</h2>
+    <table>
+      <thead>
+        <tr><th>插件</th><th>类型</th><th>来源</th><th>状态</th><th>最近错误</th><th>操作</th></tr>
+      </thead>
+      <tbody id="rows"><tr><td colspan="6" class="empty">加载中…</td></tr></tbody>
+    </table>
+  </section>
+  <section>
+    <h2>桌面日志尾部（desktop.log）</h2>
+    <pre id="logtail">…</pre>
+  </section>
+</main>
+<script>
+'use strict';
+const $ = (id) => document.getElementById(id);
+const esc = (s) => String(s == null ? '' : s)
+  .replace(/[&<>"']/g, (c) => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+
+async function act(action, value) {
+  try { return await window.rc.action(action, value); }
+  catch (e) { return { ok: false, error: String(e) }; }
+}
+
+function banner(text, kind) {
+  const b = $('banner');
+  b.textContent = text;
+  b.className = 'banner' + (kind ? ' ' + kind : '');
+}
+
+async function refresh() {
+  const st = await act('status');
+  if (!st || !st.ok) { banner('状态读取失败：' + (st && st.error), 'err'); return; }
+  $('meta').textContent = 'v' + st.appVersion + ' · profile: ' + st.profile +
+    ' · 快照 ' + st.snapshots.length + ' · 事故 ' + st.incidents.length;
+  const tb = $('rows');
+  if (!st.plugins.length) {
+    tb.innerHTML = '<tr><td colspan="6" class="empty">注册表为空（尚未登记插件档案）</td></tr>';
+  } else {
+    tb.innerHTML = st.plugins.map((p) => {
+      const ops = [];
+      if (p.enabled) ops.push(`<button data-act="disable" data-id="${esc(p.id)}">停用</button>`);
+      else ops.push(`<button data-act="enable" data-id="${esc(p.id)}">启用</button>`);
+      ops.push(`<button data-act="remove" data-id="${esc(p.id)}" class="danger">移除</button>`);
+      if (p.state === 'failed' || p.state === 'quarantined') {
+        ops.push(`<button data-act="unquarantine" data-id="${esc(p.id)}">解除隔离</button>`);
+      } else {
+        ops.push(`<button data-act="quarantine" data-id="${esc(p.id)}" class="danger">隔离</button>`);
+      }
+      const err = p.lastError
+        ? `<span class="err-line" title="${esc(p.lastError)}">${esc(p.lastError)}</span><br><span class="sub">${esc(p.lastErrorAt || '')}</span>`
+        : '—';
+      return `<tr>
+        <td class="id">${esc(p.id)}${p.version ? '<br><span class="sub">v' + esc(p.version) + '</span>' : ''}</td>
+        <td><span class="risk ${esc(p.risk)}">${esc(p.risk)}</span></td>
+        <td>${esc(p.source)}</td>
+        <td class="state ${esc(p.state)}">${esc(p.state)}${p.enabled ? '' : '<br>(已停用)'}</td>
+        <td>${err}</td>
+        <td class="btns">${ops.join('')}</td>
+      </tr>`;
+    }).join('');
+  }
+  const logs = await act('read-log', 'desktop.log');
+  $('logtail').textContent = logs && logs.ok ? logs.tail : '(日志不可读)';
+}
+
+$('rows').addEventListener('click', async (ev) => {
+  const btn = ev.target.closest('button[data-act]');
+  if (!btn) return;
+  const id = btn.dataset.id;
+  const action = btn.dataset.act;
+  btn.disabled = true;
+  const r = await act(action, id);
+  btn.disabled = false;
+  if (r && r.ok) {
+    banner(action + ' 已执行：' + id + (r.restartRequired ? '（重启 Web 服务后生效）' : ''), 'ok');
+  } else {
+    banner(action + ' 失败：' + ((r && r.error) || '未知错误'), 'err');
+  }
+  refresh();
+});
+
+$('btn-retry').addEventListener('click', async () => {
+  banner('正在重试启动 Web 服务…');
+  const r = await act('retry-boot');
+  if (r && r.ok) banner('Web 服务已重新拉起。', 'ok');
+  else banner('重试失败：' + ((r && r.error) || '未知错误'), 'err');
+});
+$('btn-safemode').addEventListener('click', async () => {
+  const r = await act('safe-mode');
+  if (!(r && r.ok)) banner('安全模式重启失败：' + ((r && r.error) || ''), 'err');
+});
+$('btn-snapshot').addEventListener('click', async () => {
+  const r = await act('snapshot');
+  banner(r && r.ok ? '快照已创建。' : '快照失败：' + ((r && r.error) || ''), r && r.ok ? 'ok' : 'err');
+  refresh();
+});
+$('btn-rollback').addEventListener('click', async () => {
+  const r = await act('rollback-last-good');
+  if (r && r.ok) banner('已回滚到最后良好快照，可重试启动。', 'ok');
+  else banner('回滚失败：' + ((r && r.error) || '无可回滚快照'), 'err');
+});
+$('btn-export').addEventListener('click', async () => {
+  const r = await act('export-logs');
+  banner(r && r.ok ? '诊断包已导出：' + r.zipPath : '导出失败：' + ((r && r.error) || ''), r && r.ok ? 'ok' : 'err');
+});
+
+refresh();
+</script>
+</body>
+</html>

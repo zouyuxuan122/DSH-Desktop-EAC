@@ -1,0 +1,44 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8" />
+<title>Deepseek Harness EAC v1.0</title>
+<style>
+  :root { color-scheme: dark; }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body { height: 100%; }
+  body {
+    /* 无边框窗口：整页作为拖拽区，启动期间窗口仍可拖动 */
+    -webkit-app-region: drag;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 26px;
+    background: radial-gradient(1200px 600px at 50% -10%, #1b2a6b 0%, #0b1220 55%);
+    color: #e6ecff;
+    font-family: "Segoe UI", "Microsoft YaHei", system-ui, sans-serif;
+    user-select: none;
+  }
+  .icon { width: 88px; height: 88px; border-radius: 22%; background: #f6f8fc; padding: 12px; box-sizing: border-box; box-shadow: 0 10px 32px rgba(0,0,0,.45); }
+  .spinner {
+    width: 52px; height: 52px;
+    border: 4px solid rgba(122, 150, 255, 0.25);
+    border-top-color: #5b8cff;
+    border-radius: 50%;
+    animation: spin 0.9s linear infinite;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  h1 { font-size: 22px; font-weight: 600; letter-spacing: 0.5px; }
+  p { font-size: 13px; color: #93a5d8; }
+  .hint { font-size: 12px; color: #5f6f9c; }
+</style>
+</head>
+<body>
+  <img class="icon" src="icon.png" alt="Deepseek Harness EAC v1.0" draggable="false" />
+  <div class="spinner"></div>
+  <h1>DeepSeek Harness 正在启动…</h1>
+  <p>正在本机启动 dsh web 服务，首次启动可能需要几十秒。</p>
+  <p class="hint">Deepseek Harness EAC v1.0 — 数据目录中的日志可帮助排查启动问题。</p>
+</body>
+</html>

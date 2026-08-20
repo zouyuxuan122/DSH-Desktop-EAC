@@ -1,0 +1,176 @@
+appId: com.deepseek.dsh.desktop
+# No version suffix in productName: a versioned install dir gets nested on
+# upgrades (.../v1.0/v2.0) when the registry keeps the old INSTALLDIR, which
+# pushes deep node_modules paths past MAX_PATH — the NSIS 7z extractor then
+# silently drops those files and dsh web crashes with MODULE_NOT_FOUND (issue #4).
+productName: Deepseek Harness EAC
+copyright: MIT License
+# 仅保留中英文，移除 Electron 其余语言包（.pak，约 80MB），不影响功能体验。
+electronLanguages:
+  - en-US
+  - zh-CN
+directories:
+  output: dist
+  buildResources: build
+
+# electron-builder strips nested node_modules from extraResources; this hook
+# restores the bundled npm CLI's own dependencies after packing.
+afterPack: scripts/after-pack.js
+
+# Native modules (sharp / node-pty / koffi) are loaded by the bundled plain
+# node.exe, so keep everything as real files and never rebuild for Electron.
+asar: false
+npmRebuild: false
+buildDependenciesFromSource: false
+
+files:
+  - main.js
+  # Task 1.x/2.x：lib/ 为 tsc 原地编译产物（prepack 时生成），bundled-files 防呆覆盖。
+  - lib/state.js
+  - lib/log.js
+  - lib/proc.js
+  - lib/paths.js
+  - lib/bridge.js
+  - lib/run-state.js
+  - lib/watchdog-boot.js
+  - lib/server.js
+  - lib/terminal.js
+  - lib/preview.js
+  - lib/market-modules.js
+  - lib/window.js
+  - lib/tray.js
+  - lib/session-heal.js
+  - lib/plugin-copy.js
+  - lib/plugin-registry-data.js
+  - lib/plugin-manager-core.js
+  - lib/plugins.js
+  - lib/market-ops.js
+  - lib/migration.js
+  - lib/guard.js
+  - lib/preflight.js
+  - lib/onboarding.js
+  - lib/balance-ui.js
+  - lib/shortcuts.js
+  - lib/update-flow.js
+  - lib/ipc/index.js
+  - lib/ipc/sender.js
+  - lib/ipc/app.js
+  - lib/ipc/recovery.js
+  - lib/ipc/plugin.js
+  - lib/ipc/onboard.js
+  - lib/ipc/session.js
+  - lib/boot.js
+  # 门面背后的实现子目录（Task 6/14 拆分；bundled-files 闭包测试防漏）：
+  - lib/logger/index.js
+  - lib/logger/api.js
+  - lib/logger/redact.js
+  - lib/logger/rotate.js
+  - lib/logger/diagnostics.js
+  - lib/client-update/index.js
+  - lib/client-update/types.js
+  - lib/client-update/net.js
+  - lib/client-update/release.js
+  - lib/client-update/download.js
+  - lib/client-update/apply.js
+  - lib/plugin-guard/index.js
+  - lib/plugin-guard/ctx.js
+  - lib/plugin-guard/snapshot.js
+  - lib/plugin-guard/scan.js
+  - lib/plugin-guard/heal.js
+  - lib/renderer-recovery/policy.js
+  - lib/renderer-recovery/load.js
+  - lib/renderer-recovery/machine.js
+  - lib/supervisor/registry.js
+  - lib/supervisor/state-machine.js
+  - lib/supervisor/incidents.js
+  - lib/supervisor/permissions.js
+  - lib/supervisor/installer.js
+  - lib/extension-host/rpc.js
+  - lib/extension-host/job-fence.js
+  - lib/extension-host/manager.js
+  - lib/extension-host/bridge-server.js
+  - lib/extension-host/sdk/index.js
+  - lib/recovery-center/register.js
+  - shared/protocol.js
+  # VNext Phase 2：Host 进程入口（内置 node.exe 拉起）与 Rust 围栏预编译产物
+  # （predist 经 scripts/build-native.js copy 强制校验存在）。
+  - host-bootstrap.js
+  - native/supervisor/index.node
+  - updater.js
+  - client-updater.js
+  - logger.js
+  - plugin-updater.js
+  - balance.js
+  - session-watcher.js
+  - session-encoding-heal.js
+  - profile-module-heal.js
+  - patch-row-heal.js
+  - builtin-collision.js
+  - plugin-manager-state.js
+  - plugin-guard.js
+  - preset-sync.js
+  - error-detail.js
+  - bundle-integrity.js
+  - stable-port.js
+  - koffi-preflight.js
+  - renderer-recovery.js
+  - watchdog.js
+  - preload.js
+  - preload/api.js
+  - preload/chrome.js
+  - assets/**/*
+  # 运行时脚本：koffi 预检探针（scripts/koffi-preflight.cjs）、会话删除补丁与
+  # 插件启停手术脚本（main.js 启动时 require）等必须在成品里存在。
+  - scripts/koffi-preflight.cjs
+  - scripts/patch-session-manage.js
+  - scripts/plugin-manager-patch.js
+  - scripts/onboarding.js
+  - scripts/make-release-hashes.js
+  - package.json
+  - "!**/*.md"
+  # `!**/*.md` above would strip every .md from node_modules too, which removes
+  # the SKILL.md files the bundled @deepseek-ai/dsh ships for its agent presets
+  # and silently breaks the 创造模式 skills. Re-include them: later patterns
+  # override earlier ones.
+  - "**/SKILL.md"
+
+extraResources:
+  - from: vendor/node/node.exe
+    to: node/node.exe
+  - from: vendor/npm
+    to: npm
+
+win:
+  icon: build/icon.png
+  target:
+    - target: portable
+      arch:
+        - x64
+    - target: nsis
+      arch:
+        - x64
+
+# No ${version} in artifact names: the README links to
+# releases/latest/download/<fixed-name>.exe, which must stay valid across
+# releases (hard-coded v2.0.1 names 404'd after v2.0.2 shipped).
+portable:
+  artifactName: Deepseek-Harness-EAC-Portable-${arch}.${ext}
+  # 稳定缓存目录名：配合 scripts/patch-portable-template.js 复用已解压目录，
+  # 避免每次启动都解压 app-64.7z（Defender 扫描 2.4 万文件导致分钟级冷启动）。
+  unpackDirName: deepseek-harness-eac-portable
+
+nsis:
+  artifactName: Deepseek-Harness-EAC-Setup-${arch}.${ext}
+  include: build/installer.nsh
+  oneClick: false
+  perMachine: false
+  allowToChangeInstallationDirectory: true
+  # V4：always 会在每次升级（含自动更新拉起的静默安装）时无条件重建桌面
+  # 快捷方式，与用户自定义/改名/换图标的快捷方式并存成两个。改为 true
+  # （尊重安装向导勾选项）；运行时维护见 main.js maintainShortcuts。
+  createDesktopShortcut: true
+  createStartMenuShortcut: true
+  shortcutName: Deepseek Harness EAC
+  uninstallDisplayName: Deepseek Harness EAC
+
+publish: null

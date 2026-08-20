@@ -1,0 +1,105 @@
+# Tasks
+
+> 纪律：每个任务完成后必须 `npm test` 全绿（457+ pass）+ `npm run typecheck`（tsc --noEmit）零错误 + check-syntax 通过，然后独立 git commit（只 add 本任务涉及文件，勿带入用户的 package-lock.json 改动）。同时间仅一个子任务改 main，严格顺序执行。
+
+- [x] Task 0: 建立分支、TS 工具链与安全网
+  - [x] 0.1 从当前 HEAD 创建并切换到 `refactor/vnext-ts-isolation` 分支
+  - [x] 0.2 记录基线：`npm test`（457 pass）+ check-syntax 通过
+  - [x] 0.3 验证 `extract-css.mjs` 零引用后删除，commit（5054930）
+  - [x] 0.4 引入 `typescript` devDep + `tsconfig.json`（strict/noUncheckedIndexedAccess/exactOptionalPropertyTypes/allowJs 过渡）；新增 `build`/`typecheck` scripts；先以 shared/protocol.ts 验证编译管线，commit（e60d6e9）
+  - [x] 0.5 验证 Rust 工具链可用（cargo 1.97.1 OK；rustc 组件缺失已在后台修复，Task 10 前复查）
+- [x] Task 1: 基础模块提取 + TS 化（state/paths/proc + shared/protocol 雏形）
+  - [x] 1.1 `lib/state.ts`：main.js 顶层共享可变状态迁为强类型 `AppState` 单例（e9f9e94）
+  - [x] 1.2 `lib/paths.ts`：路径围栏/profile/扩展目录解析（936174b）
+  - [x] 1.3 `lib/proc.ts`：子进程工具与运行时定位（936174b，含 lib/log.ts 统一日志通道）
+  - [x] 1.4 `shared/protocol.ts` 雏形（e60d6e9，后续任务持续扩充类型）
+  - [x] 1.5 对应测试迁移 `.test.ts`；builder files/check-syntax/bundled-files 适配 → 全量回归 + typecheck + commit（450/450 全绿）
+- [x] Task 2: 运行状态与服务生命周期（TS）（df57ac4）
+  - [x] 2.1 `lib/run-state.ts`（run-state 心跳 + 便携版崩溃自回退 + 24h 备份清理确认）
+  - [x] 2.2 `lib/watchdog-boot.ts`（startWatchdog/startJunctionWatchdog/detectExternalDsh）+ 适配 recovery-integration 断言指向
+  - [x] 2.3 `lib/server.ts`（childEnv/stablePortCtx/startServer/watchServerProc/waitUntilUp/startAndShow(Guarded)/bootRescuePreRetry/allowBuildsPreRetry/restartWebServiceCore）；附带 lib/bridge.ts 跨域注入点与 lib/market-modules.ts 加载器
+  - [x] 2.4 `lib/terminal.ts`、`lib/preview.ts` → 回归 450/450 全绿 + typecheck 零错 + commit
+- [x] Task 3: 窗口/托盘（TS）（2d0d9f2）
+  - [x] 3.1 `lib/window.ts`（showBox/isAllowedWebUrl/attachEditContextMenu/createWindow/浮窗族/initRendererRecovery/wireWindowRecovery/startHeartbeatLoop/reloadMainWindow）
+  - [x] 3.2 `lib/tray.ts`（createTray/trayHintOnce/closeToTray*/getExitAction/setExitAction/askExitAction/showMainWindow/showAbout/repoUrls）+ 适配 context-menu 测试
+  - [x] 3.3 回归 450/450 全绿 + commit
+- [x] Task 4: IPC 分域（TS）（3319dce）【实际 5→4 顺序执行】
+  - [x] 4.1 registerChromeIpc 拆为 `lib/ipc/{sender,app,recovery,plugin,onboard,session,index}.ts`，channel 名与行为不变
+  - [x] 4.2 适配 recovery-integration 断言（指向 lib/ipc/recovery + lib/boot，markCleanExit 计全部 quit 路径）→ 回归 + commit
+- [x] Task 5: 更新流与其余模块（TS）+ main 定型【5a=7381549，5b=84173b1，4+5.4=3319dce】
+  - [x] 5.1 `lib/update-flow.ts`（agent 流 + 内置插件更新检查 + 客户端流 + 待装提示 + 启动失败救援 + 进度窗/推送器共用）
+  - [x] 5.2 plugins 域 7 模块（7381549）：plugin-registry-data/plugin-copy/plugin-manager-core/plugins/market-ops/session-heal + d.ts 垫片
+  - [x] 5.3 `lib/guard.ts`/`lib/preflight.ts`/`lib/onboarding.ts`/`lib/balance-ui.ts`/`lib/shortcuts.ts`（84173b1）；migration/session-heal 在 5a
+  - [x] 5.4 `lib/boot.ts`（boot 全链/handleBootFailure/fatal/verifyBundledModules）+ `lib/ipc/*` → **main.js 定型 119 行**（目标 <400 达成）
+  - [x] 环境修复：electron dist 缺失致测试挂起 → ELECTRON_MIRROR=npmmirror 重装
+  - [x] 验证基线：450/450 全绿 + typecheck 零错（每里程碑）
+- [x] Task 6: 大文件门面化（TS）
+  - [x] 6.1 `client-updater` → `lib/client-update/{types,net,release,download,apply,index}.ts`，根 `client-updater.ts` re-export 门面（17 导出不变；apply 的 spawn 保持调用期属性查找 —— node-arg 测试的 spawn 拦截依赖此语义）
+  - [x] 6.2 `logger` → `lib/logger/{redact,rotate,api,index}.ts` 门面（named exports + `_testExports` 逐项一致 + `maskStringByPrefix` 兼容别名；pino/archiver 缺失优雅降级保留）
+  - [x] 6.3 `plugin-guard` → `lib/plugin-guard/{ctx,snapshot,scan,heal,index}.ts` 门面（createGuard 方法面不变；heal 内 healProfileModuleShadowing 3 参签名补进 d.ts 垫片）
+  - [x] 6.4 `preload` → `preload/{api,chrome}.ts` + 根 `preload.ts` 薄壳（window.dshDesktop API 面逐项一致；preload.js 编译产物路径不变，webPreferences/打包清单零改动；tsconfig 加 DOM lib）
+  - [x] 6.5 契约测试全绿（titlebar-strip/recovery-integration 断言按语义等价迁移指向 preload/chrome.js、preload/api.ts）→ 全量 487/487 + typecheck 零错 → commit
+- [x] Task 7: 剩余源码全 TS 收口
+  - [x] 7.1 `updater.ts`/`balance.ts`/`session-watcher.ts`/`watchdog.ts`/`stable-port.ts`/`koffi-preflight.ts`/`renderer-recovery.ts`/`bundle-integrity.ts`/`builtin-collision.ts`/`patch-row-heal.ts`/`preset-sync.ts`/`plugin-manager-state.ts`/`profile-module-heal.ts`/`session-encoding-heal.ts`/`error-detail.ts`/`wsl-backend.js→ts` 等其余根模块（批次 A+B=7582df7、C-1=6f3e4e8、C-2=b428f80）
+  - [x] 7.2 `scripts/*.js` 全量 → `.ts`（批次 1=9844c48 小工具、批次 2=492a750 构建/打包链、批次 3=223d1f6 onboarding/patch 双补丁、批次 4=94bacc0 after-pack/e2e×3/sim/analyze/repair + zstd-frames 去重提取；运行时被 spawn 的脚本走 tsc 原地产物，spawn 路径不变）
+  - [x] 7.3 剩余测试文件全量 `.test.ts`；`allowJs: false` 收口，仓库无自有 `.js/.mjs` 源（62 个测试 Node 26 type-stripping 直跑 + scripts/test-runner.ts 运行时选择器 + 删冗余 openclaw-dsh-bridge/research 目录）
+  - [x] 7.4 全量回归 + typecheck + `npm run build` + commit（487/487 + Rust 10/10 + 零错）
+- [x] Task 8: Phase 0 — 恢复中心与稳定面（ff3b01e）
+  - [x] 8.1 `assets/recovery-center.html` + 专用 preload + `lib/recovery-center/register.ts`（单通道 rc:action：状态/启停/移除/隔离/重试/安全模式/快照/回滚/日志尾部/诊断包）
+  - [x] 8.2 三入口：托盘常驻菜单、handleBootFailure+fatal 首按钮、`DSH_DESKTOP_RECOVERY=1` 直开（跳过常规 boot）
+  - [x] 8.3 插件档案落 `<DSH_HOME>/extensions/registry.json`（启动失败归因 recordStartFailure；boot 链 archivePluginProfiles）
+  - [x] 8.4 市场覆盖围栏测试固化（patchHasForeignRows/removeMarketDuplicate/builtin-migrate 快照）
+  - [x] 8.5 安全模式（非核心新行禁用 + 既有启用行强制压禁用）；7 测试 → 457/457 + commit
+- [x] Task 9: Phase 1 — 注册表/状态机/原子安装/权限模型（61bc09c）
+  - [x] 9.1 `lib/supervisor/state-machine.ts`（§8 全转移 + 退避/阈值隔离/稳定清零，含 running→quarantined 修复）+ `lib/supervisor/incidents.ts` 留痕
+  - [x] 9.2 `lib/supervisor/installer.ts`：staging→hashTree(SHA-256)→.rollback→原子切换；失败自动恢复；Core Profile 零写入（逐字节断言）
+  - [x] 9.3 `lib/supervisor/permissions.ts`：deny-by-default + 高风险安装前强制确认 + granted 落档案
+  - [x] 9.4 Legacy 建档（upsertLegacyPlugin：builtin/market → legacy-cordis）
+  - [x] 9.5 6 测试全绿（463/463）；修复测试污染真实 ~/.dsh（state 单例写错对象 + 防呆断言）→ commit
+- [x] Task 10: Phase 2 — Extension Host + RPC + Rust Job Object 围栏
+  - [x] 10.1 `lib/extension-host/rpc.ts`：长度前缀帧 JSON-RPC（nanoid ID、超时）
+  - [x] 10.2 `host-bootstrap.ts`：Host 进程入口 + init 握手（此前不载插件代码）+ 心跳应答 + **权限门执行**（deny-by-default：net/fs/shell/env 未授权即不可见）
+  - [x] 10.3 `lib/extension-host/manager.ts`：并行 spawn/心跳超时/退避重启/超阈值隔离（驱动状态机）；boot 成功链拉起 + before-quit 树杀接线；修复状态机 `starting→quarantined` 缺失导致连续启动失败卡死
+  - [x] 10.4 **Rust 原生模块 `native/supervisor`（napi-rs）**：
+    - [x] 10.4.1 脚手架：cargo crate + `#[napi]` 导出（create_job/assign_to_job/terminate_job/job_alive/close_job/sha256_stream）+ `npm run build:native`/`test:native`/`clippy:native`
+    - [x] 10.4.2 **实现注记（与 spec 的工程偏差）**：Node 26 libuv 在 Windows 已弃用 CRT fd 表，`_open_osfhandle` 产出的 fd 对 Node 流全部 EBADF → 原子 spawn-into-job 无法把 stdio 交还 Node。落地为**混合围栏**：Node spawn 持有 stdio 管道 + Rust `assign_to_job`（OpenProcess+Assign）绑入 Job；spawn 与 assign 的毫秒级窗口由协议闭合（host-bootstrap 收到 init 前不加载任何插件代码），效果等价。KILL_ON_JOB_CLOSE、PROCESS_MEMORY 上限、CPU_RATE 配额均保留；另修复 JOBOBJECTINFOCLASS 枚举值误记（BasicAccounting=1 非 2）
+    - [x] 10.4.3 流式 SHA-256（供 installer 复用）；`cargo clippy -D warnings` 零告警 + `cargo test` 10 项全绿（含布局断言/句柄回收/KILL_ON_CLOSE 语义）；本机 link.exe 在 Win10 1607 启动即 0xC0000139 → 统一走工具链自带 rust-lld（scripts/build-native.js 自动拷贝注入）
+    - [x] 10.4.4 `lib/extension-host/job-fence.ts`：Rust 模块加载器 + 类型包装 + 缺失/失败优雅降级（警告日志 + taskkill 树回收）；`.node`（367KB 预编译产物）入库 + electron-builder files 收录 + predist/prepack 经 build-native.js copy 强制校验
+  - [x] 10.5 测试：extension-host.test.mjs（帧协议/RpcPeer/围栏/sha256）+ extension-host-manager.test.mjs 9 项故障注入（init 握手/kill -9 重启/连续失败隔离/调用级超时/死循环判死/权限门/降级路径/内存配额/Supervisor 崩溃无孤儿——driver 子进程验证 KILL_ON_JOB_CLOSE 整树回收）→ 全量 481/481 + typecheck 零错 + cargo 全绿 → commit
+- [x] Task 11: Phase 2 — SDK V1 + Core Bridge + 样板
+  - [x] 11.1 `lib/extension-host/sdk/`：registerTool（dsh 风格参数描述符 + 轻量校验）/事件订阅（ctx.on + broadcastEvent）/受控上下文注入（provideContext，宿主 500ms/provider + 传输级超时丢弃）/设置命名空间（data/settings.json 原子写）/日志/心跳（host 自动应答）+ deny-by-default 权限门
+  - [x] 11.2 Core Bridge：`lib/extension-host/bridge-server.ts`（127.0.0.1 回环 + 一次性 token，childEnv 注入）+ 受信 cordis 组件 `dsh-eac-core-bridge`（工具 eac_<pluginId>_<tool> 桥接、60s 增量补注册、system-prompt/assemble 上下文注入 1.2s 超时丢弃返回原 assembly）；工具失败返回错误文本由 Agent 可见，核心回合继续
+  - [x] 11.3 `assets/sdk-plugins/sample-sdk-plugin/`（echo/status 工具 + 上下文贡献 + 设置 + 事件订阅；boot 首启幂等安装 + 随包分发）；**踩坑记录**：Node ≥ 24 global fetch 默认走环境代理（用户 0.0.0.0 代理使回环 EADDRNOTAVAIL）→ 桥接通道统一 node:http 直连；bridge-server 端口必须等 listening 事件后再读
+  - [x] 11.4 ~~迁移 1 个简单伴生插件~~ **并入 11.3 说明**：候选 dsh-auto-compact 的价值全在浏览器半边（host 半为 no-op），属 Phase 3 外置 UI 范畴；SDK V1 样板由 sample-sdk-plugin 承担（零侵入注册 Agent 工具的活样板），伴生插件整体迁移待 Phase 3 UI 协议
+  - [x] 11.5 测试：extension-host-sdk.test.mjs 6 项（元数据/参数校验/设置持久化/上下文超时丢弃/事件广播/端点鉴权全链路/mock cordis 真实 HTTP 桥接）→ 全量 487/487 + typecheck 零错 → commit
+- [x] Task 12: 性能专项
+  - [x] 12.1 `scripts/bench-boot.ts`：冷启动关键路径耗时 + 启动期 IO 计数，产出改造前基线（39 插件源：stamp-scan 1612.9ms / copy-skip 1109.2ms×2 / hosts 串行 949→并行 255ms；IO 计数经原生 fs 模块对象补丁——__importStar 副本属性是委托回原对象的活 getter，补丁须打在 `require('node:fs')` 原生对象上）
+  - [x] 12.2 启动扫描缓存（mtime+size 哈希）；并行拉起（Host/preset/快捷方式/余额）；懒加载非首屏模块
+    - 扫描缓存：plugin-copy 单遍走树（readdir+Dirent+每文件 1 stat，exists 3843→0）+ 戳记 {v,f,b}→{v,f,b,h}（FNV-1a over rel|size|mtimeMs，捕获同字节数就地改写）+ 进程内戳记缓存（源路径+顶层 mtimeMs 校验，boot 第 2 次 sync 1109→14.5ms）；guard trojanFindings 逐文件 (path,mtimeMs,size) 结论缓存（命中免 readFileSync+正则）
+    - Host 并行拉起：manager 已 Promise.all（bench 验证收益 76%）；preset 同步在 syncCompanionPlugins 内、快捷方式/余额首拉在窗口就绪后（均非关键路径阻塞点，无需改造）
+    - 懒加载评估：updater 被 12+ 模块扇入（tray/server/proc/paths…）、balance-ui 被 ipc/session 拉入、terminal 被 ipc/app 拉入——真正可推迟的仅 shortcuts.ts（~3ms，收益不可测）；唯一重模块 koffi 预检 V4 已异步化（boot.ts 注释）；结论：结构性扇入使懒加载为净负收益，冷启动瓶颈（插件同步 IO 3.8s）已由扫描缓存消除
+  - [x] 12.3 日志异步管线核查（pino async + 轮转不变）：管线 pino→RedactTransform（回调式 transform，行缓冲）→RotateWriteStream（终点同步写为「崩溃安全优先」既定设计，main.00-09×20MB 轮转链不变）；Task 12 改动未触碰日志链；logger-redact/logger-rotate 测试全绿
+  - [x] 12.4 bench 对比不劣化报告写入提交信息 → 回归 + commit（6f1b01c：stamp-scan -70.6% / copy-skip 冷 -60.8% 暖 -98.7% / 两次 sync 合计 2218.4→448.9ms -79.8%，全行 OK；491/491 全绿含新增 4 项缓存语义回归）
+- [x] Task 13: 注释、日志与死代码清理
+  - [x] 13.1 全部新模块文件头注释 + 非自明函数中文 JSDoc（66 个 TS 模块文件头全覆盖核验；补齐 createWindow/initRendererRecovery/wireWindowRecovery/startHeartbeatLoop/fatal/runClientUpdateFlow/guardFloatWebContents/三个 guard 域工厂/5 个 IPC 注册函数等入口级 JSDoc）
+  - [x] 13.2 日志审计（Supervisor/Host/SDK/恢复中心齐全且无重复）：四域通道核验通过 —— Supervisor 按域分 tag（state-machine/installer/registry/incidents/permissions，状态转移仅 state-machine 单点记录）；Host 族 ext-host（manager 生命周期）/ext:\<id\>:\<level\>（插件日志经 RPC log 通知转发，级别由 tag 正则映射）/ext:\<id\>:stderr/job-fence；SDK io.log → notify → 转发链闭合；恢复中心 recovery-center 独立 tag，与 guard 内部日志层级分工无重复
+  - [x] 13.3 死代码清理（仅删零引用项，全局搜索验证）：零引用导出扫描（588 导出，跨文件+定义文件+配置全文词匹配）→ 删 5 项：job-fence `_resetNativeCacheForTest`、preflight 同步版 `applyKoffiPreflight`（V4 全走 async 版）+ 连带清 spawnSync/runKoffiPreflight 导入、recovery-center `recoveryCenterOpen`、permissions `isGranted`、protocol `HostHello`（被 HostInitParams 取代）；test-only 引用项（runKoffiPreflight 等）保留 → 回归 491/491 + typecheck 零错 + commit
+- [x] Task 14: 最终验收
+  - [x] 14.1 `npm test` 全绿；typecheck 零错；check-syntax + 编译产物校验；`cargo clippy`/`cargo test` 通过；规模检查（main.ts<400、无文件>600 行、无自有 .js/.mjs 源）（2026-08-20：**npm test 492/492 全绿**（22.2s，62 测试文件）；typecheck 零错（strict+noUncheckedIndexedAccess+exactOptionalPropertyTypes）；check-syntax 16 入口产物全过；`cargo clippy` release 零告警 + `cargo test` 10/10；规模：main.ts=149 行、第一方源码无 >600 行（assets/plugins/zat-dsh-engine 两文件 1533/3336 行属 vendored 插件资产，checklist L19 明示 assets 豁免）、无第一方 .mjs；唯二 .cjs 为刻意保留的独立子进程脚本——scripts/koffi-preflight.cjs（启动前 koffi FFI 崩溃探针，须在编译产物加载前以子进程运行）与 test/fixtures/vnext-orphans-driver.cjs（孤儿回收测试的 Supervisor 替身，被 kill -9 模拟崩溃），均非 tsc 管辖的自有模块源）
+  - [x] 14.2 `npm run pack` 打包成功且 bundled-files 绿（host-bootstrap/恢复中心/示例插件/Rust `.node` 全部入包）（2026-08-20：pack 退出码 0；网络前置修复——GitHub 直连超时，手动下载 winCodeSign-2.6.0.7z（npmmirror，SHA-256 与官方钉死值 cdaec715…743a4 一致）放入 `%LOCALAPPDATA%\electron-builder\Cache\winCodeSign-2.6.0\` 归档缓存跳过下载，重跑带 ELECTRON_MIRROR+ELECTRON_BUILDER_BINARIES_MIRROR 双镜像；afterPack 全链 OK：npm CLI 118 deps 拷入、conpty arm64 裁剪、131 个 .js.map 丢弃、schemastery 注入 dsh 闭包、bundle manifest 595 包、长路径审计干净；产物核验：host-bootstrap.js、assets/recovery-center.html+preload、assets/sdk-plugins/sample-sdk-plugin、native/supervisor/index.node（359KB）、Task 6/14 拆分子目录（lib/renderer-recovery/{policy,load,machine}.js、lib/logger/diagnostics.js 等）全部在 win-unpacked 内；bundled-files 测试（含入口 require 闭包遍历）随 492/492 全绿）
+  - [x] 14.3 架构文档 §10 验收标准 1-6 逐条核验（可重复执行的测试/脚本）：
+    - §10.1 Host 插件崩溃核心对话仍可完成 → `extension-host-manager.test.ts` 三项故障注入（外部 kill -9→crash/retrying→自动重启恢复 running；工具 hang 调用级严格超时 invoke 拒绝且 Host 存活；事件循环死循环→心跳超时判死→重启恢复）+ `extension-host.test.ts` 帧协议/RpcPeer/围栏（进程隔离使核心与插件故障物理隔离）；发布门：`scripts/e2e-full.js` 真实对话链
+    - §10.2 插件启动失败仍能进恢复中心关闭/卸载 → `recovery-center.test.ts`（三入口：托盘菜单/启动失败链对话框/DSH_DESKTOP_RECOVERY=1 直开；页面与 preload 不依赖 dsh web；rc:action 单通道 + 来源校验）+ `recovery-integration.test.ts` 接线钉住 + `supervisor-phase1.test.ts` 卸载→registry uninstalled
+    - §10.3 连续失败自动隔离不再反复加载 → `extension-host-manager.test.ts`「连续启动失败 3 次→自动隔离并停手」+ `supervisor-phase1.test.ts`「§8 状态机全部合法转移可走通」（含 quarantined 态）
+    - §10.4 安装/更新/回滚不改 Core Profile 依赖图与 patch 层 → `supervisor-phase1.test.ts`「核心配置围栏：安装/卸载/回滚全程不触碰 Core Profile（§10.4）」（测试名直接锚定本条）+「原子安装：staging→切换→建档；失败自动回退保住旧版」
+    - §10.5 故障关联版本/日志/时间/恢复动作 → `supervisor-phase1.test.ts`「状态机：转移留痕 incidents，registry 落盘可读」+ `recovery-center.test.ts`「扩展注册表：档案登记/失败归因/隔离标记」「启动失败归因落扩展注册表」
+    - §10.6 无第三方插件/离线/全禁用正常启动并完成基础工作 → `recovery-center.test.ts`「安全模式：非核心插件强制禁用（新行与既有启用行）」+ `plugin-guard.test.ts` guardedBoot 三部曲（首启失败→修复重试/快照回滚/落事故，行为级）+ `scripts/sim-client-update.js`（无外网依赖的离线更新链模拟）；发布门：`scripts/e2e-v4.js`/`e2e-mario.js`/`e2e-full.js` 真实启动冒烟
+  - [x] 14.4 checklist.md 全勾 → 最终 commit（2026-08-20：全 37 项勾选完成，其中 5 项补注实现偏差说明（tsc 原地产物替代 dist/、.cjs 探针/替身豁免、bundled-files 闭包遍历实现）；Task 14.0 拆分独立 commit 35acbbc，本条为收尾 commit）
+
+# Task Dependencies
+
+- Task 0 是一切前提；0.4（TS 管线）先于所有 TS 化任务。
+- Task 1 → 2 → 3 → 4 → 5 严格顺序（均改 main 源）。
+- Task 6、7 依赖 Task 5（main 稳定后拆大文件、收口全 TS）。
+- Task 8 依赖 Task 5；Task 9 依赖 Task 8；Task 10 依赖 Task 9；Task 11 依赖 Task 10。
+- Task 12 依赖 Task 11（架构定型后测性能）；Task 13、14 依赖全部。

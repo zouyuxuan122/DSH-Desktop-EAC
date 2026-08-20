@@ -1,0 +1,52 @@
+# ============================================================
+# 根 .gitignore —— 仓库级通用忽略（依赖/产物/日志/OS/编辑器）
+# 项目专属规则（TS 编译产物、打包资源白名单）见 dsh-desktop/.gitignore
+# ============================================================
+
+# ---- 依赖 ----
+node_modules/
+
+# ---- 构建产物 ----
+# tsc 编译输出（原地 .js 产物由 dsh-desktop/.gitignore 忽略）
+dsh-desktop/dist/
+# tsc 增量编译缓存
+*.tsbuildinfo
+
+# ---- 运行时 vendor（fetch-node/fetch-npm 生成的 node.exe + npm CLI）----
+dsh-desktop/vendor/
+
+# ---- 运行时数据 / 测试沙箱 ----
+# 开发调试与更新模拟的本地数据（含真实会话，勿入库）
+.dev-data/
+.update-test/
+# 测试运行数据（dsh home / 打包探针）
+dsh-desktop/.dsh-test-home/
+dsh-desktop/.dsh-packaged-test/
+dsh-desktop/test/.dsh-home-repro/
+# 桌面壳运行数据目录
+dsh-desktop/data/
+# 更新器待装目录（下载的安装包与 .part 断点分片）
+updates/
+
+# ---- 日志与临时文件 ----
+*.log
+*.tmp
+
+# ---- OS ----
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# ---- 编辑器 / IDE ----
+.vscode/
+.idea/
+
+# ---- Python 构建产物（picturereader setup 脚本 / dsh-dafeiyu helper 等）----
+__pycache__/
+*.pyc
+
+# ---- bench 基线报告（机器相关数字，本地保留供 --compare 回归对比）----
+dsh-desktop/bench-*.json
+
+# ---- Reasonix 工具元数据（勿提交）----
+.reasonix/

@@ -1,0 +1,15 @@
+# Zat-DSH Engine bundle patch: inserts the marketplace host half into the
+# host Loader. The browser half is discovered through the `dsh.client`
+# declaration in package.json (web platform roster).
+#
+# Install with:
+#   dsh plugin --profile <name> add github:<user>/zat-dsh-engine
+#
+# The host half exports a Typert Remote service (`pluginMarket` namespace);
+# the Gateway discovers its `@Remote`-marked methods at runtime (SRC mode),
+# and the client half mounts matching strict descriptors.
+- insert:
+    - id: plugin-market
+      name: zat-dsh-engine
+      config:
+        mirror: https://gh-proxy.com/

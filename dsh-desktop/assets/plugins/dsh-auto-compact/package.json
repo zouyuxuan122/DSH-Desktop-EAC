@@ -1,0 +1,23 @@
+{
+  "name": "dsh-auto-compact",
+  "description": "自动压缩（DSH Desktop 配套插件）：监听会话 contextPressure 投影，接近上下文上限（默认 80%，可调）时自动发送 /compact —— 默认开启，对话不再撑爆上下文",
+  "version": "0.1.0",
+  "type": "module",
+  "main": "lib/index.js",
+  "exports": {
+    ".": "./lib/index.js",
+    "./client": "./lib/client.js",
+    "./package.json": "./package.json"
+  },
+  "dsh": {
+    "client": {
+      "platform": "web",
+      "inject": [
+        "@deepseek-ai/dsh-client-runtime",
+        "@deepseek-ai/dsh-client-locale",
+        "@deepseek-ai/dsh-client-ui-settings"
+      ]
+    }
+  },
+  "license": "MIT"
+}

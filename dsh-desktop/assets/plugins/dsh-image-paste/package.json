@@ -1,0 +1,22 @@
+{
+  "name": "dsh-image-paste",
+  "description": "图片粘贴发送（DSH Desktop 配套插件）：在对话输入框按 Ctrl/Cmd+V 粘贴剪贴板里的图片时，自动把图片保存到临时目录并把完整路径注入输入框（配合 inspect_image 视觉工具发送），多张图片合并提示；纯客户端 + 一个受控 IPC。",
+  "version": "0.1.0",
+  "type": "module",
+  "main": "lib/index.js",
+  "exports": {
+    ".": "./lib/index.js",
+    "./client": "./lib/client.js",
+    "./package.json": "./package.json"
+  },
+  "dsh": {
+    "client": {
+      "platform": "web",
+      "inject": [
+        "@deepseek-ai/dsh-client-runtime",
+        "@deepseek-ai/dsh-client-ui-slots"
+      ]
+    }
+  },
+  "license": "MIT"
+}

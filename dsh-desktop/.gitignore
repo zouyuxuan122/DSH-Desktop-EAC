@@ -1,0 +1,37 @@
+node_modules/
+dist/
+vendor/
+*.log
+data/
+.playwright-mcp/
+.DS_Store
+# TypeScript 编译产物：只提交 .ts 源码，.js 由 `npm run build` 原地生成
+# （scripts/koffi-preflight.cjs 为运行时探针资产，保持入库，见下方否定规则）
+/*.js
+/lib/**/*.js
+/shared/**/*.js
+/preload/*.js
+/preload-lib/**/*.js
+/scripts/*.js
+!scripts/koffi-preflight.cjs
+# Rust 围栏模块：cargo target 不入库；index.node 为预编译产物（367KB，
+# predist 经 scripts/build-native.js copy 校验后随安装包分发）
+/native/supervisor/target/
+# 临时调试 / 备份产物不入库
+debug-session-dump.cjs
+e2e-base.txt
+package.json.bak-*
+scripts/tmp-dbg*.cjs
+scripts/tmp-instrument.cjs
+# build/ 只保留图标与 NSIS 安装脚本，其余构建产物不入库
+build/*
+!build/icon.ico
+!build/icon.png
+!build/installer.nsh
+# 内置社区插件的 vendor / 自包含运行时依赖 / 离线数据必须随仓库分发，
+# 否则克隆后构建出的安装包会复现“插件命名空间不可用”（vendor 缺失）
+# 与“tdai-memory 无法启动”（sqlite-vec / jieba / BM25 语料缺失）
+!assets/plugins/*/vendor/
+!assets/plugins/*/data/
+!assets/plugins/dsh-tdai-memory/node_modules/
+!assets/plugins/dsh-tdai-memory/node_modules/**/data/

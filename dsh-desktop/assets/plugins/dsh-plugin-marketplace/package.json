@@ -1,0 +1,24 @@
+{
+  "name": "@deepseek-ai/dsh-plugin-marketplace",
+  "description": "设置页插件市场（DSH Desktop 配套插件）：浏览/搜索 npm 上的 dsh 插件并一键安装到 web profile，host 半边以 Typert Remote 驱动 npm",
+  "version": "0.1.0",
+  "type": "module",
+  "main": "lib/index.js",
+  "exports": {
+    ".": "./lib/index.js",
+    "./client": "./lib/client.js",
+    "./package.json": "./package.json"
+  },
+  "dsh": {
+    "client": {
+      "platform": "web",
+      "inject": [
+        "@deepseek-ai/dsh-api-remotes",
+        "@deepseek-ai/dsh-client-runtime",
+        "@deepseek-ai/dsh-client-ui-settings",
+        "@deepseek-ai/dsh-client-locale"
+      ]
+    }
+  },
+  "license": "MIT"
+}

@@ -1,0 +1,33 @@
+{
+  "name": "dsh-undo-savepoint",
+  "version": "0.3.3.1",
+  "description": "DSH undo/rollback system: snapshot config files on change, undo/redo the last action from the WebUI or by chat, and roll back broken plugin trees without reinstalling. Works even when DSH fails to boot (offline CLI + GUI).",
+  "type": "module",
+  "main": "lib/index.js",
+  "exports": {
+    ".": "./lib/index.js",
+    "./client": "./lib/client.js",
+    "./cordis.patch.yml": "./cordis.patch.yml",
+    "./package.json": "./package.json"
+  },
+  "scripts": {
+    "test": "node tools/smoke-test.mjs && node tools/e2e-watch.mjs",
+    "prepublishOnly": "npm test"
+  },
+  "engines": {
+    "dsh": ">=0.0.1",
+    "node": ">=20.0.0"
+  },
+  "dsh": {
+    "runtime": "host",
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    },
+    "client": {
+      "platform": "web",
+      "inject": ["slots", "locale"]
+    }
+  },
+  "files": ["lib", "tools", "cordis.patch.yml"],
+  "license": "MIT"
+}
