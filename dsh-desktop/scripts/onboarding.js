@@ -29,7 +29,6 @@ const RECOMMENDED_PLUGIN_IDS = new Set([
   'easy-setup',
   'picturereader',
   'soul-md',
-  'tdai-memory',
   'mobile-fix',
   'better-sidebar',
   'message-rewind',

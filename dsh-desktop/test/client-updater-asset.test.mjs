@@ -18,6 +18,20 @@ test('selectAsset picks version-less Setup artifact (v2.0.3+ naming)', () => {
   assert.equal(got.parts.length, 1);
 });
 
+test('selectAsset picks versioned Setup artifact (Setup-v<ver>-x64.exe naming)', () => {
+  const rel = {
+    version: '4.4.1',
+    assets: [
+      A('Deepseek-Harness-EAC-Setup-v4.4.1-x64.exe'),
+      A('Deepseek-Harness-EAC-Setup-v4.4.1-x64.exe.blockmap'),
+      A('Deepseek-Harness-EAC-Portable-v4.4.1-x64.exe'),
+    ],
+  };
+  const got = selectAsset(rel);
+  assert.equal(got.name, 'Deepseek-Harness-EAC-Setup-v4.4.1-x64.exe');
+  assert.equal(got.parts.length, 1);
+});
+
 test('selectAsset still picks legacy versioned Portable artifact (<=v2.0.2 naming)', () => {
   const rel = {
     version: '2.0.2',

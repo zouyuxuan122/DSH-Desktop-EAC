@@ -26,9 +26,9 @@ module.exports = async function afterPack(context) {
   console.log(`afterPack: bundled npm copied (deps: ${deps})`);
 
   // Same copier also strips nested node_modules / vendor trees inside the
-  // app files (assets/**). The community plugins (tdai-memory in particular)
-  // ship self-contained runtime deps (sqlite-vec, jieba, ai sdk, BM25 corpus
-  // data) that must survive verbatim — copy the plugins tree back in.
+  // app files (assets/**). The community plugins ship self-contained runtime
+  // deps (sqlite-vec, jieba, ai sdk, BM25 corpus data, dsh-dafeiyu helper)
+  // that must survive verbatim — copy the plugins tree back in.
   const pluginsSrc = path.resolve(__dirname, '..', 'assets', 'plugins');
   const pluginsDest = path.join(appOutDir, 'resources', 'app', 'assets', 'plugins');
   if (fs.existsSync(pluginsSrc)) {

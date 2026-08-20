@@ -92,6 +92,37 @@ test('healRowConfig 不把长 id 兄弟当目标行补 config（前缀 bug 回�
   assert.ok(r2.patch.includes('config:\n        x: 1\n'), '正确 id 应正常补 config');
 });
 
+test('healRowConfig 不重复补 config：name→disabled→config 形态（重复 config 事故回归）', () => {
+  // 首次安装的向导/写入组合可产生该形态；旧实现只看 name 后一行（disabled），
+  // 会再补一份 config → YAML duplicated mapping key → dsh web 启动失败。
+  const t = '- insert:\n    - id: dsh-pet\n      name: dsh-pet\n      disabled: true\n      config:\n        size: 260\n        position: "bottom-right"\n';
+  const r = healRowConfig(t, 'dsh-pet', { size: 260, position: 'bottom-right' });
+  assert.equal(r.patch, t, '块内已有 config 不得重复补');
+  assert.deepEqual(r.healed, []);
+});
+
+test('healRowConfig 不重复补 config：name→config→disabled 正常形态', () => {
+  const t = '- insert:\n    - id: dsh-pet\n      name: dsh-pet\n      config:\n        size: 260\n        position: "bottom-right"\n      disabled: true\n';
+  const r = healRowConfig(t, 'dsh-pet', { size: 260, position: 'bottom-right' });
+  assert.equal(r.patch, t, 'config 在 disabled 前同样不重复补');
+  assert.deepEqual(r.healed, []);
+});
+
+test('healRowConfig 真缺 config（name→disabled）时补一次并保留 disabled', () => {
+  const t = '- insert:\n    - id: dsh-pet\n      name: dsh-pet\n      disabled: true\n';
+  const r = healRowConfig(t, 'dsh-pet', { size: 260, position: 'bottom-right' });
+  assert.ok(r.patch.includes('config:\n        size: 260\n'), '应补 config');
+  assert.equal(r.patch.match(/config:/g).length, 1, '只补一份');
+  assert.ok(r.patch.includes('disabled: true'), 'disabled 行保留');
+});
+
+test('healRowConfig 幂等：补过一次的条目不再补', () => {
+  const once = healRowConfig('- insert:\n    - id: dsh-pet\n      name: dsh-pet\n      disabled: true\n', 'dsh-pet', { size: 260 }).patch;
+  const twice = healRowConfig(once, 'dsh-pet', { size: 260 });
+  assert.equal(twice.patch, once);
+  assert.deepEqual(twice.healed, []);
+});
+
 test('healRowConfig 给顶层 dsh-pet 行补 config 时用 2/4 缩进', () => {
   const patch = "- id: dsh-pet\n  name: 'dsh-pet'\n  disabled: true\n";
   const { patch: out, healed } = healRowConfig(patch, 'dsh-pet', { size: 260, position: 'bottom-right' });

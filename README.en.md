@@ -52,8 +52,8 @@ On top of the original, EAC embraces the community's creations — skins, plugin
 
 | File | Description | Size |
 | --- | --- | --- |
-| [Portable exe](https://github.com/zouyuxuan122/Deepseek-Harness-EAC/releases/latest/download/Deepseek-Harness-EAC-Portable-x64.exe) | No install needed, double-click to run, USB-friendly | ~167 MB |
-| [Setup exe](https://github.com/zouyuxuan122/Deepseek-Harness-EAC/releases/latest/download/Deepseek-Harness-EAC-Setup-x64.exe) | Installs to system, creates desktop/Start-Menu shortcuts | ~167 MB |
+| [Portable exe](https://github.com/zouyuxuan122/Deepseek-Harness-EAC/releases/latest/download/Deepseek-Harness-EAC-Portable-v4.4.1-x64.exe) | No install needed, double-click to run, USB-friendly | ~167 MB |
+| [Setup exe](https://github.com/zouyuxuan122/Deepseek-Harness-EAC/releases/latest/download/Deepseek-Harness-EAC-Setup-v4.4.1-x64.exe) | Installs to system, creates desktop/Start-Menu shortcuts | ~167 MB |
 
 More versions on the [Releases page](https://github.com/zouyuxuan122/Deepseek-Harness-EAC/releases).
 
@@ -121,7 +121,6 @@ More versions on the [Releases page](https://github.com/zouyuxuan122/Deepseek-Ha
 - **Project file tree + HTML/port preview**: VSCode-style tree, in-app preview of HTML files and localhost ports (loopback only)
 - **Community plugin marketplace (new in v2, dsh-webui-market)**: Settings → Plugins → Marketplace — browse plugins listed on awesome-dsh-plugin.com and install/uninstall them into the profile with one click; install/uninstall jobs are queued and run during the service restart window so the current session is never interrupted
 - **External vision models (new in v2, dsh-tool-vision)**: the `inspect_image` tool sends local image files or image URLs to any OpenAI-compatible vision endpoint (qwen-vl / GLM-4V / Ollama, ...) and brings the vision answer back into the conversation
-- **Long-term memory (new in v2, dsh-tdai-memory)**: a port of TencentDB Agent Memory — L0 conversation capture → L1 structured memory → L2 scenarios / L3 persona profiles, with automatic recall injection plus memory/conversation search tools; reuses existing `~/.memory-tencentdb/memory-tdai` data
 - **soul.md persona hot-reload (new in v2, dsh-soul-md)**: injects a markdown persona file into the system prompt (`soul:persona`), hot-reloads on file change — the agent roleplays while it works
 - **Mobile layout fixes (new in v2, dsh-web-mobile-fix)**: fixes settings panel, popups, sidebar and session header on narrow (≤400px) screens — pure client-side CSS, desktop layout untouched
 - **Easy setup (dsh-easy-setup)**: one-click vision-model provider/model picker, `soul.md` persona visual editor, one-click migration of skills + MCP + memory from Codex / Claude Code directories

@@ -21,5 +21,3 @@ build/*
 # 与“tdai-memory 无法启动”（sqlite-vec / jieba / BM25 语料缺失）
 !assets/plugins/*/vendor/
 !assets/plugins/*/data/
-!assets/plugins/dsh-tdai-memory/node_modules/
-!assets/plugins/dsh-tdai-memory/node_modules/**/data/

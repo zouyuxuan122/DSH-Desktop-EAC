@@ -2970,7 +2970,6 @@ const COMPANION_PLUGINS = [
   // 退出码 1，应用持续闪退“启动失败”）。schema 现已带默认值，这里显式
   // 写 config 是双保险，healSoulMdPatchRow 另负责修复存量坏行。
   { id: 'soul-md', name: 'dsh-soul-md', dir: 'dsh-soul-md', config: { path: 'soul.md' } },
-  { id: 'tdai-memory', name: 'dsh-tdai-memory', dir: 'dsh-tdai-memory' },
   { id: 'mobile-fix', name: 'dsh-web-mobile-fix', dir: 'dsh-web-mobile-fix' },
   // VSCode 风格右侧边栏（文件树 / 编辑器 / 终端 / Git，按会话隔离）。
   // lib/ 预编译自包含（codemirror、xterm 已内嵌），服务端仅额外依赖
@@ -3091,7 +3090,6 @@ const COMPANION_PLUGINS = [
 const PLUGIN_UPDATE_SOURCES = {
   'picturereader': { npm: 'picturereader' },
   'soul-md': { npm: 'dsh-soul-md' },
-  'tdai-memory': { npm: 'dsh-tdai-memory' },
   'dsh-pet': { npm: 'dsh-pet' },
   'better-sidebar': { npm: 'dsh-better-sidebar' },
   'dsh-navbar': { npm: '@vlln/dsh-navbar' },
@@ -3218,8 +3216,8 @@ function copyPluginPackage(profileDirP, src, name) {
   // lib 整目录随包（配套插件可能有 logic.js 等额外模块，按清单拷会漏文件
   // 导致 dsh web 启动时 ERR_MODULE_NOT_FOUND）。
   for (const f of ['package.json', 'skin.json', ...EXTRA_PACKAGE_FILES]) copyFile(f);
-  // 社区插件（soul-md / tdai-memory / tool-vision）入口在包根目录而非
-  // lib/，vendor/ 是其内置依赖，同样必须随包分发。
+  // 社区插件（soul-md / tool-vision 等）入口在包根目录而非 lib/，
+  // vendor/ 是其内置依赖，同样必须随包分发。
   for (const f of ['index.js', 'client.js', 'recall-inject.js', 'cordis.patch.yml']) copyFile(f);
   copyDir('lib');
   copyDir('preview');
@@ -3837,12 +3835,61 @@ function pluginManagerSetEnabled(id, enabled) {
   return { ok: true };
 }
 
+// 曾内置、现已从内置清单移除的插件（tdai-memory：唯一携带 node_modules 的
+// 内置插件，v4.5 起退役 —— 体积 ~310MB 占安装包近半，且 vendor 任一小缺失
+// 即 import 失败拖垮插件树）。老用户 profile 可能残留其 patch 行、node_modules
+// 副本与 package.json 依赖：行在包被清会拖垮插件树，包在行在则退役插件继续
+// 加载。启动时统一清理，避免任何残留路径。
+const RETIRED_BUILTIN_PLUGINS = [
+  { id: 'tdai-memory', name: 'dsh-tdai-memory' },
+];
+
+// 清理退役内置插件在 profile 的所有残留（patch 行 / 包副本 / 依赖项）。
+function retireRemovedBuiltinPlugins(profileDirP) {
+  for (const p of RETIRED_BUILTIN_PLUGINS) {
+    const patchFile = path.join(profileDirP, 'cordis.patch.yml');
+    try {
+      const text = fs.readFileSync(patchFile, 'utf8');
+      const patched = removePluginFromPatch(text, p.id);
+      if (patched !== text) {
+        const tmp = patchFile + '.tmp';
+        fs.writeFileSync(tmp, patched, 'utf8');
+        fs.renameSync(tmp, patchFile);
+        log('boot', `已清理退役内置插件 ${p.id} 的 profile 行`);
+      }
+    } catch (err) {
+      log('boot', `清理退役内置插件 ${p.id} 行失败: ${String((err && err.message) || err)}`);
+    }
+    const pkgDir = path.join(profileDirP, 'node_modules', ...p.name.split('/'));
+    try {
+      if (fs.existsSync(pkgDir)) {
+        fs.rmSync(pkgDir, { recursive: true, force: true });
+        log('boot', `已清理退役内置插件 ${p.id} 的 profile 包副本`);
+      }
+    } catch (err) {
+      log('boot', `清理退役内置插件 ${p.id} 包失败: ${String((err && err.message) || err)}`);
+    }
+    try {
+      const pkgFile = path.join(profileDirP, 'package.json');
+      const pkg = JSON.parse(fs.readFileSync(pkgFile, 'utf8'));
+      if (pkg.dependencies && pkg.dependencies[p.name]) {
+        delete pkg.dependencies[p.name];
+        fs.writeFileSync(pkgFile, JSON.stringify(pkg, null, 2) + '\n');
+        log('boot', `已清理退役内置插件 ${p.id} 的 package.json 依赖`);
+      }
+    } catch { /* package.json 缺失/损坏则跳过 */ }
+  }
+}
+
 function syncCompanionPlugins() {
   if (!IS_WIN) return;
   try {
     const home = dshHome || path.join(os.homedir(), '.dsh');
     // 桌面专属 profile 必须先存在（未知 profile 不会被 dsh 自动初始化）。
     ensureDesktopProfileInit();
+    // 清理已退役内置插件（tdai-memory 等）在 profile 的残留，避免
+    // 「行在包被清」拖垮插件树或退役插件继续加载。
+    retireRemovedBuiltinPlugins(desktopProfileDir());
     // V4 运行时补丁（幂等，随启动 / 服务重启 / agent 更新后重放）：
     //  · 对话删除/归档 —— dsh-session-manager 插件的全链路前置依赖；
     applySessionManageFix();

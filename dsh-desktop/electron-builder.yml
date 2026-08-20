@@ -79,17 +79,19 @@ win:
       arch:
         - x64
 
-# No ${version} in artifact names: the README links to
-# releases/latest/download/<fixed-name>.exe, which must stay valid across
-# releases (hard-coded v2.0.1 names 404'd after v2.0.2 shipped).
+# 产物名带 ${version}（Setup-v<version>-x64.exe / Portable-v<version>-x64.exe）：
+# releases/latest/download/<file>.exe 要求「最新 release 里存在同名资产」，
+# 因此每次发版必须同步更新 README.md / README.en.md 的下载链接文件名
+# （旧链接在旧 release 上仍有资产，不会 404，但 /latest/ 只认最新 release 的
+# 同名文件）。client-updater.js 的资产选择兼容固定名与两种版本位置形态。
 portable:
-  artifactName: Deepseek-Harness-EAC-Portable-${arch}.${ext}
+  artifactName: Deepseek-Harness-EAC-Portable-v${version}-${arch}.${ext}
   # 稳定缓存目录名：配合 scripts/patch-portable-template.js 复用已解压目录，
   # 避免每次启动都解压 app-64.7z（Defender 扫描 2.4 万文件导致分钟级冷启动）。
   unpackDirName: deepseek-harness-eac-portable
 
 nsis:
-  artifactName: Deepseek-Harness-EAC-Setup-${arch}.${ext}
+  artifactName: Deepseek-Harness-EAC-Setup-v${version}-${arch}.${ext}
   include: build/installer.nsh
   oneClick: false
   perMachine: false

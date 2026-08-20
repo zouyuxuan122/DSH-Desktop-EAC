@@ -252,7 +252,7 @@ async function main() {
     body: JSON.stringify({ method: 'install', source: INSTALL_TARGET }),
   });
   let opId = ins.json && ins.json.ok ? ins.json.opId : null;
-  // v4.4 生态：主流社区插件（dsh-tool-vision / dsh-soul-md / dsh-tdai-memory …）
+  // v4.4 生态：主流社区插件（dsh-tool-vision / dsh-soul-md …）
   // 已全部内置分发（COMPANION_PLUGINS），市场对内置包的拒装（builtin:true，
   // 拒绝理由附内置说明）本身是正确行为。受理成功（真第三方包）或 builtin
   // 拒装都算通过；仅异常拒绝（网络/registry 错误）才失败。
