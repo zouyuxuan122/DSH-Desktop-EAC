@@ -19,6 +19,10 @@ openclaw-dsh-bridge/dist/
 dsh-desktop/.dsh-test-home/
 dsh-desktop/.dsh-packaged-test/
 dsh-desktop/test/.dsh-home-repro/
+dsh-desktop/.dsh-test-runtime/
+
+# Standalone local test runtime kept outside the source tree when permissions allow
+.test-runtime/
 
 # Logs
 *.log

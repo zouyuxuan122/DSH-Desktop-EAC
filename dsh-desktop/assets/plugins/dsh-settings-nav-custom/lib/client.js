@@ -4,8 +4,8 @@
 //   · 枚举 slots 服务里 settings.section 条目（与官方设置页同一数据源，
 //     官方实现见 dsh-client-ui-settings-general 506-511 行）；
 //   · 在设置面板左侧导航（.nav）底部加「自定义边栏」按钮，打开浮层：
-//     按需显示/隐藏 + 上移/下移排序，localStorage 持久化
-//     （eac:settings-nav:v1），默认全显、零行为改变；
+//     按需显示/隐藏 + 拖拽排序，localStorage 持久化
+//     （eac:settings-nav:v1），首次只显示必要栏目，其余可在编辑器中恢复；
 //   · 通过 MutationObserver 跟随设置面板挂载/重渲染自动重放配置。
 //
 // 纯逻辑挂在 window.__dshSettingsNavCore 上（生产无副作用），node 测试套件
@@ -15,6 +15,44 @@
 
   // ───────────────────────── 纯逻辑（可测） ─────────────────────────
   var STORAGE_KEY = 'eac:settings-nav:v1';
+
+  // 首次使用与「恢复默认」的导航优先级。未知/后来注册的分区保持其
+  // 注册顺序并排在后面，避免新插件因为没有维护本表而消失或乱序。
+  var DEFAULT_LABEL_ORDER = [
+    '通用设置', '模型', 'Agent 预设', '人设卡', '对话管理', '价格设置',
+    '记忆', '侧边临时会话', '侧边卡片', 'Skills 与 MCP', '插件',
+    '选择向导', '插件保护', '外观 · 字体与颜色', '视觉模型', '自定义提示词',
+    '第三方模型思考强度', '自动压缩', 'AI 变更审核', '快照', '归档对话管理',
+    '一键迁移（夺舍）', 'ClawBot'
+  ];
+  var DEFAULT_VISIBLE_LABELS = [
+    '通用设置', 'Agent 预设', '模型', '对话管理', '侧边卡片', '插件',
+    '选择向导', 'Skills 与 MCP'
+  ];
+
+  function isDefaultVisible(section) {
+    var label = (section.label || '').replace(/^\s*[^\w\u4e00-\u9fff]+\s*/, '');
+    for (var i = 0; i < DEFAULT_VISIBLE_LABELS.length; i++) {
+      if (label === DEFAULT_VISIBLE_LABELS[i] || label.indexOf(DEFAULT_VISIBLE_LABELS[i]) === 0) return true;
+    }
+    return false;
+  }
+
+  function defaultConfig(sections) {
+    var hidden = new Set();
+    for (var i = 0; i < sections.length; i++) {
+      if (!isDefaultVisible(sections[i])) hidden.add(sections[i].id);
+    }
+    return { hidden: hidden, order: [] };
+  }
+
+  function defaultPriority(section) {
+    var label = (section.label || '').replace(/^\s*[^\w\u4e00-\u9fff]+\s*/, '');
+    for (var i = 0; i < DEFAULT_LABEL_ORDER.length; i++) {
+      if (label === DEFAULT_LABEL_ORDER[i] || label.indexOf(DEFAULT_LABEL_ORDER[i]) === 0) return i;
+    }
+    return DEFAULT_LABEL_ORDER.length;
+  }
 
   function parseConfig(raw) {
     var hidden = new Set();
@@ -57,28 +95,34 @@
       var s = byId.get(cfg.order[k]);
       if (s) { ordered.push(s); byId.delete(cfg.order[k]); }
     }
+    // 旧版/第三方测试或自定义 section 可能使用任意英文标签；只有识别到
+    // 官方设置导航的锚点时才启用产品默认优先级，避免改变外部 section 的
+    // 原始顺序。
+    var useDefaultPriority = visible.some(function (section) {
+      return section.label === '通用设置' || section.label === 'Agent 预设';
+    });
+    var remainder = [];
     for (var m = 0; m < visible.length; m++) {
-      if (byId.has(visible[m].id)) ordered.push(visible[m]);
+      if (byId.has(visible[m].id)) remainder.push({ section: visible[m], index: m });
     }
+    remainder.sort(function (a, b) {
+      return (useDefaultPriority ? defaultPriority(a.section) : 0) -
+        (useDefaultPriority ? defaultPriority(b.section) : 0) || a.index - b.index;
+    });
+    for (var n = 0; n < remainder.length; n++) ordered.push(remainder[n].section);
     return ordered;
   }
 
-  // dir: -1 上移 / +1 下移。未知 id 不动（no-op），保证只操作已知条目。
+  // 保留核心层的兼容 API，旧版本测试/第三方调用仍可使用；界面不再渲染
+  // 用户界面统一通过拖拽完成排序。
   function move(id, dir, cfg, knownIds) {
     var order = cfg.order.slice();
     if (knownIds.indexOf(id) === -1) return { hidden: cfg.hidden, order: order };
     var i = order.indexOf(id);
-    if (i === -1) {
-      if (dir < 0) order.unshift(id);
-      return { hidden: cfg.hidden, order: order };
-    }
+    if (i === -1) { if (dir < 0) order.unshift(id); return { hidden: cfg.hidden, order: order }; }
     var j = i + dir;
-    if (j < 0 || j >= order.length) {
-      order.splice(i, 1);
-      return { hidden: cfg.hidden, order: order };
-    }
-    order.splice(i, 1);
-    order.splice(j, 0, id);
+    if (j < 0 || j >= order.length) { order.splice(i, 1); return { hidden: cfg.hidden, order: order }; }
+    order.splice(i, 1); order.splice(j, 0, id);
     return { hidden: cfg.hidden, order: order };
   }
 
@@ -88,13 +132,27 @@
     return { hidden: hidden, order: cfg.order.slice() };
   }
 
+  // 按当前可见顺序移动条目，供拖拽排序使用。隐藏项不参与拖拽，
+  // 但其配置仍然保留，重新显示后回到自定义顺序中。
+  function reorder(id, beforeId, sections, cfg) {
+    var visible = applyConfig(sections, cfg).map(function (s) { return s.id; });
+    var from = visible.indexOf(id);
+    var to = visible.indexOf(beforeId);
+    if (from < 0 || to < 0 || from === to) return { hidden: cfg.hidden, order: cfg.order.slice() };
+    visible.splice(from, 1);
+    visible.splice(visible.indexOf(beforeId), 0, id);
+    return { hidden: cfg.hidden, order: visible };
+  }
+
   window.__dshSettingsNavCore = {
     STORAGE_KEY: STORAGE_KEY,
     parseConfig: parseConfig,
     serialize: serialize,
     applyConfig: applyConfig,
     move: move,
+    reorder: reorder,
     toggle: toggle,
+    defaultConfig: defaultConfig,
   };
 
   // ───────────────────────── DOM 粘合 ─────────────────────────
@@ -222,9 +280,27 @@
     if (el && el.parentElement) el.parentElement.removeChild(el);
   }
 
-  function editorRow(section, cfg, onChanged) {
+  function editorRow(section, cfg, onChanged, onDrop) {
     var row = document.createElement('div');
-    row.style.cssText = 'display:flex;align-items:center;gap:8px;padding:8px 4px;';
+    row.draggable = true;
+    row.style.cssText = 'display:flex;align-items:center;gap:8px;padding:8px 4px;border-radius:8px;cursor:grab;';
+    row.addEventListener('dragstart', function (ev) {
+      row.style.opacity = '.45';
+      try { ev.dataTransfer.effectAllowed = 'move'; ev.dataTransfer.setData('text/plain', section.id); } catch (e) {}
+    });
+    row.addEventListener('dragend', function () { row.style.opacity = ''; row.style.outline = ''; });
+    row.addEventListener('dragover', function (ev) {
+      ev.preventDefault();
+      row.style.outline = '2px solid var(--dsw-alias-interactive-bg,#6aa8ff)';
+    });
+    row.addEventListener('dragleave', function () { row.style.outline = ''; });
+    row.addEventListener('drop', function (ev) {
+      ev.preventDefault();
+      row.style.outline = '';
+      var source = '';
+      try { source = ev.dataTransfer.getData('text/plain'); } catch (e) {}
+      if (source && source !== section.id && onDrop) onDrop(source, section.id);
+    });
     var box = document.createElement('input');
     box.type = 'checkbox';
     box.checked = !cfg.hidden.has(section.id);
@@ -233,41 +309,16 @@
     label.textContent = section.label || section.id;
     label.style.cssText = 'flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;' +
       'color:var(--dsw-alias-label-primary,#e6e9ef);font-size:13px;';
-    function btn(txt, title) {
-      var b = document.createElement('button');
-      b.type = 'button';
-      b.textContent = txt;
-      b.title = title;
-      b.style.cssText = 'cursor:pointer;width:28px;height:28px;flex:none;border-radius:8px;' +
-        'border:1px solid var(--dsw-alias-border-secondary,#3a3f4b);' +
-        'background:transparent;color:var(--dsw-alias-label-secondary,#9aa3b2);font-size:12px;';
-      return b;
-    }
-    var up = btn('↑', '上移');
-    var down = btn('↓', '下移');
     box.addEventListener('change', function () {
       onChanged(window.__dshSettingsNavCore.toggle(section.id, cfg));
     });
-    up.addEventListener('click', function () {
-      onChanged(window.__dshSettingsNavCore.move(section.id, -1, cfg, sectionsOf(cfg, null)));
-    });
-    down.addEventListener('click', function () {
-      onChanged(window.__dshSettingsNavCore.move(section.id, 1, cfg, sectionsOf(cfg, null)));
-    });
     row.appendChild(box);
     row.appendChild(label);
-    row.appendChild(up);
-    row.appendChild(down);
     return row;
   }
 
-  // sectionsOf 由 openEditor 闭包提供；这里转发调用避免重复枚举。
-  var _knownIds = [];
-  function sectionsOf() { return _knownIds; }
-
   function openEditor(panelEl, sections, cfg) {
     removeEditor();
-    _knownIds = sections.map(function (s) { return s.id; });
     var overlay = document.createElement('div');
     overlay.className = 'eac-nav-editor';
     overlay.style.cssText = 'position:fixed;inset:0;z-index:1200;display:flex;align-items:center;' +
@@ -290,7 +341,7 @@
       'color:var(--dsw-alias-label-interactive,#6aa8ff);font-size:12px;font-family:inherit;';
     reset.addEventListener('click', function () {
       try { localStorage.removeItem(window.__dshSettingsNavCore.STORAGE_KEY); } catch (e) {}
-      var fresh = window.__dshSettingsNavCore.parseConfig(null);
+      var fresh = window.__dshSettingsNavCore.defaultConfig(sections);
       renderRows(fresh);
       applyAndSave(fresh);
     });
@@ -315,8 +366,13 @@
     function renderRows(c) {
       state.cfg = c;
       list.textContent = '';
-      for (var i = 0; i < sections.length; i++) {
-        list.appendChild(editorRow(sections[i], c, applyAndSave));
+      var visible = window.__dshSettingsNavCore.applyConfig(sections, c);
+      var hidden = sections.filter(function (section) { return c.hidden.has(section.id); });
+      var rows = visible.concat(hidden);
+      for (var i = 0; i < rows.length; i++) {
+        list.appendChild(editorRow(rows[i], c, applyAndSave, function (from, to) {
+          applyAndSave(window.__dshSettingsNavCore.reorder(from, to, sections, state.cfg));
+        }));
       }
     }
     function applyAndSave(c) {
@@ -372,7 +428,9 @@
       // order/display 不会产生 childList 变化，杜绝自触发与拉锯。
       if (fp && fp === state.fingerprint) return;
       state.fingerprint = fp;
-      var cfg = window.__dshSettingsNavCore.parseConfig(readStorage());
+      var stored = readStorage();
+      var cfg = stored ? window.__dshSettingsNavCore.parseConfig(stored) :
+        window.__dshSettingsNavCore.defaultConfig(sections);
       var labelMap = new Map();
       for (var i = 0; i < sections.length; i++) labelMap.set(sections[i].label, sections[i].id);
       applyToPanel(panelEl, sections, cfg, labelMap);
