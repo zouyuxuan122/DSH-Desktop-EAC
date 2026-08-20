@@ -11,6 +11,14 @@ const fs = require('node:fs');
 const path = require('node:path');
 const { buildBundleManifest } = require('../bundle-integrity.js');
 
+function shouldIncludeBundledPluginPath(source, pluginsRoot) {
+  const parts = path.relative(pluginsRoot, source).split(path.sep);
+  return !parts.some((part) => {
+    const name = part.toLowerCase();
+    return name.startsWith('.backup-before-') || name.endsWith('.bak-dsh-fix');
+  });
+}
+
 module.exports = async function afterPack(context) {
   const { appOutDir, electronPlatformName } = context;
   if (electronPlatformName !== 'win32') return;
@@ -33,8 +41,11 @@ module.exports = async function afterPack(context) {
   const pluginsDest = path.join(appOutDir, 'resources', 'app', 'assets', 'plugins');
   if (fs.existsSync(pluginsSrc)) {
     fs.rmSync(pluginsDest, { recursive: true, force: true });
-    fs.cpSync(pluginsSrc, pluginsDest, { recursive: true });
-    console.log('afterPack: bundled plugins copied verbatim');
+    fs.cpSync(pluginsSrc, pluginsDest, {
+      recursive: true,
+      filter: (source) => shouldIncludeBundledPluginPath(source, pluginsSrc),
+    });
+    console.log('afterPack: bundled plugins copied without local repair backups');
   }
 
   trimLongPathFiles(appOutDir);
@@ -43,6 +54,8 @@ module.exports = async function afterPack(context) {
   writeBundleManifest(appOutDir);
   auditLongPaths(appOutDir);
 };
+
+module.exports.shouldIncludeBundledPluginPath = shouldIncludeBundledPluginPath;
 
 // The profile fallback closure (profiles/node_modules junctions) is maintained
 // by dsh-app-boot, whose BFS starts at the BUNDLED dsh package's package.json.

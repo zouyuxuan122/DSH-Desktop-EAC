@@ -27,7 +27,11 @@ import {
   resolveReasoningEffort,
   shouldRetryWithoutReasoning,
 } from "./reasoning-compat.js";
-import { buildFinalPrompt as assembleFinalPrompt } from "./prompt.js";
+import {
+  buildFinalPrompt as assembleFinalPrompt,
+  hasNonEmptyUserMessage,
+} from "./prompt.js";
+import { readAgentDefaultField } from "./settings-reader.js";
 
 const NS = "dsh-side-session";
 const CONTEXT_ROUTE = "/api/dsh-side-session/context";
@@ -110,9 +114,7 @@ function readGlobalKey() {
 function readGlobalModel() {
   try {
     const text = readFileSync(join(dshHome(), "settings.yaml"), "utf8");
-    // 仅锚定 agent-default-model 段内的 model: 行，避免误读其它命名空间的 model 键
-    const anchored = text.match(/agent-default-model:[\s\S]*?^\s*model:\s*(\S+)/m);
-    if (anchored) return anchored[1];
+    return readAgentDefaultField(text, "model", DEFAULT_MODEL);
   } catch {}
   return DEFAULT_MODEL;
 }
@@ -120,18 +122,7 @@ function readGlobalModel() {
 function readGlobalProvider() {
   try {
     const text = readFileSync(join(dshHome(), "settings.yaml"), "utf8");
-    const NL = String.fromCharCode(10);
-    const lines = text.split(NL);
-    for (let i = 0; i < lines.length; i++) {
-      if (lines[i].trim() === "agent-default-model:") {
-        for (let j = i + 1; j < lines.length; j++) {
-          const nest = lines[j].trim();
-          if (nest.startsWith("provider:")) return nest.slice("provider:".length).trim();
-          if (nest && !(lines[j].startsWith(" ") || lines[j].startsWith(String.fromCharCode(9)))) break;
-        }
-        break;
-      }
-    }
+    return readAgentDefaultField(text, "provider", DEFAULT_PROVIDER);
   } catch {}
   return DEFAULT_PROVIDER;
 }
@@ -139,18 +130,7 @@ function readGlobalProvider() {
 function readGlobalReasoning() {
   try {
     const text = readFileSync(join(dshHome(), "settings.yaml"), "utf8");
-    const NL = String.fromCharCode(10);
-    const lines = text.split(NL);
-    for (let i = 0; i < lines.length; i++) {
-      if (lines[i].trim() === "agent-default-model:") {
-        for (let j = i + 1; j < lines.length; j++) {
-          const nest = lines[j].trim();
-          if (nest.startsWith("reasoningEffort:")) return nest.slice("reasoningEffort:".length).trim();
-          if (nest && !(lines[j].startsWith(" ") || lines[j].startsWith(String.fromCharCode(9)))) break;
-        }
-        break;
-      }
-    }
+    return readAgentDefaultField(text, "reasoningEffort", "");
   } catch {}
   return "";
 }
@@ -850,8 +830,8 @@ async function handleAsk(req, res) {
   const mode = String(body.mode || "3");
   const sessionId = String(body.sessionId || "").trim();
   const messages = Array.isArray(body.messages) ? body.messages : [];
-  if (messages.length === 0) {
-    sendJson(res, 400, { error: "messages 为空" });
+  if (!hasNonEmptyUserMessage(messages)) {
+    sendJson(res, 400, { error: "messages 缺少非空 user 消息" });
     return;
   }
 
@@ -871,6 +851,7 @@ async function handleAsk(req, res) {
 
   const { system, rest } = buildFinalPrompt(body);
   const upstreamUrl = cfg.base + "/chat/completions";
+  const upstreamMessages = (system ? [{ role: "system", content: system }] : []).concat(rest);
   let upstream;
   try {
     upstream = await fetch(upstreamUrl, {
@@ -882,7 +863,7 @@ async function handleAsk(req, res) {
       },
       body: JSON.stringify({
         model: cfg.model,
-        messages: [{ role: "system", content: system }].concat(rest),
+        messages: upstreamMessages,
         stream: true,
       }),
     });

@@ -36,5 +36,9 @@ __pycache__/
 *.tmp
 updates/
 
+# Local repair backups must never enter source packages
+*.bak-dsh-fix
+**/.backup-before-*/
+
 # Reasonix 工具元数据（勿提交）
 .reasonix/

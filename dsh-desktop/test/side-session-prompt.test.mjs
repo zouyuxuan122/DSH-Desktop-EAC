@@ -1,7 +1,10 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { buildFinalPrompt } from "../assets/plugins/dsh-side-session/lib/prompt.js";
+import {
+  buildFinalPrompt,
+  hasNonEmptyUserMessage,
+} from "../assets/plugins/dsh-side-session/lib/prompt.js";
 
 test("side session folds prior turns into system and sends only the latest user message", () => {
   const { system, rest } = buildFinalPrompt({
@@ -40,4 +43,15 @@ test("side session ignores empty text blocks and supports array content", () => 
 
   assert.deepEqual(rest, [{ role: "user", content: "问题" }]);
   assert.equal(system, "==== 临时会话上下文 ====\n[助手] 历史\n\n系统");
+});
+
+test("side session rejects message lists without a non-empty user turn", () => {
+  const assistantOnly = [
+    { role: "assistant", content: "first" },
+    { role: "assistant", content: "second" },
+  ];
+  assert.equal(hasNonEmptyUserMessage(assistantOnly), false);
+  assert.equal(hasNonEmptyUserMessage([{ role: "user", content: "   " }]), false);
+  assert.equal(hasNonEmptyUserMessage([{ role: "user", content: "question" }]), true);
+  assert.deepEqual(buildFinalPrompt({ messages: assistantOnly }), { system: "", rest: [] });
 });

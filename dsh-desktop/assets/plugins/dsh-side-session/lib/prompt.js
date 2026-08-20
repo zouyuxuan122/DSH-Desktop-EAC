@@ -8,7 +8,19 @@ function contentText(content) {
   return "";
 }
 
-export function buildFinalPrompt(body, fileBlock = "") {
+export function hasNonEmptyUserMessage(messages) {
+  return (
+    Array.isArray(messages) &&
+    messages.some(
+      (message) =>
+        message &&
+        message.role === "user" &&
+        contentText(message.content).trim().length > 0
+    )
+  );
+}
+
+export function buildFinalPrompt(body = {}, fileBlock = "") {
   const msgs = Array.isArray(body.messages) ? body.messages : [];
   const firstIsSystem = msgs.length && msgs[0] && msgs[0].role === "system";
   const clientSystem = firstIsSystem ? contentText(msgs[0].content) : "";
@@ -31,8 +43,8 @@ export function buildFinalPrompt(body, fileBlock = "") {
   }
 
   const rest = lastUserIndex >= 0 ? [restAll[lastUserIndex]] : [];
-  const tempHistory = restAll
-    .slice(0, lastUserIndex)
+  const history = lastUserIndex >= 0 ? restAll.slice(0, lastUserIndex) : [];
+  const tempHistory = history
     .map((message) => {
       const who = message.role === "assistant" ? "助手" : "用户";
       return `[${who}] ${message.content}`;

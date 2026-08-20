@@ -113,6 +113,14 @@ function wslListDistros() {
   return text.replace(/^\uFEFF/, '').split(/\r?\n/).map((s) => s.trim()).filter(Boolean);
 }
 
+function isSafeWslInstallDir(value) {
+  return /^\/[\p{L}\p{N}\p{M}._\/-]+$/u.test(String(value || ''));
+}
+
+function isSafeNpmVersion(value) {
+  return /^[0-9A-Za-z][0-9A-Za-z._+-]*$/.test(String(value || ''));
+}
+
 // ---------------------------------------------------------------------------
 // 配置与探活
 // ---------------------------------------------------------------------------
@@ -143,7 +151,9 @@ function configure(opts = {}) {
   } else {
     dir = homeDir() + '/.dsh-desktop';
   }
-  if (/\s/.test(dir)) fail(`wslInstallDir 不能包含空白字符（shell 命令拼接需要）: ${dir}`);
+  if (!isSafeWslInstallDir(dir)) {
+    fail(`wslInstallDir 只能包含字母、数字、点、下划线、连字符和斜杠: ${dir}`);
+  }
   state.installDir = dir;
   state.uncDir = '\\\\' + uncHost() + '\\' + state.distro + dir.replace(/\//g, '\\');
   log(`安装目录: ${dir}（UNC: ${state.uncDir}）`);
@@ -220,6 +230,8 @@ function bundledVersion() {
  * 安装后校验入口文件 / 失败清理 staging）。
  */
 async function installAgent(version, onLine) {
+  version = String(version || '').trim();
+  if (!isSafeNpmVersion(version)) fail(`非法的 DSH npm 版本: ${version}`);
   const dir = state.installDir;
   const bin = `${dir}/agent-staging/node_modules/@deepseek-ai/dsh/lib/bin.js`;
   const cmd = `sh -lc 'set -eu; rm -rf ${dir}/agent-staging; mkdir -p ${dir}/agent-staging; cd ${dir}/agent-staging; export NPM_CONFIG_UPDATE_NOTIFIER=false NPM_CONFIG_FUND=false NPM_CONFIG_AUDIT=false; npm install --save-exact --omit=dev --no-audit --no-fund --no-update-notifier ${PKG}@${version}; test -f ${bin}; cd ${dir}; if [ -d agent ]; then rm -rf agent-prev; mv agent agent-prev; fi; mv agent-staging agent; echo WSL_INSTALL_OK'`;
@@ -316,7 +328,13 @@ function self() {
     installDirLinux, uncHome, distroName,
     ensureInstalled, applyUpdate, rollback, hasPrevious, activeVersion,
     spawnServer, stop, bundledVersion,
-    _internals: { runWsl, runWslSync, wslListDistros },
+    _internals: {
+      isSafeNpmVersion,
+      isSafeWslInstallDir,
+      runWsl,
+      runWslSync,
+      wslListDistros,
+    },
   };
 }
 
