@@ -56,6 +56,7 @@ function headerValue(headers, name) {
 const DEFAULT_REPOS = { github: 'zouyuxuan122/Deepseek-Harness-EAC', gitee: 'zouyuxuan122/Deepseek-Harness-EAC' };
 const REPO_SLUG = /^[A-Za-z0-9_.-]{1,64}\/[A-Za-z0-9_.-]{1,64}$/;
 const MIN_VALID_BYTES = 64 * 1024 * 1024; // 完整安装包远大于 64MB，防止把错误页当 exe
+const GITHUB_DOWNLOAD_PROXY = 'https://gh.geekertao.top/';
 
 function isPortable() {
   return !!process.env.PORTABLE_EXECUTABLE_DIR;
@@ -67,6 +68,27 @@ function resolveRepos(repos) {
   const github = REPO_SLUG.test(String(r.github || '')) ? r.github : DEFAULT_REPOS.github;
   const gitee = REPO_SLUG.test(String(r.gitee || '')) ? r.gitee : DEFAULT_REPOS.gitee;
   return { github, gitee };
+}
+
+/** 只为 GitHub Release 资产生成代理地址；其他来源保持原地址。 */
+function githubProxyUrl(url) {
+  const value = String(url || '').trim();
+  if (!/^https:\/\/github\.com\//i.test(value)) return null;
+  return GITHUB_DOWNLOAD_PROXY + value;
+}
+
+/** 组装下载候选：代理优先，随后原始地址，再接其他 Release 源。 */
+function downloadUrls(primaryUrl, fallbackUrls = []) {
+  const primary = String(primaryUrl || '').trim();
+  const candidates = [];
+  const proxied = githubProxyUrl(primary);
+  if (proxied) candidates.push(proxied);
+  if (primary) candidates.push(primary);
+  for (const url of Array.isArray(fallbackUrls) ? fallbackUrls : []) {
+    const value = String(url || '').trim();
+    if (value) candidates.push(value);
+  }
+  return [...new Set(candidates)];
 }
 
 function apiEndpoints() {
@@ -537,7 +559,10 @@ async function downloadRelease(ctx, release, { onProgress, onSourceChange, fallb
     const p = sel.parts[i];
     ctx.log('client-update', `下载 ${p.name}（${Math.round(p.size / 1048576)} MB）`);
     const dest = split ? finalPath + '.part' + (i + 1) : finalPath;
-    const urls = [p.url, ...fbSelections.map((f) => (f.parts[i] && f.parts[i].url) || '').filter(Boolean)];
+    const urls = downloadUrls(
+      p.url,
+      fbSelections.map((f) => (f.parts[i] && f.parts[i].url) || ''),
+    );
     const res = await downloadWithSourceSwitch(urls, dest, {
       ctx,
       onSourceChange: (idx) => {
@@ -1007,4 +1032,4 @@ function applyUpdate(ctx, pending, opts) {
   return script;
 }
 
-module.exports = { checkLatest, selectAsset, downloadFile, downloadWithSourceSwitch, downloadRelease, releaseFallbacks, applyUpdate, buildApplyScript, buildInstalledApplyScript, buildInstalledPowerShellArgs, buildSpawnCommandLine, isPortable, resolveRepos, normalizeRelease, computeSha256, fetchSumsMap, expectedSha256, isNoSpaceError, DEFAULT_REPOS };
+module.exports = { checkLatest, selectAsset, downloadFile, downloadWithSourceSwitch, downloadRelease, releaseFallbacks, applyUpdate, buildApplyScript, buildInstalledApplyScript, buildInstalledPowerShellArgs, buildSpawnCommandLine, isPortable, resolveRepos, normalizeRelease, computeSha256, fetchSumsMap, expectedSha256, isNoSpaceError, githubProxyUrl, downloadUrls, DEFAULT_REPOS };
