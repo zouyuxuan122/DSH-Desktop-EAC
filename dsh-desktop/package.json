@@ -51,5 +51,13 @@
   "devDependencies": {
     "electron": "^43.4.0",
     "electron-builder": "^26.15.3"
+  },
+  "allowScripts": {
+    "electron-winstaller@5.4.0": true,
+    "koffi@3.1.5": true,
+    "node-pty@1.2.0-beta.15": true,
+    "protobufjs@7.6.5": true,
+    "@deepseek-ai/dsh-subprocess-local@0.1.0-rc.7": true,
+    "@google/genai@1.52.0": true
   }
 }

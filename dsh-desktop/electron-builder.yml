@@ -39,6 +39,7 @@ files:
   - plugin-guard.js
   - rescue-agent.js
   - preset-sync.js
+  - reasoning-settings-heal.js
   - error-detail.js
   - bundle-integrity.js
   - stable-port.js

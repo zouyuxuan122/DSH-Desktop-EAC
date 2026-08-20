@@ -23,3 +23,5 @@ build/*
 !assets/plugins/*/data/
 !assets/plugins/dsh-tdai-memory/node_modules/
 !assets/plugins/dsh-tdai-memory/node_modules/**/data/
+!assets/plugins/dsh-tdai-memory/node_modules/**/dist/
+!assets/plugins/dsh-tdai-memory/node_modules/**/dist/**

@@ -23,6 +23,15 @@ import { readFileSync, readdirSync, statSync, promises as fsp } from "node:fs";
 import { join, isAbsolute } from "node:path";
 import { homedir } from "node:os";
 import { zstdDecompressSync } from "node:zlib";
+import {
+  resolveReasoningEffort,
+  shouldRetryWithoutReasoning,
+} from "./reasoning-compat.js";
+import {
+  buildFinalPrompt as assembleFinalPrompt,
+  hasNonEmptyUserMessage,
+} from "./prompt.js";
+import { readAgentDefaultField } from "./settings-reader.js";
 
 const NS = "dsh-side-session";
 const CONTEXT_ROUTE = "/api/dsh-side-session/context";
@@ -55,7 +64,7 @@ const MAX_TRANSCRIPT_CHARS = 40 * 1024; // 标准档字符上限（兼容引用�
 const Config = z.object({
   mode: z
     .string()
-    .default("1")
+    .default("3")
     .description(
       "回答引擎模式：1=复用 dsh 全局 Key；2=插件自带 Key；3=纯服务端走 dsh 宿主 LLM（ctx.llm，不读任何 key）"
     ),
@@ -105,11 +114,25 @@ function readGlobalKey() {
 function readGlobalModel() {
   try {
     const text = readFileSync(join(dshHome(), "settings.yaml"), "utf8");
-    // 仅锚定 agent-default-model 段内的 model: 行，避免误读其它命名空间的 model 键
-    const anchored = text.match(/agent-default-model:[\s\S]*?^\s*model:\s*(\S+)/m);
-    if (anchored) return anchored[1];
+    return readAgentDefaultField(text, "model", DEFAULT_MODEL);
   } catch {}
   return DEFAULT_MODEL;
+}
+
+function readGlobalProvider() {
+  try {
+    const text = readFileSync(join(dshHome(), "settings.yaml"), "utf8");
+    return readAgentDefaultField(text, "provider", DEFAULT_PROVIDER);
+  } catch {}
+  return DEFAULT_PROVIDER;
+}
+
+function readGlobalReasoning() {
+  try {
+    const text = readFileSync(join(dshHome(), "settings.yaml"), "utf8");
+    return readAgentDefaultField(text, "reasoningEffort", "");
+  } catch {}
+  return "";
 }
 
 function globalBase() {
@@ -271,8 +294,9 @@ const EMPTY = {
   files: [],
   transcript: [],
   truncated: false,
-  provider: DEFAULT_PROVIDER,
-  model: DEFAULT_MODEL,
+  provider: "",
+  model: "",
+  reasoningEffort: "",
 };
 
 const parseCache = new Map(); // 文件 -> { mtimeMs, size, firstMagic, frameEnd, at, state }
@@ -281,7 +305,7 @@ const parseCache = new Map(); // 文件 -> { mtimeMs, size, firstMagic, frameEnd
 const SEEN_FILES_MAX = 2000; // seenFiles 兜底上限（远大于任何档位的 filesTotal）
 
 function freshParseState() {
-  return { title: "", provider: "", model: "", seenFiles: new Map(), transcript: [] };
+  return { title: "", provider: "", model: "", reasoningEffort: "", seenFiles: new Map(), transcript: [] };
 }
 
 /** 逐行解析事件并累计进 state（增量与全量共用同一语义）。 */
@@ -307,10 +331,14 @@ function parseEventsInto(state, lines) {
       if (cfg) {
         if (cfg.provider) state.provider = String(cfg.provider);
         if (cfg.model) state.model = String(cfg.model);
+        if (cfg.reasoningEffort !== undefined && cfg.reasoningEffort !== null)
+          state.reasoningEffort = String(cfg.reasoningEffort);
       }
     } else if (ev.type === "request/context" && ev.data) {
       if (ev.data.provider) state.provider = String(ev.data.provider);
       if (ev.data.model) state.model = String(ev.data.model);
+      if (ev.data.reasoningEffort !== undefined && ev.data.reasoningEffort !== null)
+        state.reasoningEffort = String(ev.data.reasoningEffort);
     }
 
     // 文件捕获：tool/code-dispatch* 事件
@@ -399,8 +427,9 @@ function renderState(state) {
     files,
     transcript,
     truncated,
-    provider: state.provider || DEFAULT_PROVIDER,
-    model: state.model || readGlobalModel(),
+    provider: state.provider || "",
+    model: state.model || "",
+    reasoningEffort: state.reasoningEffort || "",
   };
 }
 
@@ -533,13 +562,8 @@ function buildFileContext(sessionId) {
 
 // 将客户端消息拆分为「客户端 system」+「其余消息」，并拼上文件上下文块
 function buildFinalPrompt(body) {
-  const msgs = Array.isArray(body.messages) ? body.messages : [];
-  const firstIsSystem = msgs.length && msgs[0] && msgs[0].role === "system";
-  const clientSystem = firstIsSystem ? String(msgs[0].content || "") : "";
-  const rest = firstIsSystem ? msgs.slice(1) : msgs;
   const fileBlock = buildFileContext(String(body.sessionId || "").trim());
-  const system = (fileBlock ? fileBlock + "\n\n" : "") + clientSystem;
-  return { system, rest };
+  return assembleFinalPrompt(body, fileBlock);
 }
 
 // ---------------------------------------------------------------------------
@@ -621,6 +645,7 @@ async function handleContext(req, res) {
         truncated: parsed.truncated,
         provider: parsed.provider,
         model: parsed.model,
+        reasoningEffort: parsed.reasoningEffort,
         updatedAt,
       });
       return;
@@ -634,6 +659,12 @@ async function handleContext(req, res) {
 // ---------------------------------------------------------------------------
 // 路由：/ask（mode1 / mode2 流式代理；mode3 走 ctx.llm）
 // ---------------------------------------------------------------------------
+function officialMode1Model() {
+  const m = (readGlobalModel() || "").trim();
+  if (m === "deepseek-v4-pro" || m === "deepseek-v4-flash") return m;
+  return DEFAULT_MODEL;
+}
+
 function resolveKeyForMode(mode, settings) {
   if (mode === "2") {
     const key = (settings && settings.apiKey ? String(settings.apiKey) : "").trim();
@@ -645,10 +676,44 @@ function resolveKeyForMode(mode, settings) {
   }
   return {
     key: readGlobalKey(),
-    model: readGlobalModel(),
+    model: officialMode1Model(),
     base: globalBase(),
     source: "global",
   };
+}
+
+function hostErrorDetail(value) {
+  if (!value) return "宿主 LLM 返回未知错误";
+  if (typeof value === "string") return value;
+  const failure = value.failure;
+  return String(
+    value.message ||
+      value.detail ||
+      value.error ||
+      (failure && (failure.message || failure.detail || failure.code)) ||
+      value.code ||
+      JSON.stringify(value)
+  );
+}
+
+function isRetryableHostError(value) {
+  let serialized = "";
+  try {
+    serialized = JSON.stringify(value);
+  } catch {}
+  const detail = (hostErrorDetail(value) + " " + serialized).toLowerCase();
+  return (
+    detail.includes("overloaded") ||
+    detail.includes("try again later") ||
+    detail.includes("rate limit") ||
+    detail.includes("too many requests") ||
+    /(^|\D)429(\D|$)/.test(detail) ||
+    /(^|\D)50[234](\D|$)/.test(detail)
+  );
+}
+
+function wait(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
 async function handleAskMode3(req, res, body, sessionId) {
@@ -658,8 +723,12 @@ async function handleAskMode3(req, res, body, sessionId) {
   }
   const { system, rest } = buildFinalPrompt(body);
   const parsed = parseSession(sessionId);
-  const provider = String(body.provider || parsed.provider || DEFAULT_PROVIDER);
-  const model = String(body.model || parsed.model || readGlobalModel());
+  const parsedProvider = parsed.provider || "";
+  const parsedModel = parsed.model || "";
+  const parsedReasoning = parsed.reasoningEffort || "";
+  const globalProvider = readGlobalProvider();
+  const provider = String(parsedProvider || body.provider || globalProvider || DEFAULT_PROVIDER);
+  const model = String(parsedModel || body.model || readGlobalModel() || DEFAULT_MODEL);
   const llmMessages = rest.map((m) => ({
     role: m.role,
     content: [{ type: "text", text: String(m.content || "") }],
@@ -671,22 +740,57 @@ async function handleAskMode3(req, res, body, sessionId) {
     connection: "keep-alive",
   });
   try {
-    const stream = ctxRef.llm.stream({ provider, model, system, messages: llmMessages });
-    for await (const chunk of stream) {
-      if (!chunk) continue;
-      if (chunk.type === "text-delta" && typeof chunk.text === "string") {
-        res.write(
-          "data: " + JSON.stringify({ choices: [{ delta: { content: chunk.text } }] }) + "\n\n"
-        );
-      } else if (chunk.type === "error") {
-        res.write(
-          "data: " + JSON.stringify({ error: String(chunk.message || chunk.error || "宿主 LLM 错误") }) + "\n\n"
-        );
-      } else if (chunk.type === "finish" && chunk.reason && chunk.reason.kind === "error") {
-        res.write(
-          "data: " + JSON.stringify({ error: String((chunk.reason && chunk.reason.message) || "宿主 LLM 流结束于错误") }) + "\n\n"
-        );
+    const llmOptions = { provider, model, system, messages: llmMessages };
+
+    const globalReasoning = readGlobalReasoning();
+    const reasoning = resolveReasoningEffort(provider, parsedReasoning || globalReasoning);
+    if (reasoning !== undefined) llmOptions.reasoningEffort = reasoning;
+
+    const maxAttempts = 3;
+    let retriedWithoutReasoning = false;
+    for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+      let wroteText = false;
+      let terminalError = null;
+      try {
+        const stream = ctxRef.llm.stream(llmOptions);
+        for await (const chunk of stream) {
+          if (!chunk) continue;
+          if (chunk.type === "text-delta" && typeof chunk.text === "string") {
+            wroteText = true;
+            res.write(
+              "data: " + JSON.stringify({ choices: [{ delta: { content: chunk.text } }] }) + "\n\n"
+            );
+          } else if (chunk.type === "error") {
+            terminalError = chunk.error || chunk;
+          } else if (chunk.type === "finish" && chunk.reason && chunk.reason.kind === "error") {
+            terminalError = chunk.reason;
+          }
+        }
+      } catch (err) {
+        terminalError = err;
       }
+
+      if (!terminalError) break;
+      const canRetryWithoutReasoning =
+        !retriedWithoutReasoning &&
+        attempt < maxAttempts &&
+        shouldRetryWithoutReasoning(terminalError, wroteText, llmOptions);
+      if (canRetryWithoutReasoning) {
+        delete llmOptions.reasoningEffort;
+        retriedWithoutReasoning = true;
+        continue;
+      }
+      const canRetry = !wroteText && attempt < maxAttempts && isRetryableHostError(terminalError);
+      if (canRetry && !res.destroyed) {
+        await wait(1000 * 2 ** (attempt - 1));
+        continue;
+      }
+      res.write(
+        "data: " +
+          JSON.stringify({ error: "宿主 LLM 请求失败：" + hostErrorDetail(terminalError) }) +
+          "\n\n"
+      );
+      break;
     }
     res.write("data: [DONE]\n\n");
     res.end();
@@ -723,11 +827,11 @@ async function handleAsk(req, res) {
     sendJson(res, 400, { error: "invalid JSON body" });
     return;
   }
-  const mode = String(body.mode || "1");
+  const mode = String(body.mode || "3");
   const sessionId = String(body.sessionId || "").trim();
   const messages = Array.isArray(body.messages) ? body.messages : [];
-  if (messages.length === 0) {
-    sendJson(res, 400, { error: "messages 为空" });
+  if (!hasNonEmptyUserMessage(messages)) {
+    sendJson(res, 400, { error: "messages 缺少非空 user 消息" });
     return;
   }
 
@@ -747,6 +851,7 @@ async function handleAsk(req, res) {
 
   const { system, rest } = buildFinalPrompt(body);
   const upstreamUrl = cfg.base + "/chat/completions";
+  const upstreamMessages = (system ? [{ role: "system", content: system }] : []).concat(rest);
   let upstream;
   try {
     upstream = await fetch(upstreamUrl, {
@@ -758,7 +863,7 @@ async function handleAsk(req, res) {
       },
       body: JSON.stringify({
         model: cfg.model,
-        messages: [{ role: "system", content: system }].concat(rest),
+        messages: upstreamMessages,
         stream: true,
       }),
     });
@@ -898,4 +1003,4 @@ function apply(ctx, config) {
   };
 }
 
-export { apply, inject, name, parseSession, resetParseCacheForTest };
+export { apply, buildFinalPrompt, inject, name, parseSession, resetParseCacheForTest };

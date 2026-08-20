@@ -50,6 +50,7 @@ const {
 } = require('./koffi-preflight');
 const { configLinesFor, healSoulMdPatchRow, healRowConfig, removeBundledRowDuplicates, collectBundleEntryIds } = require('./patch-row-heal');
 const { syncBundledPresets, ensureDefaultAgentPreset } = require('./preset-sync');
+const { healUnsupportedOffReasoning } = require('./reasoning-settings-heal');
 const { buildErrorDetail } = require('./error-detail');
 const { SessionWatcher, scanZstdFrames } = require('./session-watcher');
 const { isEncodingMismatch, healSessionEncodingConflicts } = require('./session-encoding-heal');
@@ -2972,6 +2973,11 @@ const COMPANION_PLUGINS = [
   { id: 'soul-md', name: 'dsh-soul-md', dir: 'dsh-soul-md', config: { path: 'soul.md' } },
   { id: 'tdai-memory', name: 'dsh-tdai-memory', dir: 'dsh-tdai-memory' },
   { id: 'mobile-fix', name: 'dsh-web-mobile-fix', dir: 'dsh-web-mobile-fix' },
+  // 设置面板滚轮修复（dsh-settings-scroll-fix，EAC 独占纯客户端 CSS）：
+  // 强制设置页内容区/导航列表可滚轮滚动（overflow-y:auto + 滚动条收敛），
+  // 面板容器 overflow:hidden 防双层滚动条。host 半边 no-op；无 npm 上游，
+  // 不登记到 PLUGIN_UPDATE_SOURCES。
+  { id: 'settings-scroll-fix', name: 'dsh-settings-scroll-fix', dir: 'dsh-settings-scroll-fix' },
   // VSCode 风格右侧边栏（文件树 / 编辑器 / 终端 / Git，按会话隔离）。
   // lib/ 预编译自包含（codemirror、xterm 已内嵌），服务端仅额外依赖
   // schemastery（已加入 app 闭包，见 package.json）。
@@ -3841,6 +3847,9 @@ function syncCompanionPlugins() {
   if (!IS_WIN) return;
   try {
     const home = dshHome || path.join(os.homedir(), '.dsh');
+    // 第三方模型的 "off" 是选择器语义。旧版本会把它持久化后原样发给
+    // provider；启动时移除该遗留值，让主会话和临时会话都回落为省略参数。
+    healUnsupportedOffReasoning(home, (m) => log('boot', m));
     // 桌面专属 profile 必须先存在（未知 profile 不会被 dsh 自动初始化）。
     ensureDesktopProfileInit();
     // V4 运行时补丁（幂等，随启动 / 服务重启 / agent 更新后重放）：
