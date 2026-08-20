@@ -97,11 +97,28 @@ function compareVersions(a, b) {
 // --- npm runner -----------------------------------------------------------
 
 function killProc(proc) {
-  if (!proc || !proc.pid) return;
-  try {
-    if (IS_WIN) spawn('taskkill', ['/pid', String(proc.pid), '/T', '/F'], { windowsHide: true, stdio: 'ignore' });
-    else proc.kill('SIGTERM');
-  } catch {}
+  if (!proc || !proc.pid) return Promise.resolve();
+  return new Promise((resolve) => {
+    let settled = false;
+    const done = () => { if (!settled) { settled = true; resolve(); } };
+    const fallback = setTimeout(done, IS_WIN ? 2000 : 500);
+    try {
+      proc.once('close', () => { clearTimeout(fallback); done(); });
+      if (IS_WIN) {
+        const killer = spawn('taskkill', ['/pid', String(proc.pid), '/T', '/F'], {
+          windowsHide: true, stdio: 'ignore',
+        });
+        killer.once('close', () => {
+          // taskkill may finish just before the child emits close; the bounded
+          // fallback keeps cleanup from hanging if the event is lost.
+          setTimeout(done, 100);
+        });
+        killer.once('error', done);
+      } else {
+        proc.kill('SIGTERM');
+      }
+    } catch { done(); }
+  });
 }
 
 function abort() { killProc(activeProc); activeProc = null; }
@@ -130,15 +147,18 @@ function runNpm(ctx, args, { timeoutMs = 30 * 60 * 1000, logStream = null, onOut
     let settled = false;
     let stdoutBuf = '';
     const finish = (fn, value) => { if (!settled) { settled = true; clearTimeout(timer); clearTimeout(stallTimer); activeProc = null; fn(value); } };
-    const timer = setTimeout(() => { killProc(proc); finish(reject, new Error('npm 执行超时（' + Math.round(timeoutMs / 1000) + ' 秒）')); }, timeoutMs);
+    const timer = setTimeout(async () => {
+      await killProc(proc);
+      finish(reject, new Error('npm 执行超时（' + Math.round(timeoutMs / 1000) + ' 秒）'));
+    }, timeoutMs);
     // 停滞检测：stallMs > 0 时，超过阈值没有产生任何输出即判死（触发
     // 调用方切换镜像源），避免「卡住但没到整体超时」的长时间空转。
     let stallTimer = null;
     const armStall = () => {
       if (!stallMs) return;
       if (stallTimer) clearTimeout(stallTimer);
-      stallTimer = setTimeout(() => {
-        killProc(proc);
+      stallTimer = setTimeout(async () => {
+        await killProc(proc);
         finish(reject, new Error('下载停滞（' + Math.round(stallMs / 1000) + ' 秒无进展），将切换镜像源重试'));
       }, stallMs);
     };

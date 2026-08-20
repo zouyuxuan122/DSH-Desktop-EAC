@@ -44,7 +44,7 @@ function makeFakeNpmCli(dir, behavior) {
       process.stdout.write('0.1.0-rc.9\\n');
       process.exit(0);
     }
-    if (out === 'stall') { setTimeout(() => process.exit(0), 20000); return; }
+    if (out === 'stall') { setTimeout(() => process.exit(0), 5000); return; }
     if (out === 'fail') { process.stderr.write('EINTEGRITY fetch failed\\n'); process.exit(1); }
     process.stdout.write('0.1.0-rc.9\\n');
     process.exit(0);
@@ -65,9 +65,12 @@ function makeCtx(cli, userDataDir) {
 
 // 子进程被杀后可能仍短暂持有 cwd 句柄（Windows），清理时重试几次。
 function rmRetry(dir) {
-  for (let i = 0; i < 10; i++) {
+  // Windows may keep a recently-killed child cwd handle briefly (especially
+  // on hosted runners with antivirus scanning); allow cleanup to outlive the
+  // process termination instead of turning a successful assertion into EBUSY.
+  for (let i = 0; i < 20; i++) {
     try { fs.rmSync(dir, { recursive: true, force: true }); return; } catch {}
-    Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 300);
+    Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 500);
   }
   fs.rmSync(dir, { recursive: true, force: true });
 }
