@@ -33,8 +33,8 @@
 ## 快速开始（成品用户）
 
 1. 打开 [Releases](https://github.com/zouyuxuan122/Deepseek-Harness-EAC/releases/latest) 页面，选其一（链接永久有效，始终指向最新版）：
-   - [Deepseek-Harness-EAC-Portable-x64.exe](https://github.com/zouyuxuan122/Deepseek-Harness-EAC/releases/latest/download/Deepseek-Harness-EAC-Portable-x64.exe) —— 免安装便携版，双击运行
-   - [Deepseek-Harness-EAC-Setup-x64.exe](https://github.com/zouyuxuan122/Deepseek-Harness-EAC/releases/latest/download/Deepseek-Harness-EAC-Setup-x64.exe) —— 安装版，创建桌面/开始菜单快捷方式
+   - [Deepseek-Harness-EAC-Portable-v4.4.1-x64.exe](https://github.com/zouyuxuan122/Deepseek-Harness-EAC/releases/latest/download/Deepseek-Harness-EAC-Portable-v4.4.1-x64.exe) —— 免安装便携版，双击运行
+   - [Deepseek-Harness-EAC-Setup-v4.4.1-x64.exe](https://github.com/zouyuxuan122/Deepseek-Harness-EAC/releases/latest/download/Deepseek-Harness-EAC-Setup-v4.4.1-x64.exe) —— 安装版，创建桌面/开始菜单快捷方式
 2. 首次运行会显示启动动画，随后进入 DeepSeek Harness Web UI。
 3. 如尚未配置 API Key，在界面内完成配置即可开始使用（与命令行 dsh 完全一致）。
 
