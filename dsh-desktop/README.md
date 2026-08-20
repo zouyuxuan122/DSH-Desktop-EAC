@@ -141,7 +141,7 @@
 | `dsh-dock-settings` | Skills 与 MCP 管理：技能目录浏览（EAC 内置/用户来源徽标、打开目录）+ MCP 服务增删改（stdio / streamable-http），保存后一键重启生效 | 设置 → Skills 与 MCP |
 | `dsh-pet` | 桌面宠物：28 个透明动画的悬浮宠物，空闲呼吸、随机动作、屏幕游走 | 随包自动启用 |
 | `dsh-dafeiyu`（v4） | 大肥鱼桌宠：真实会话状态驱动的原生置顶窗口（六态动画 + 项目状态卡 + 摸头/戳一戳；角色素材按 ASSET_LICENSE 分发） | 默认禁用，「插件 → 管理」启用 |
-| `dsh-tool-vision` | 外置视觉模型：`inspect_image` 把本地图片/URL 发给任意 OpenAI 兼容视觉端点（GLM-4V / qwen-vl / Ollama…），主模型保持不变；文本模型贴图自动转为 `inspect_image` 指引，另有「请求兜底」在请求发出前降级图片块，杜绝 UNSUPPORTED_CONTENT 整轮失败 | 设置 → 视觉模型 |
+| `picturereader` | 全能读图/读文档：视觉孪生 adapter（原生缩略图 + 粘贴即用自动分析，opencode 等 pi-ai provider 也可用，杜绝 UNSUPPORTED_CONTENT）；隐私/智能/严谨三模式；本地工具链（像素扫描/3 引擎 OCR/裁剪/取色/对比/批量）；pdf/word/excel/ppt 转图片；可选外部 VLM 桥（OpenAI 兼容端点） | 设置 → 图片阅读 |
 | `dsh-tdai-memory` | 长期记忆（腾讯云 Agent Memory 移植）：L0 对话 → L1 结构化事实 → L2 场景 → L3 画像，自动召回注入 + 记忆/对话搜索工具，数据存于 `~/.memory-tencentdb/memory-tdai` | 设置 → 长期记忆 |
 | `dsh-soul-md` | soul.md 人设卡：可视化编辑人设，热重载即时生效；未配置时注册空 section，**完全不影响官方系统提示词** | 设置 → 人设卡 |
 | `dsh-web-mobile-fix` | Web UI 移动端适配修复 | 随包自动启用 |

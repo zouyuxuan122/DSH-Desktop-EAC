@@ -105,7 +105,19 @@ const dshDesktop = {
     getState: () => ipcRenderer.invoke('chrome:recovery-state'),
     reload: () => ipcRenderer.invoke('chrome:recovery-reload'),
     restart: () => ipcRenderer.invoke('chrome:recovery-restart'),
-    openLogs: () => ipcRenderer.invoke('chrome:recovery-open-logs'),
+    exportLogs: () => ipcRenderer.invoke('chrome:export-logs'),
+  },
+  // 崩溃救援（rescue-agent.js）：服务器死后仍可用的轻量 agent。
+  // 救援页从这里取状态、确认发送清单、发起 AI 诊断、逐项批准执行
+  // 白名单动作（restore/disable/remove/repair/safe-mode/retry）、开关
+  // 壳层安全模式、重启服务。
+  rescue: {
+    getState: () => ipcRenderer.invoke('rescue:state'),
+    confirm: () => ipcRenderer.invoke('rescue:confirm'),
+    diagnose: (selections, userNote) => ipcRenderer.invoke('rescue:diagnose', { selections, userNote }),
+    apply: (suggestion) => ipcRenderer.invoke('rescue:apply', { suggestion }),
+    setSafeMode: (on) => ipcRenderer.invoke('safe-mode:set', { on }),
+    retry: () => ipcRenderer.invoke('rescue:retry'),
   },
 };
 
@@ -268,7 +280,7 @@ function renderMenu() {
     <button class="dch-item" data-act="fullscreen"><span>全屏</span><span class="dch-kbd">F11</span></button>
     <div class="dch-sep"></div>
     <button class="dch-item" data-act="open-browser">在浏览器中打开</button>
-    <button class="dch-item" data-act="open-logs">打开日志目录</button>
+    <button class="dch-item" data-act="export-logs">导出日志</button>
     <button class="dch-item" data-act="feedback">反馈建议</button>
     <div class="dch-sep"></div>
     <button class="dch-item" data-act="about">关于 Deepseek Harness EAC</button>

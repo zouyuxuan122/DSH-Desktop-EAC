@@ -9,7 +9,7 @@
 <p>
 <a href="https://github.com/zouyuxuan122/Deepseek-Harness-EAC"><img src="https://img.shields.io/github/stars/zouyuxuan122/Deepseek-Harness-EAC?style=flat&label=%E2%AD%90&color=08C" alt="GitHub stars"></a>
 <a href="https://github.com/zouyuxuan122/Deepseek-Harness-EAC/releases"><img src="https://img.shields.io/badge/Windows-10%2F11-4493F8?style=flat" alt="Windows"></a>
-<a href="https://github.com/zouyuxuan122/Deepseek-Harness-EAC/releases/tag/v4.0.1-linux"><img src="https://img.shields.io/badge/Linux-pacman%2Fdeb%2Frpm%2FAppImage-178600?style=flat" alt="Linux"></a>
+<a href="https://github.com/zouyuxuan122/Deepseek-Harness-EAC/releases/tag/v4.4.0-linux"><img src="https://img.shields.io/badge/Linux-pacman%2Fdeb%2Frpm%2FAppImage-178600?style=flat" alt="Linux"></a>
 <a href="https://github.com/zouyuxuan122/Deepseek-Harness-EAC"><img src="https://img.shields.io/badge/Desktop-App-47848F?style=flat" alt="Desktop App"></a>
 <a href="https://github.com/zouyuxuan122/Deepseek-Harness-EAC/blob/main/LICENSE"><img src="https://img.shields.io/badge/license-MIT-2EA44F?style=flat" alt="MIT License"></a>
 </p>
@@ -58,21 +58,21 @@
 
 | 文件 | 说明 | 大小 |
 | --- | --- | --- |
-| [便携版 exe](https://github.com/zouyuxuan122/Deepseek-Harness-EAC/releases/latest/download/Deepseek-Harness-EAC-Portable-x64.exe) | 免安装，双击即用，可放 U 盘 | ~167 MB |
-| [安装版 exe](https://github.com/zouyuxuan122/Deepseek-Harness-EAC/releases/latest/download/Deepseek-Harness-EAC-Setup-x64.exe) | 安装到系统，创建桌面/开始菜单快捷方式 | ~167 MB |
+| [便携版 exe](https://github.com/zouyuxuan122/Deepseek-Harness-EAC/releases/latest/download/Deepseek-Harness-EAC-Portable-x64.exe) | 免安装，双击即用，可放 U 盘 | ~226 MB |
+| [安装版 exe](https://github.com/zouyuxuan122/Deepseek-Harness-EAC/releases/latest/download/Deepseek-Harness-EAC-Setup-x64.exe) | 安装到系统，创建桌面/开始菜单快捷方式 | ~241 MB |
 
 更多版本见 [Releases 页面](https://github.com/zouyuxuan122/Deepseek-Harness-EAC/releases)。
 
 ### Linux（x64）
 
-Linux 打包由社区开发者 [@Luoye-hb](https://github.com/Luoye-hb) 贡献（[PR #12](https://github.com/zouyuxuan122/Deepseek-Harness-EAC/pull/12)），随 [v4.0.1-linux](https://github.com/zouyuxuan122/Deepseek-Harness-EAC/releases/tag/v4.0.1-linux) 发布，支持 **Arch / Ubuntu / Debian / Fedora** 与通用 AppImage：
+Linux 打包由社区开发者 [@Luoye-hb](https://github.com/Luoye-hb) 贡献（[PR #12](https://github.com/zouyuxuan122/Deepseek-Harness-EAC/pull/12)），随 [v4.4.0-linux](https://github.com/zouyuxuan122/Deepseek-Harness-EAC/releases/tag/v4.4.0-linux) 发布，支持 **Arch / Ubuntu / Debian / Fedora** 与通用 AppImage：
 
 | 发行版 | 包 | 安装 |
 | --- | --- | --- |
-| Arch Linux | [.pacman](https://github.com/zouyuxuan122/Deepseek-Harness-EAC/releases/download/v4.0.1-linux/Deepseek-Harness-EAC-4.0.1-x64.pacman) | `sudo pacman -U ./Deepseek-Harness-EAC-4.0.1-x64.pacman` |
-| Ubuntu / Debian | [.deb](https://github.com/zouyuxuan122/Deepseek-Harness-EAC/releases/download/v4.0.1-linux/Deepseek-Harness-EAC-4.0.1-amd64.deb) | `sudo apt install ./Deepseek-Harness-EAC-4.0.1-amd64.deb` |
-| Fedora | [.rpm](https://github.com/zouyuxuan122/Deepseek-Harness-EAC/releases/download/v4.0.1-linux/Deepseek-Harness-EAC-4.0.1.x86_64.rpm) | `sudo dnf install ./Deepseek-Harness-EAC-4.0.1.x86_64.rpm` |
-| 通用 | [.AppImage](https://github.com/zouyuxuan122/Deepseek-Harness-EAC/releases/download/v4.0.1-linux/Deepseek-Harness-EAC-4.0.1-x86_64.AppImage) | `chmod +x` 后直接运行 |
+| Arch Linux | [.pacman](https://github.com/zouyuxuan122/Deepseek-Harness-EAC/releases/download/v4.4.0-linux/Deepseek-Harness-EAC-4.4.0-x64.pacman) | `sudo pacman -U ./Deepseek-Harness-EAC-4.4.0-x64.pacman` |
+| Ubuntu / Debian | [.deb](https://github.com/zouyuxuan122/Deepseek-Harness-EAC/releases/download/v4.4.0-linux/Deepseek-Harness-EAC-4.4.0-amd64.deb) | `sudo apt install ./Deepseek-Harness-EAC-4.4.0-amd64.deb` |
+| Fedora | [.rpm](https://github.com/zouyuxuan122/Deepseek-Harness-EAC/releases/download/v4.4.0-linux/Deepseek-Harness-EAC-4.4.0.x86_64.rpm) | `sudo dnf install ./Deepseek-Harness-EAC-4.4.0.x86_64.rpm` |
+| 通用 | [.AppImage](https://github.com/zouyuxuan122/Deepseek-Harness-EAC/releases/download/v4.4.0-linux/Deepseek-Harness-EAC-4.4.0-x86_64.AppImage) | `chmod +x` 后直接运行 |
 
 > - 卸载：`pacman -Rns dsh-desktop` / `apt remove dsh-desktop` / `dnf remove dsh-desktop`
 > - 与 Windows 版一致：内置 Node.js 与 npm CLI，目标机器无需预装 Node.js；数据目录沿用 `~/.dsh`（`DSH_HOME`）
@@ -166,6 +166,10 @@ Linux 打包由社区开发者 [@Luoye-hb](https://github.com/Luoye-hb) 贡献�
 - **快速配置（dsh-easy-setup）**：视觉模型提供商/模型一键选择、`soul.md` 人设可视化编辑、从 Codex / Claude Code 目录一键迁移 skills + MCP + 记忆
 - **双重自动更新**：官方 dsh agent 更新（npm overlay）+ 客户端封装自更新，均经用户同意，失败自动回退
 - **稳定性自愈**：`profile-module-heal` 自动修复 profile 模块遮蔽问题（真实目录与 pnpm 链接双形态，如 `prompt section already registered`、「设置命名空间不可用」、模型列表/模式切换失效）；`plugin-guard` 守护启动失败链路（体检 → 修复 → 回滚 → 事故报告）；重启服务时等待旧进程完全退出（释放文件锁）再启动新服务，插件包（含自带 vendor 依赖）随安装包原样分发
+- **临时对话（v4 新增，dsh-side-session）**：DSH 临时会话：独立悬浮窗，自动导入当前主对话上下文，发起不污染主会话的临时追问
+- **自定义第三方模型思考强度（v4 新增，dsh-third-party-thinking）**：让接入的第三方模型也能在使用时调整思考强度
+- **对话节点导航条（v4 新增，dsh-navbar）**：user 消息快速跳转
+- **微信ClawBot**(v4.1新增)：一键将Deepseek-Harness-EAC接入ClawBot
 
 ---
 

@@ -224,6 +224,7 @@ async function queryBalance(dshHome) {
 
 module.exports = {
   queryBalance,
+  readApiKey,
   readActiveModel,
   DEFAULT_PRICES,
   FALLBACK_PRICES,

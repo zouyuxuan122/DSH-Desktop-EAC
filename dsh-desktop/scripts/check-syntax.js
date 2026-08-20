@@ -19,13 +19,16 @@ const entryFiles = [
   'client-updater.js',
   'balance.js',
   'session-watcher.js',
+  'session-encoding-heal.js',
   'renderer-recovery.js',
   'watchdog.js',
+  'shortcut-maintenance.js',
   'stable-port.js',
   'koffi-preflight.js',
   'profile-module-heal.js',
   'patch-row-heal.js',
   'plugin-guard.js',
+  'rescue-agent.js',
   'preset-sync.js',
 ];
 

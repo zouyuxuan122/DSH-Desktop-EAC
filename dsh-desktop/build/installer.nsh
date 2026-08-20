@@ -219,8 +219,13 @@
 !macro customUnInstall
   ; 先确保没有残留进程占用用户数据文件（静默卸载时应用可能还在跑）
   nsExec::Exec 'taskkill /F /T /IM "Deepseek Harness EAC.exe"'
+  ; /SD IDNO（v4.4）：NSIS 静默模式（uninstall /S，即注册表 QuietUninstallString）
+  ; 下 MessageBox 自动按第一按钮应答 —— MB_YESNO 的第一按钮是 IDYES
+  ; （MB_DEFBUTTON2 只移动 UI 焦点），静默卸载会径直删光用户数据。
+  ; /SD IDNO 让静默卸载与 UI 默认一致：保留数据。
   MessageBox MB_YESNO|MB_ICONQUESTION|MB_DEFBUTTON2 \
     "是否同时删除用户数据？$\r$\n$\r$\n将删除：$\r$\n  · 设置与登录状态（%APPDATA%\Deepseek Harness EAC）$\r$\n  · Web 工作目录与全部对话记录（%USERPROFILE%\.dsh）$\r$\n$\r$\n选择「否」（推荐）则保留数据，重装后原样恢复。" \
+    /SD IDNO \
     IDYES dshUnWipe IDNO dshUnKeep
   Goto dshUnKeep
   dshUnWipe:

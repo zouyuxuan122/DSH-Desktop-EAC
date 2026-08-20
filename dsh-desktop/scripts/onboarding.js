@@ -3,10 +3,10 @@
 // 首次启动「内置插件选择向导」—— 纯逻辑层（无 fs / electron 依赖，可直接
 // 被 node --test 单元测试）。
 //
-// 背景：33 个内置插件（COMPANION_PLUGINS）每次启动被 syncCompanionPlugins
-// 无条件全量复制 + 注册到 web profile，对只需要其中一部分的用户显得臃肿。
-// 本模块只负责「判定 / 目录 / 状态 / 操作清单」四件纯函数事，写盘与 IPC 由
-// main.js 完成。
+// 背景：38 个内置插件（COMPANION_PLUGINS，另有 10 个内置皮肤）每次启动被
+// syncCompanionPlugins 无条件全量复制 + 注册到 web profile，对只需要其中
+// 一部分的用户显得臃肿。本模块只负责「判定 / 目录 / 状态 / 操作清单」四件
+// 纯函数事，写盘与 IPC 由 main.js 完成。
 // ---------------------------------------------------------------------------
 
 // 核心必装插件（向导中锁定，不可取消勾选）：主界面 / 设置页的底座，卸载会
@@ -27,7 +27,7 @@ const CORE_PLUGIN_IDS = new Set([
 const RECOMMENDED_PLUGIN_IDS = new Set([
   'skin-switch',
   'easy-setup',
-  'tool-vision',
+  'picturereader',
   'soul-md',
   'tdai-memory',
   'mobile-fix',
@@ -150,7 +150,7 @@ function buildCatalog(plugins, { coreIds, recommendedIds, describe, dirSize } = 
     name: p.name,
     description: describe ? describe(p.name) : '',
     core: core.has(p.id),
-    // 注册表默认禁用的插件（dsh-dafeiyu）不进「推荐」勾选。
+    // 注册表默认禁用的插件（p.disabled: true，如 dsh-pet）不进「推荐」勾选。
     recommended: rec.has(p.id) && p.disabled !== true,
     registryDisabled: p.disabled === true,
     size: dirSize ? dirSize(p.dir || (p.name.includes('/') ? p.name.split('/').pop() : p.name)) : 0,

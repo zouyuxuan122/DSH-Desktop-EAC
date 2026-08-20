@@ -568,9 +568,13 @@ window.__ModuleLoader__.load({
     // ── plugin ────────────────────────────────────────────────────────────
     var inject = ["slots", "locale", "remote", "settingsScope", "sessions", "workspaces"];
 
-    function apply(ctx) {
+    function apply(ctx, config) {
       var t = ctx.locale.bind(NS);
       ctx.effect(function () { return ctx.locale.register(NS, { zh: zh, en: en }); }, "dsh-easy-setup: dictionaries");
+
+      // 插件配置 hideSections（默认 []）：隐藏对应的设置栏 section。
+      var hidden = (Array.isArray(config && config.hideSections) && config.hideSections) || [];
+      function shown(id) { return hidden.indexOf(id) < 0; }
 
       var mountPromise = ctx.remote.$mount(REMOTE).then(function (dispose) {
         ctx.effect(function () { return dispose; }, "dsh-easy-setup: remote face");
@@ -590,39 +594,47 @@ window.__ModuleLoader__.load({
       };
 
       var visionScope = ctx.settingsScope.bind({ namespace: "tool-vision" });
-      ctx.slots.inject("settings.section", function () {
-        return ctx.slots.register({
-          name: "settings.section",
-          id: "easy-vision",
-          order: 24,
-          label: function () { return t("visionNav"); },
-          locale: NS
-        }, function (props) {
-          return h(VisionQuick, Object.assign({}, props, { scope: visionScope }));
+      // 官方"视觉模型（快速配置）"卡与 dsh-tool-vision 原生"视觉模型"卡重复 → 写死不注册。
+      if (false && shown("easy-vision")) {
+        ctx.slots.inject("settings.section", function () {
+          return ctx.slots.register({
+            name: "settings.section",
+            id: "easy-vision",
+            order: 24,
+            label: function () { return t("visionNav"); },
+            locale: NS
+          }, function (props) {
+            return h(VisionQuick, Object.assign({}, props, { scope: visionScope }));
+          });
         });
-      });
-      ctx.slots.inject("settings.section", function () {
-        return ctx.slots.register({
-          name: "settings.section",
-          id: "easy-persona",
-          order: 26,
-          label: function () { return t("personaNav"); },
-          locale: NS
-        }, function (props) {
-          return h(PersonaEditor, Object.assign({}, props, { remote: remote }));
+      }
+      // 官方"人设卡"（预设+卡片库+编辑）保留；dsh-soul-md 原生"人设卡"已在 soul-md 侧写死关闭避免重复。
+      if (shown("easy-persona")) {
+        ctx.slots.inject("settings.section", function () {
+          return ctx.slots.register({
+            name: "settings.section",
+            id: "easy-persona",
+            order: 26,
+            label: function () { return t("personaNav"); },
+            locale: NS
+          }, function (props) {
+            return h(PersonaEditor, Object.assign({}, props, { remote: remote }));
+          });
         });
-      });
-      ctx.slots.inject("settings.section", function () {
-        return ctx.slots.register({
-          name: "settings.section",
-          id: "easy-migration",
-          order: 27,
-          label: function () { return t("migrationNav"); },
-          locale: NS
-        }, function (props) {
-          return h(Migration, Object.assign({}, props, { remote: remote, ctx: ctx }));
+      }
+      if (shown("easy-migration")) {
+        ctx.slots.inject("settings.section", function () {
+          return ctx.slots.register({
+            name: "settings.section",
+            id: "easy-migration",
+            order: 27,
+            label: function () { return t("migrationNav"); },
+            locale: NS
+          }, function (props) {
+            return h(Migration, Object.assign({}, props, { remote: remote, ctx: ctx }));
+          });
         });
-      });
+      }
     }
 
     exports.apply = apply;
