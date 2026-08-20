@@ -75,8 +75,10 @@ function activeVersion(ctx) { return overlayVersion(ctx) || bundledVersion(); }
 
 function compareVersions(a, b) {
   const parse = (v) => {
-    const [core, pre = ''] = String(v).split('-');
-    const nums = core.split('.').map((s) => parseInt(s, 10) || 0);
+    const [rawCore, pre = ''] = String(v).trim().replace(/^v/i, '').split('-');
+    const coreParts = rawCore.split('.');
+    // 补齐缺省段，保证 4.4 与 4.4.0 的比较结果为相等而不是 NaN。
+    const nums = Array.from({ length: 3 }, (_, i) => parseInt(coreParts[i], 10) || 0);
     const preNum = parseInt((pre.match(/\d+/) || [''])[0], 10);
     return { nums, pre, preNum: Number.isNaN(preNum) ? -1 : preNum, hasPre: !!pre };
   };
