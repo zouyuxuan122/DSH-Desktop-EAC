@@ -8,7 +8,16 @@
  * - `encodeTexts(texts)` — encode documents for upsert (TF-based)
  * - `encodeQueries(texts)` — encode queries for search (IDF-based)
  */
-import { BM25Encoder } from "@tencentdb-agent-memory/tcvdb-text";
+// BM25 is an optional acceleration layer. Keep a missing/incomplete bundled
+// package from preventing the whole memory plugin from loading.
+let BM25Encoder;
+let bm25LoadError;
+try {
+    ({ BM25Encoder } = await import("@tencentdb-agent-memory/tcvdb-text"));
+}
+catch (error) {
+    bm25LoadError = error;
+}
 const TAG = "[memory-tdai][bm25-local]";
 // ============================
 // Implementation
@@ -62,6 +71,10 @@ export class BM25LocalEncoder {
 export function createBM25Encoder(config, logger) {
     if (!config.enabled) {
         logger?.debug?.(`${TAG} BM25 sparse encoding disabled`);
+        return undefined;
+    }
+    if (!BM25Encoder) {
+        logger?.warn?.(`${TAG} BM25 unavailable; continuing without sparse encoding: ${bm25LoadError instanceof Error ? bm25LoadError.message : String(bm25LoadError)}`);
         return undefined;
     }
     return new BM25LocalEncoder(config.language ?? "zh", logger);
