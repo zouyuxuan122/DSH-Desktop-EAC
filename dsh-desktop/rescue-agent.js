@@ -27,7 +27,9 @@
 
 const fs = require('node:fs');
 const path = require('node:path');
+const http = require('node:http');
 const https = require('node:https');
+const yaml = require('js-yaml');
 const { removePluginFromPatch } = require('./scripts/plugin-manager-patch');
 
 const DEFAULT_OPTS = {
@@ -129,6 +131,9 @@ function collectDiagnosis(ctx, opts = {}) {
     workspaceYaml: readProfileFile('pnpm-workspace.yaml'),
     builtinList: readProfileFile('.dsh-builtin-plugins.json'),
   };
+  // 全局 settings.yaml（快照不覆盖、规则体检不扫的配置面 —— AI 主动修复的
+  // 主要作战对象之一），限长读取，损坏字节不影响收集。
+  const settingsYaml = home ? readTail(path.join(home, 'settings.yaml'), o.PROFILE_TEXT_MAX) : '';
   const logs = {
     'dsh-web.log': readTail(path.join(logsDir, 'dsh-web.log'), o.LOG_TAIL_BYTES),
     'desktop.log': readTail(path.join(logsDir, 'desktop.log'), o.LOG_TAIL_BYTES),
@@ -157,6 +162,7 @@ function collectDiagnosis(ctx, opts = {}) {
     lastGood: lastGood ? { id: lastGood.id, reason: lastGood.reason || '' } : null,
     incidents,
     profile,
+    settingsYaml,
     logs,
   };
 
@@ -168,6 +174,7 @@ function collectDiagnosis(ctx, opts = {}) {
     ...(snapshots.length ? [{ kind: '快照', name: `${snapshots.length} 份快照（含最后良好）`, size: JSON.stringify(snapshots).length }] : []),
     ...incidents.map((i) => ({ kind: '事故报告', name: i.title, size: i.body.length })),
     ...Object.entries(profile).filter(([, v]) => v).map(([k, v]) => ({ kind: '配置面', name: k, size: v.length })),
+    ...(settingsYaml ? [{ kind: '配置面', name: 'settings.yaml', size: settingsYaml.length }] : []),
     ...Object.entries(logs).filter(([, v]) => v).map(([k, v]) => ({ kind: '日志尾部', name: k, size: v.length })),
   ];
 
@@ -208,16 +215,19 @@ function filterDiagnosisPayload(payload, manifest, selectedNames) {
       if (manifest.some((m) => m.kind === '配置面' && m.name === k && sel.has(m.name))) out.profile[k] = v;
     }
   }
+  out.settingsYaml = kinds.has('配置面') && sel.has('settings.yaml') ? payload.settingsYaml : '';
   return out;
 }
 
 // ── 提示词构建（buildDiagnosisPrompt）──────────────────────────────────
 // 系统提示词约束：只诊断、只输出动作白名单内的 JSON 建议、绝不虚构文件内容。
 const ACTION_SPEC = [
-  { action: 'restore', params: { snapshotId: '快照 id（来自诊断上下文 snapshots 列表）' }, desc: '回滚 profile 配置到指定快照' },
+  { action: 'restore', params: { snapshotId: '快照 id（来自诊断上下文 snapshots 列表）' }, desc: '回滚 profile 配置到指定快照（高风险，最后手段）' },
   { action: 'disable', params: { pluginId: '插件 id（来自 plugins 列表）' }, desc: '停用某个插件（写盘停用，重启不还原）' },
-  { action: 'remove', params: { pluginId: '插件 id' }, desc: '卸载某个内置插件（清 patch 行与包副本）' },
+  { action: 'remove', params: { pluginId: '插件 id' }, desc: '卸载某个内置插件（高风险，清 patch 行与包副本）' },
   { action: 'repair', params: {}, desc: '执行规则体检修复（patch 行 / 模块遮蔽 / junction）' },
+  { action: 'resync', params: {}, desc: '重装/修复 profile 模块树（node_modules 损坏时使用）' },
+  { action: 'edit-file', params: { file: '白名单文件名（settings.yaml 或 profile 的 package.json / pnpm-lock.yaml / pnpm-workspace.yaml / cordis.patch.yml / .dsh-builtin-plugins.json）', ops: '[{op:"replace-line"|"delete-line"|"insert-after", anchor:"现有行锚点", with:"替换/插入内容（可选）"}] 或 newContent:"整体替换内容"' }, desc: '直接编辑白名单配置文件修复根因（写前快照、写后校验可解析）' },
   { action: 'safe-mode', params: { on: 'true=开启安全模式（只留核心插件裸启动），false=恢复' }, desc: '壳层安全模式开关' },
   { action: 'retry', params: {}, desc: '重新启动 Web 服务（走守护启动全链路）' },
   { action: 'export', params: {}, desc: '建议用户导出诊断 zip（不自动执行）' },
@@ -231,7 +241,7 @@ function buildDiagnosisPrompt(diag) {
     `    desc: ${a.desc}`
   )).join('\n');
   return [
-    '你是 DeepSeek Harness 桌面客户端的救援诊断助手。你的任务是根据下方诊断上下文判断客户端无法工作的原因。',
+    '你是 DeepSeek Harness 桌面客户端的救援修复助手。你的任务是根据下方诊断上下文判断客户端无法工作的原因，并给出可自动执行的修复方案。',
     '',
     '规则：',
     '1. 只做只读诊断，绝不臆造文件内容或日志中不存在的事实。',
@@ -244,8 +254,13 @@ function buildDiagnosisPrompt(diag) {
     '   }',
     '3. suggestions 只能从以下动作白名单中选择，params 必须与规格一致：',
     spec,
-    '4. 若无法确定根因，analysis 说明疑点，suggestions 只给最保守的项（如 retry 或 export）。',
-    '5. 最多给出 4 条建议，按实施顺序排列。',
+    '4. 优先主动修复根因：先考虑 edit-file / resync / repair（低/中风险，会被自动执行），',
+    '   不要一上来就 disable 或 restore；restore / remove 风险高，只在规则链与编辑都无法修复时给出。',
+    '5. edit-file 纪律：只编辑白名单文件；用最小改动（优先 replace-line / delete-line，避免整文件重写）；',
+    '   anchor 必须取诊断上下文里真实存在的行内容；改后文件必须仍是合法 YAML/JSON；',
+    '   若无法给出精确编辑，宁可不给 edit-file。',
+    '6. 若无法确定根因，analysis 说明疑点，suggestions 只给最保守的项（如 retry 或 export）。',
+    '7. 最多给出 4 条建议，按实施顺序排列。',
     '',
     '=== 诊断上下文（JSON） ===',
     JSON.stringify(diag, null, 2),
@@ -296,9 +311,10 @@ function parseAiResponse(text, opts = {}) {
 }
 
 // ── 建议校验（validateSuggestion）─────────────────────────────────────
-const SUGGESTION_ACTIONS = new Set(['restore', 'disable', 'remove', 'repair', 'safe-mode', 'retry', 'export']);
+const SUGGESTION_ACTIONS = new Set(['restore', 'disable', 'remove', 'repair', 'resync', 'edit-file', 'safe-mode', 'retry', 'export']);
 const ID_RE = /^[A-Za-z0-9_.-]+$/;
 const SNAPSHOT_ID_RE = /^[\w.-]+$/;
+const EDIT_OPS = new Set(['replace-line', 'delete-line', 'insert-after']);
 
 function validateSuggestion(item) {
   if (!item || typeof item !== 'object') return { ok: false, error: '建议项不是对象' };
@@ -319,8 +335,190 @@ function validateSuggestion(item) {
     out.params.pluginId = id;
   } else if (action === 'safe-mode') {
     out.params.on = params.on === true;
+  } else if (action === 'edit-file') {
+    // AI 主动修复：只接受白名单文件名 + 结构化行编辑（ops）或整体替换
+    // （newContent）。文件名不得含路径分隔符 / .. / :，杜绝越权与路径穿越。
+    const file = String(params.file || '');
+    if (!file || file.includes('\\') || file.includes('/') || file.includes('..') || file.includes(':')) {
+      return { ok: false, error: 'edit-file 缺少合法 file（只允许白名单文件名本身）' };
+    }
+    if (!EDITABLE_PROFILE_FILES.includes(file) && !EDITABLE_HOME_FILES.includes(file)) {
+      return { ok: false, error: 'edit-file 文件不在可编辑白名单内: ' + file };
+    }
+    const ops = Array.isArray(params.ops) ? params.ops : null;
+    const newContent = typeof params.newContent === 'string' ? params.newContent : null;
+    if (!ops && newContent === null) return { ok: false, error: 'edit-file 缺少 ops 或 newContent' };
+    if (ops) {
+      if (!ops.length) return { ok: false, error: 'edit-file ops 不能为空' };
+      const clean = [];
+      for (const op of ops) {
+        if (!op || typeof op !== 'object') return { ok: false, error: 'edit-file 操作项必须是对象' };
+        const kind = String(op.op || '');
+        if (!EDIT_OPS.has(kind)) return { ok: false, error: '未知编辑操作: ' + kind };
+        const anchor = String(op.anchor || '');
+        if (!anchor) return { ok: false, error: '编辑操作缺少 anchor' };
+        if ((kind === 'replace-line' || kind === 'insert-after') && typeof op.with !== 'string') {
+          return { ok: false, error: kind + ' 缺少 with' };
+        }
+        clean.push({ op: kind, anchor, ...(typeof op.with === 'string' ? { with: op.with } : {}) });
+      }
+      out.params = { file, ops: clean };
+    } else {
+      out.params = { file, newContent };
+    }
   }
   return { ok: true, suggestion: out };
+}
+
+// ── 可编辑文件白名单（AI 主动修复的唯一落笔范围）────────────────────
+const EDITABLE_PROFILE_FILES = ['package.json', 'pnpm-lock.yaml', 'pnpm-workspace.yaml', 'cordis.patch.yml', '.dsh-builtin-plugins.json'];
+const EDITABLE_HOME_FILES = ['settings.yaml'];
+
+// 校验编辑目标：文件名必须本身在白名单内，解析后落在 profileDir / home 根下。
+function validateEditTarget(file, ctx = {}) {
+  const name = String(file || '');
+  if (!name || name.includes('\\') || name.includes('/') || name.includes('..') || name.includes(':')) {
+    return { ok: false, error: '越权路径：只允许编辑白名单文件本身' };
+  }
+  const ext = path.extname(name).toLowerCase();
+  if (EDITABLE_PROFILE_FILES.includes(name)) {
+    const profileDir = String(ctx.profileDir || '');
+    if (!profileDir) return { ok: false, error: 'profileDir 缺失' };
+    return { ok: true, abs: path.join(profileDir, name), kind: 'profile', ext };
+  }
+  if (EDITABLE_HOME_FILES.includes(name)) {
+    const home = String(ctx.home || '');
+    if (!home) return { ok: false, error: 'home 缺失' };
+    return { ok: true, abs: path.join(home, name), kind: 'home', ext };
+  }
+  return { ok: false, error: '文件不在可编辑白名单内' };
+}
+
+function lineMatches(line, anchor) {
+  const t = String(line).trim();
+  return t === anchor || t.startsWith(anchor + ':') || t.startsWith(anchor + ' ');
+}
+
+function applyEditOp(text, op) {
+  const kind = String(op && op.op || '');
+  const anchor = String(op && op.anchor || '');
+  if (!anchor) return { ok: false, error: '行编辑缺少 anchor' };
+  const lines = String(text || '').split('\n');
+  const idx = lines.findIndex((l) => lineMatches(l, anchor));
+  if (idx < 0) return { ok: false, error: '锚点未找到: ' + anchor };
+  if (kind === 'replace-line') {
+    if (typeof op.with !== 'string') return { ok: false, error: 'replace-line 缺少 with' };
+    lines[idx] = op.with;
+    return { ok: true, text: lines.join('\n') };
+  }
+  if (kind === 'delete-line') {
+    lines.splice(idx, 1);
+    return { ok: true, text: lines.join('\n') };
+  }
+  if (kind === 'insert-after') {
+    if (typeof op.with !== 'string') return { ok: false, error: 'insert-after 缺少 with' };
+    lines.splice(idx + 1, 0, op.with);
+    return { ok: true, text: lines.join('\n') };
+  }
+  return { ok: false, error: '未知编辑操作: ' + kind };
+}
+
+function verifyContentParses(ext, text) {
+  try {
+    if (ext === '.json') {
+      JSON.parse(text);
+      return null;
+    }
+    if (ext === '.yaml' || ext === '.yml') {
+      yaml.load(text);
+      return null;
+    }
+    return null;
+  } catch (err) {
+    return '编辑后内容无法解析（' + (ext === '.json' ? 'JSON' : 'YAML') + '）: ' + String((err && err.message) || err);
+  }
+}
+
+// 应用一次白名单文件编辑。副作用（备份/写盘）经 ctx 注入，核心纯逻辑可测。
+// 顺序：目标校验 → 行编辑 → 可解析校验 → 备份 → 写盘。
+function applyProfileEdit(edit, ctx = {}) {
+  const target = validateEditTarget(edit && edit.file, ctx);
+  if (!target.ok) return { ok: false, error: target.error };
+  const ops = Array.isArray(edit && edit.ops) ? edit.ops : null;
+  const newContent = typeof (edit && edit.newContent) === 'string' ? edit.newContent : null;
+  if (!ops && newContent === null) return { ok: false, error: '缺少编辑内容（ops 或 newContent）' };
+
+  let raw = null;
+  try { raw = typeof ctx.readFile === 'function' ? ctx.readFile(target.abs) : null; } catch { raw = null; }
+  if (raw === null && newContent === null) {
+    return { ok: false, error: '目标文件不存在，无法做行级编辑（可改用 newContent 重建）' };
+  }
+  if (raw === null) raw = '';
+
+  let result = raw;
+  let applied = 0;
+  if (ops) {
+    for (const op of ops) {
+      const step = applyEditOp(result, op);
+      if (!step.ok) return { ok: false, error: step.error };
+      result = step.text;
+      applied += 1;
+    }
+  } else {
+    result = newContent;
+    applied = 1;
+  }
+
+  const parseErr = verifyContentParses(target.ext, result);
+  if (parseErr) return { ok: false, error: parseErr };
+
+  try {
+    if (typeof ctx.backup === 'function') ctx.backup(target.abs);
+    if (typeof ctx.writeFile === 'function') ctx.writeFile(target.abs, result);
+  } catch (err) {
+    return { ok: false, error: '写入失败: ' + String((err && err.message) || err) };
+  }
+  return { ok: true, file: edit.file, opsApplied: applied, backupTaken: true };
+}
+
+// ── 一键 AI 自动修复循环（runAutoRepair）──────────────────────────────
+// 所有副作用注入：diagnose（收集上下文）、analyze（调 AI 返回建议）、
+// execute（执行单条白名单建议）、retry（重启 Web 服务）、fallback（兜底
+// 回滚+安全模式）。自动跳过 risk=high 的动作；无进展不重试；超过轮次
+// 或修复后仍无法启动 → 兜底并返回完整轮次记录。
+async function runAutoRepair({ diagnose, analyze, execute, retry, fallback, maxRounds = 2, log = () => {} } = {}) {
+  const safe = (fn) => Promise.resolve().then(fn).catch((err) => ({ ok: false, error: String((err && err.message) || err) }));
+  const rounds = [];
+  const max = Math.max(1, Number(maxRounds) || 2);
+  for (let round = 0; round < max; round++) {
+    const diag = await safe(diagnose);
+    if (!diag || !diag.ok) return { ok: false, error: (diag && diag.error) || '诊断上下文收集失败', rounds };
+    const ai = await safe(() => analyze(diag.payload));
+    if (!ai || !ai.ok) return { ok: false, error: (ai && ai.error) || 'AI 诊断失败', rounds };
+    const suggestions = Array.isArray(ai.suggestions) ? ai.suggestions : [];
+    const applied = [];
+    for (const s of suggestions) {
+      if (s && s.risk === 'high') {
+        applied.push({ action: s.action, skipped: 'high-risk' });
+        continue;
+      }
+      const r = await safe(() => execute(s));
+      applied.push({ action: s && s.action, ok: !!(r && r.ok), result: r && r.result, error: r && r.error });
+    }
+    const progressed = applied.some((a) => a.ok);
+    const roundRec = { round, analysis: ai.analysis || '', applied };
+    if (!progressed) {
+      rounds.push(roundRec);
+      return { ok: false, rounds, error: 'AI 未给出可自动执行的修复', fallback: await safe(fallback) };
+    }
+    const retryRes = await safe(retry);
+    roundRec.retryOk = !!(retryRes && retryRes.ok);
+    roundRec.retryResult = retryRes && retryRes.result;
+    rounds.push(roundRec);
+    if (roundRec.retryOk) return { ok: true, rounds };
+    log('rescue', `AI 自动修复第 ${round + 1} 轮已应用但启动仍失败，进入下一轮`);
+  }
+  return { ok: false, rounds, error: '多轮 AI 修复后仍未启动成功', fallback: await safe(fallback) };
 }
 
 // ── 白名单分发（applySuggestion，副作用经 exec 注入）──────────────────
@@ -391,16 +589,21 @@ function chatCompletions({ apiKey, model, messages, timeoutMs, baseUrl, httpFn }
   const base = String(baseUrl || process.env.DEEPSEEK_API_BASE || 'https://api.deepseek.com').replace(/\/+$/, '');
   const url = base + '/chat/completions';
   const body = JSON.stringify({
-    model: model || DEFAULT_OPTS.MODEL,
+    model: model || process.env.DSH_RESCUE_MODEL || DEFAULT_OPTS.MODEL,
     messages: Array.isArray(messages) ? messages : [],
-    max_tokens: 2000,
+    max_tokens: Number(process.env.DSH_RESCUE_MAX_TOKENS) || 8192,
     temperature: 0.2,
+    // 显式非流式：部分本地路由网关（如 9router）未指定 stream 时默认返回
+    // SSE 流式响应，JSON.parse 会失败。
+    stream: false,
   });
   const timeout = timeoutMs || DEFAULT_OPTS.AI_TIMEOUT_MS;
+  // 兼容本地 http 网关（LLM 路由/聚合端点常为 http://localhost:port）。
+  const transport = base.startsWith('http://') ? http : https;
   const doFetch = typeof httpFn === 'function'
     ? httpFn
     : (url2, reqBody, headers) => new Promise((resolve, reject) => {
-      const req = https.request(url2, {
+      const req = transport.request(url2, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -458,4 +661,7 @@ module.exports = {
   recordBootFailure,
   shouldEnterRescue,
   chatCompletions,
+  validateEditTarget,
+  applyProfileEdit,
+  runAutoRepair,
 };

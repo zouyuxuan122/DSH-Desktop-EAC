@@ -31,6 +31,18 @@ test('main.js registers every rescue IPC endpoint', () => {
   }
 });
 
+test('main.js wires the one-click AI auto-repair IPC', () => {
+  assert.ok(mainSrc.includes("'rescue:auto-repair'"), "IPC handler rescue:auto-repair missing");
+  assert.ok(/rescueAgent\.runAutoRepair\(/.test(mainSrc), 'main.js must call rescueAgent.runAutoRepair()');
+});
+
+test('main.js executes edit-file and resync in the whitelist dispatcher', () => {
+  assert.ok(/case 'edit-file'/.test(mainSrc), "rescueExecuteSuggestion edit-file case missing");
+  assert.ok(/case 'resync'/.test(mainSrc), "rescueExecuteSuggestion resync case missing");
+  assert.ok(/applyProfileEdit\(/.test(mainSrc), 'edit-file must go through applyProfileEdit()');
+  assert.ok(/snapshot\('ai-edit-before'\)/.test(mainSrc), 'edit-file must snapshot before writing');
+});
+
 test('main.js offers 进入救援模式 from the boot-failure dialog', () => {
   assert.ok(mainSrc.includes("'进入救援模式'"), 'rescue-mode button missing from handleBootFailure');
   assert.ok(/function showRescuePage\(/.test(mainSrc), 'showRescuePage() missing');
@@ -52,6 +64,19 @@ test('preload exposes the rescue bridge', () => {
   for (const ch of ['rescue:state', 'rescue:confirm', 'rescue:diagnose', 'rescue:apply', 'rescue:retry', 'safe-mode:set']) {
     assert.ok(preloadSrc.includes(`'${ch}'`), `preload bridge for ${ch} missing`);
   }
+});
+
+test('preload exposes the auto-repair bridge', () => {
+  assert.ok(preloadSrc.includes("'rescue:auto-repair'"), 'preload auto-repair bridge missing');
+  assert.ok(/autoRepair:/.test(preloadSrc), 'preload rescue.autoRepair() missing');
+});
+
+test('rescue page offers the one-click AI auto repair', () => {
+  const page = join(ROOT, 'assets', 'recovery.html');
+  const html = readFileSync(page, 'utf8');
+  assert.ok(html.includes('AI 自动修复'), 'recovery.html must offer the AI auto-repair button');
+  assert.ok(/btn-autorepair/.test(html), 'recovery.html btn-autorepair missing');
+  assert.ok(/auto-progress/.test(html), 'recovery.html auto-repair progress area missing');
 });
 
 test('rescue page exists and references the rescue bridge', () => {

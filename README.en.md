@@ -52,8 +52,8 @@ On top of the original, EAC embraces the community's creations — skins, plugin
 
 | File | Description | Size |
 | --- | --- | --- |
-| [Portable exe](https://github.com/zouyuxuan122/Deepseek-Harness-EAC/releases/latest/download/Deepseek-Harness-EAC-Portable-x64.exe) | No install needed, double-click to run, USB-friendly | ~167 MB |
-| [Setup exe](https://github.com/zouyuxuan122/Deepseek-Harness-EAC/releases/latest/download/Deepseek-Harness-EAC-Setup-x64.exe) | Installs to system, creates desktop/Start-Menu shortcuts | ~167 MB |
+| [Portable exe](https://github.com/zouyuxuan122/Deepseek-Harness-EAC/releases/latest/download/Deepseek-Harness-EAC-Portable-v4.4.1-x64.exe) | No install needed, double-click to run, USB-friendly | ~167 MB |
+| [Setup exe](https://github.com/zouyuxuan122/Deepseek-Harness-EAC/releases/latest/download/Deepseek-Harness-EAC-Setup-v4.4.1-x64.exe) | Installs to system, creates desktop/Start-Menu shortcuts | ~167 MB |
 
 More versions on the [Releases page](https://github.com/zouyuxuan122/Deepseek-Harness-EAC/releases).
 
@@ -121,7 +121,6 @@ More versions on the [Releases page](https://github.com/zouyuxuan122/Deepseek-Ha
 - **Project file tree + HTML/port preview**: VSCode-style tree, in-app preview of HTML files and localhost ports (loopback only)
 - **Community plugin marketplace (new in v2, dsh-webui-market)**: Settings → Plugins → Marketplace — browse plugins listed on awesome-dsh-plugin.com and install/uninstall them into the profile with one click; install/uninstall jobs are queued and run during the service restart window so the current session is never interrupted
 - **External vision models (new in v2, dsh-tool-vision)**: the `inspect_image` tool sends local image files or image URLs to any OpenAI-compatible vision endpoint (qwen-vl / GLM-4V / Ollama, ...) and brings the vision answer back into the conversation
-- **Long-term memory (new in v2, dsh-tdai-memory)**: a port of TencentDB Agent Memory — L0 conversation capture → L1 structured memory → L2 scenarios / L3 persona profiles, with automatic recall injection plus memory/conversation search tools; reuses existing `~/.memory-tencentdb/memory-tdai` data
 - **soul.md persona hot-reload (new in v2, dsh-soul-md)**: injects a markdown persona file into the system prompt (`soul:persona`), hot-reloads on file change — the agent roleplays while it works
 - **Mobile layout fixes (new in v2, dsh-web-mobile-fix)**: fixes settings panel, popups, sidebar and session header on narrow (≤400px) screens — pure client-side CSS, desktop layout untouched
 - **Easy setup (dsh-easy-setup)**: one-click vision-model provider/model picker, `soul.md` persona visual editor, one-click migration of skills + MCP + memory from Codex / Claude Code directories
@@ -196,6 +195,29 @@ dsh-desktop/                  # Electron desktop app
 openclaw-dsh-bridge/          # WeChat bridge plugin (optional, research-grade)
 research/                     # Third-party WeChat / bridge protocol research
 ```
+
+## Contributors
+
+Thanks to every contributor:
+
+<p align="center">
+  <a href="https://github.com/zouyuxuan122"><img src="https://avatars.githubusercontent.com/u/245557608?size=64" width="64" height="64" style="border-radius:50%" alt="zouyuxuan122" title="zouyuxuan122 · 27 commits"></a>
+  <a href="https://github.com/jiang8297"><img src="https://avatars.githubusercontent.com/u/242639667?size=64" width="64" height="64" style="border-radius:50%" alt="jiang8297" title="jiang8297 · 6 commits"></a>
+  <a href="https://github.com/zixin947"><img src="https://avatars.githubusercontent.com/u/318131693?size=64" width="64" height="64" style="border-radius:50%" alt="zixin947" title="zixin947 · 5 commits"></a>
+  <a href="https://github.com/dtyg123"><img src="https://avatars.githubusercontent.com/u/171705219?size=64" width="64" height="64" style="border-radius:50%" alt="dtyg123" title="dtyg123 · 3 commits"></a>
+  <a href="https://github.com/jing-hy"><img src="https://avatars.githubusercontent.com/u/281396152?size=64" width="64" height="64" style="border-radius:50%" alt="jing-hy" title="jing-hy · 2 commits"></a>
+  <a href="https://github.com/Luoye-hb"><img src="https://avatars.githubusercontent.com/u/238787898?size=64" width="64" height="64" style="border-radius:50%" alt="Luoye-hb" title="Luoye-hb · 1 commit"></a>
+  <a href="https://github.com/lanyun077"><img src="https://avatars.githubusercontent.com/u/186024291?size=64" width="64" height="64" style="border-radius:50%" alt="lanyun077" title="lanyun077 · 1 commit"></a>
+  <a href="https://github.com/lbn2011"><img src="https://avatars.githubusercontent.com/u/89037561?size=64" width="64" height="64" style="border-radius:50%" alt="lbn2011" title="lbn2011 · 1 commit"></a>
+</p>
+
+## Star History
+
+<p align="center">
+  <a href="https://star-history.com/#zouyuxuan122/Deepseek-Harness-EAC&Date">
+    <img src="https://api.star-history.com/svg?repos=zouyuxuan122/Deepseek-Harness-EAC&type=Date" alt="Star History Chart">
+  </a>
+</p>
 
 ## License
 

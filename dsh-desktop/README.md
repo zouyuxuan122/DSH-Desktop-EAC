@@ -33,8 +33,8 @@
 ## 快速开始（成品用户）
 
 1. 打开 [Releases](https://github.com/zouyuxuan122/Deepseek-Harness-EAC/releases/latest) 页面，选其一（链接永久有效，始终指向最新版）：
-   - [Deepseek-Harness-EAC-Portable-x64.exe](https://github.com/zouyuxuan122/Deepseek-Harness-EAC/releases/latest/download/Deepseek-Harness-EAC-Portable-x64.exe) —— 免安装便携版，双击运行
-   - [Deepseek-Harness-EAC-Setup-x64.exe](https://github.com/zouyuxuan122/Deepseek-Harness-EAC/releases/latest/download/Deepseek-Harness-EAC-Setup-x64.exe) —— 安装版，创建桌面/开始菜单快捷方式
+   - [Deepseek-Harness-EAC-Portable-v4.4.1-x64.exe](https://github.com/zouyuxuan122/Deepseek-Harness-EAC/releases/latest/download/Deepseek-Harness-EAC-Portable-v4.4.1-x64.exe) —— 免安装便携版，双击运行
+   - [Deepseek-Harness-EAC-Setup-v4.4.1-x64.exe](https://github.com/zouyuxuan122/Deepseek-Harness-EAC/releases/latest/download/Deepseek-Harness-EAC-Setup-v4.4.1-x64.exe) —— 安装版，创建桌面/开始菜单快捷方式
 2. 首次运行会显示启动动画，随后进入 DeepSeek Harness Web UI。
 3. 如尚未配置 API Key，在界面内完成配置即可开始使用（与命令行 dsh 完全一致）。
 
@@ -142,7 +142,6 @@
 | `dsh-pet` | 桌面宠物：28 个透明动画的悬浮宠物，空闲呼吸、随机动作、屏幕游走 | 随包自动启用 |
 | `dsh-dafeiyu`（v4） | 大肥鱼桌宠：真实会话状态驱动的原生置顶窗口（六态动画 + 项目状态卡 + 摸头/戳一戳；角色素材按 ASSET_LICENSE 分发） | 默认禁用，「插件 → 管理」启用 |
 | `picturereader` | 全能读图/读文档：视觉孪生 adapter（原生缩略图 + 粘贴即用自动分析，opencode 等 pi-ai provider 也可用，杜绝 UNSUPPORTED_CONTENT）；隐私/智能/严谨三模式；本地工具链（像素扫描/3 引擎 OCR/裁剪/取色/对比/批量）；pdf/word/excel/ppt 转图片；可选外部 VLM 桥（OpenAI 兼容端点） | 设置 → 图片阅读 |
-| `dsh-tdai-memory` | 长期记忆（腾讯云 Agent Memory 移植）：L0 对话 → L1 结构化事实 → L2 场景 → L3 画像，自动召回注入 + 记忆/对话搜索工具，数据存于 `~/.memory-tencentdb/memory-tdai` | 设置 → 长期记忆 |
 | `dsh-soul-md` | soul.md 人设卡：可视化编辑人设，热重载即时生效；未配置时注册空 section，**完全不影响官方系统提示词** | 设置 → 人设卡 |
 | `dsh-web-mobile-fix` | Web UI 移动端适配修复 | 随包自动启用 |
 | `dsh-easy-setup` | 一键迁移（一键夺舍）：选择目录 → 新建工作区与对话 → AI 全程可视化迁移 skills / MCP / 记忆 | 设置 → 一键迁移 |
@@ -247,7 +246,7 @@ dsh-desktop/
 ├── assets/               # 加载页、更新进度页、图标、托盘图标、配套 dsh 插件
 │   └── plugins/          # 桌面壳配套（dsh-balance、dsh-file-changes、dsh-terminal、
 │                         # dsh-easy-setup、dsh-skin-switch）+ 内置社区插件
-│                         # （dsh-webui-market、dsh-tool-vision、dsh-tdai-memory、
+│                         # （dsh-webui-market、dsh-tool-vision、
 │                         # dsh-soul-md、dsh-web-mobile-fix，含 vendor 与自包含依赖）
 │                         # 全部自动同步进 web profile
 ├── scripts/

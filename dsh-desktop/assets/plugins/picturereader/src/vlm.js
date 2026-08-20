@@ -212,8 +212,8 @@ export function isVlmConfigured() {
   if (rt?.vlm?.enabled === false) return false;
   const base = effectiveBase(rt);
   if (base.length === 0) return false;
-  // Cloud endpoints require an API key
-  const isLocal = isManagedEndpoint(base, DEFAULT_PORT);
+  // Cloud endpoints require an API key; local endpoints (127.0.0.1/localhost) don't
+  const isLocal = isLocalEndpoint(base);
   if (!isLocal && effectiveApiKey(rt).length === 0) return false;
   return true;
 }
@@ -240,6 +240,16 @@ export async function probe(baseURL, timeoutMs = 3000) {
   } catch {
     return false;
   }
+}
+
+/**
+ * Check if the endpoint is on localhost (no API key required).
+ * @param {string} baseURL - the VLM endpoint base URL.
+ * @returns {boolean} true when it's a local endpoint.
+ */
+function isLocalEndpoint(baseURL) {
+  const u = baseURL.replace(/\/v1$/, '').replace(/\/+$/, '');
+  return /^http:\/\/(127\.0\.0\.1|localhost):\d+$/.test(u);
 }
 
 /**

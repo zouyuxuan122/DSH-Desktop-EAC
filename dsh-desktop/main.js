@@ -1117,6 +1117,36 @@ async function rescueExecuteSuggestion(s) {
       const applied = (r && r.applied) || [];
       return { ok: true, result: applied.length ? '已应用修复: ' + applied.join('；') : '体检未发现可修复项' };
     }
+    case 'edit-file': {
+      // AI 主动修复：白名单文件结构化编辑。写前快照（ai-edit-before），
+      // rescue-agent 校验目标与可解析性后原子落盘，失败不动原文件。
+      const snap = g.snapshot('ai-edit-before');
+      const ctx = {
+        home: dshHome || path.join(os.homedir(), '.dsh'),
+        profileDir: desktopProfileDir(),
+        readFile: (f) => { try { return fs.readFileSync(f, 'utf8'); } catch { return null; } },
+        writeFile: (f, text) => { fs.writeFileSync(f, text, 'utf8'); },
+        backup: (f) => { try { fs.copyFileSync(f, f + '.ai-bak'); } catch {} },
+      };
+      const r = rescueAgent.applyProfileEdit(s.params, ctx);
+      if (!r.ok) return { ok: false, error: r.error };
+      return { ok: true, result: `已编辑 ${r.file}（${r.opsApplied} 处改动）`, restartRequired: true, snapshotId: snap && snap.id };
+    }
+    case 'resync': {
+      // 重装/修复 profile 模块树：补齐内置插件依赖与补丁（syncCompanionPlugins）
+      // 后修模块遮蔽（healProfileModules）。两者幂等；需服务停止时执行。
+      if (serverProc && serverProc.exitCode === null && !serverProc.killed && !restartingServer) {
+        return { ok: false, error: 'service-running', hint: '请先重启服务（模块树重装需在重启间隙执行）' };
+      }
+      const notes = [];
+      try { syncCompanionPlugins(); notes.push('内置插件树已同步'); } catch (err) {
+        return { ok: false, error: '内置插件同步失败: ' + String((err && err.message) || err) };
+      }
+      try { healProfileModules(); notes.push('模块遮蔽已清理'); } catch (err) {
+        return { ok: false, error: '模块树修复失败: ' + String((err && err.message) || err) };
+      }
+      return { ok: true, result: notes.join('；'), restartRequired: true };
+    }
     case 'safe-mode': {
       const r = safeModeSet(s.params.on);
       return r.ok
@@ -1267,93 +1297,98 @@ function handleBootFailure(err) {
     return;
   }
   const ov = updater.overlayBinPath(updCtx());
-  if (ov && fs.existsSync(ov)) {
-    // V4.1 更新保障②：上次更新保留的上一版本备份可用时，优先提供
-    // 「回退到上一版本」（比退回内置版更贴近用户原状态）。
-    const prev = updater.previousAgentInfo(updCtx());
-    // V4.2 插件即时提醒：报错文案归因到 profile 里的插件时，提供
-    // 「停用插件 X 并重试」（写盘停用，重启不还原）；另有最后良好快照时
-    // 提供「回滚到最后良好快照并重试」。两项都失败才轮到版本级回退。
-    // V4.4：第一按钮永远是「进入救援模式」（完整查看/修复/AI 诊断）。
-    let blame = null;
-    let blameRow = null;
-    try {
-      const g = ensureGuard();
-      if (typeof g.attributeBootFailure === 'function') {
-        blame = g.attributeBootFailure(String((err && err.message) || err));
-      }
-      if (blame) {
-        try {
-          blameRow = pluginManagerCollect().find((r) => r.id === blame.rowId) || null;
-        } catch { blameRow = null; }
-      }
-    } catch {}
-    const lastGood = (() => { try { return ensureGuard().lastGoodSnapshot(); } catch { return null; } })();
-    const btnDisable = blameRow && blameRow.toggleable ? '停用插件 ' + blameRow.name + ' 并重试' : null;
-    const btnRollback = lastGood ? '回滚到最后良好快照并重试' : null;
-    const buttons = [
-      '进入救援模式',
-      ...(btnDisable ? [btnDisable] : []),
-      ...(btnRollback ? [btnRollback] : []),
-      ...(prev ? ['回退到上一版本并重试', '回退到内置版本', '重试', '退出'] : ['回退到内置版本并重试', '重试', '退出']),
-    ];
-    const detailLines = [String((err && err.message) || err)];
+  const hasOverlay = !!(ov && fs.existsSync(ov));
+  // V4.1 更新保障②：上次更新保留的上一版本备份可用时，优先提供
+  // 「回退到上一版本」（比退回内置版更贴近用户原状态）。
+  const prev = hasOverlay ? updater.previousAgentInfo(updCtx()) : null;
+  // V4.2 插件即时提醒：报错文案归因到 profile 里的插件时，提供
+  // 「停用插件 X 并重试」（写盘停用，重启不还原）；另有最后良好快照时
+  // 提供「回滚到最后良好快照并重试」。两项都失败才轮到版本级回退。
+  // V4.4：第一按钮永远是「进入救援模式」（完整查看/修复/AI 诊断）——
+  // 无上一版本备份（普通崩溃/坏插件）时同样弹此对话框，不再裸弹 fatal。
+  let blame = null;
+  let blameRow = null;
+  try {
+    const g = ensureGuard();
+    if (typeof g.attributeBootFailure === 'function') {
+      blame = g.attributeBootFailure(String((err && err.message) || err));
+    }
     if (blame) {
-      detailLines.push('', `报错指向插件「${blame.name}」（${blame.kind === 'patchRow' ? 'patch 行 ' + blame.rowId : blame.kind}），可先停用该插件后重试。`);
+      try {
+        blameRow = pluginManagerCollect().find((r) => r.id === blame.rowId) || null;
+      } catch { blameRow = null; }
     }
-    if (lastGood) {
-      detailLines.push(`存在最后良好快照（${lastGood.reason || lastGood.id}），可一键回滚后重试。`);
-    }
-    if (prev) detailLines.push('', `可回退到上一版本（v${prev.version}）或内置版本继续使用。`);
-    else detailLines.push('', '可回退到内置版本继续使用。');
-    detailLines.push('', '也可进入救援模式：查看日志/快照/事故报告，或让 AI 诊断后按建议修复。');
-    showBox({
-      type: 'error',
-      title: 'DeepSeek Harness 启动失败',
-      message: prev ? '更新后的 agent 无法启动。' : 'DeepSeek Harness 无法启动。',
-      detail: detailLines.join('\n'),
-      buttons,
-      defaultId: 0,
-      cancelId: buttons.length - 1,
-    }).then(({ response }) => {
-      let i = 0;
-      const take = () => i++;
-      // 第一按钮：进入救援模式（完整修复能力 + AI 诊断）。
-      if (response === take()) {
-        showRescuePage();
-        return;
-      }
-      // 归因到插件时，优先给「停用插件」——
-      if (btnDisable && response === take()) {
-        try {
-          pluginManagerSetEnabled(blameRow.id, false);
-          log('plugin-manager', `启动失败后停用插件: ${blameRow.id}`);
-        } catch (e2) { log('plugin-manager', '停用插件失败: ' + ((e2 && e2.message) || e2)); }
-        startAndShow().catch((e2) => handleBootFailure(e2));
-        return;
-      }
-      if (btnRollback && response === take()) {
-        try {
-          ensureGuard().restore(lastGood.id);
-        } catch (e2) { log('guard', '回滚快照失败: ' + ((e2 && e2.message) || e2)); }
-        startAndShow().catch((e2) => handleBootFailure(e2));
-        return;
-      }
-      if (prev && response === take()) {
-        updater.rollbackToPrevious(updCtx());
-        startAndShow().catch((e2) => fatal('DeepSeek Harness 启动失败', e2));
-      } else if ((prev && response === take()) || (!prev && response === take())) {
-        updater.rollback(updCtx());
-        startAndShow().catch((e2) => fatal('DeepSeek Harness 启动失败', e2));
-      } else if ((prev && response === take()) || (!prev && response === take())) {
-        startAndShow().catch((e2) => handleBootFailure(e2));
-      } else {
-        app.quit();
-      }
-    });
-  } else {
-    fatal('Deepseek Harness 启动失败', err);
+  } catch {}
+  const lastGood = (() => { try { return ensureGuard().lastGoodSnapshot(); } catch { return null; } })();
+  const btnDisable = blameRow && blameRow.toggleable ? '停用插件 ' + blameRow.name + ' 并重试' : null;
+  const btnRollback = lastGood ? '回滚到最后良好快照并重试' : null;
+  const buttons = [
+    '进入救援模式',
+    ...(btnDisable ? [btnDisable] : []),
+    ...(btnRollback ? [btnRollback] : []),
+    ...(prev ? ['回退到上一版本并重试'] : []),
+    '回退到内置版本并重试',
+    '重试',
+    '退出',
+  ];
+  const detailLines = [String((err && err.message) || err)];
+  if (blame) {
+    detailLines.push('', `报错指向插件「${blame.name}」（${blame.kind === 'patchRow' ? 'patch 行 ' + blame.rowId : blame.kind}），可先停用该插件后重试。`);
   }
+  if (lastGood) {
+    detailLines.push(`存在最后良好快照（${lastGood.reason || lastGood.id}），可一键回滚后重试。`);
+  }
+  if (prev) detailLines.push('', `可回退到上一版本（v${prev.version}）或内置版本继续使用。`);
+  else detailLines.push('', '可回退到内置版本继续使用。');
+  detailLines.push('', '也可进入救援模式：查看日志/快照/事故报告，或让 AI 诊断后按建议修复。');
+  showBox({
+    type: 'error',
+    title: 'DeepSeek Harness 启动失败',
+    message: prev ? '更新后的 agent 无法启动。' : 'DeepSeek Harness 无法启动。',
+    detail: detailLines.join('\n'),
+    buttons,
+    defaultId: 0,
+    cancelId: buttons.length - 1,
+  }).then(({ response }) => {
+    let i = 0;
+    const take = () => i++;
+    // 第一按钮：进入救援模式（完整修复能力 + AI 诊断）。
+    if (response === take()) {
+      showRescuePage();
+      return;
+    }
+    // 归因到插件时，优先给「停用插件」——
+    if (btnDisable && response === take()) {
+      try {
+        pluginManagerSetEnabled(blameRow.id, false);
+        log('plugin-manager', `启动失败后停用插件: ${blameRow.id}`);
+      } catch (e2) { log('plugin-manager', '停用插件失败: ' + ((e2 && e2.message) || e2)); }
+      startAndShow().catch((e2) => handleBootFailure(e2));
+      return;
+    }
+    if (btnRollback && response === take()) {
+      try {
+        ensureGuard().restore(lastGood.id);
+      } catch (e2) { log('guard', '回滚快照失败: ' + ((e2 && e2.message) || e2)); }
+      startAndShow().catch((e2) => handleBootFailure(e2));
+      return;
+    }
+    if (prev && response === take()) {
+      updater.rollbackToPrevious(updCtx());
+      startAndShow().catch((e2) => fatal('DeepSeek Harness 启动失败', e2));
+      return;
+    }
+    if (response === take()) {
+      updater.rollback(updCtx()); // 无上一版本备份时为空操作（返回 null）
+      startAndShow().catch((e2) => fatal('DeepSeek Harness 启动失败', e2));
+      return;
+    }
+    if (response === take()) {
+      startAndShow().catch((e2) => handleBootFailure(e2));
+      return;
+    }
+    app.quit();
+  });
   // dsh web 起不来（如 v3.0.0 schemastery 闭包缺陷）的用户永远走不到
   // 成功链上的自动更新定时器，只能手动重装。主动查一次客户端更新，
   // manual=true 绕过 skip/稍后 抑制，让修复版本能下载并自愈。
@@ -2456,6 +2491,69 @@ function registerChromeIpc() {
     }
   });
 
+  // ── V4.6 一键 AI 自动修复：诊断 → 自动执行低/中风险建议 → 自动重启 → 迭代。
+  // 全量发送诊断上下文（用户在清单页已确认的内容）；高风险动作自动跳过，
+  // 多轮修复后仍无法启动则兜底（回滚最后良好快照 + 开启安全模式）。
+  ipcMain.handle('rescue:auto-repair', async (event) => {
+    if (!mainWindow || event.sender !== mainWindow.webContents) return { ok: false, error: 'unauthorized' };
+    if (rescueBusy) return { ok: false, error: 'busy' };
+    const home = dshHome || path.join(os.homedir(), '.dsh');
+    const apiKey = balance.readApiKey(home);
+    if (!apiKey) {
+      return { ok: false, error: 'no-key', hint: '未找到 DEEPSEEK_API_KEY（环境变量或 ~/.dsh/.credentials.yaml）' };
+    }
+    rescueBusy = true;
+    try {
+      const g = ensureGuard();
+      const result = await rescueAgent.runAutoRepair({
+        diagnose: () => {
+          const diag = buildRescueDiagnosis();
+          if (!diag) return { ok: false, error: '诊断上下文收集失败' };
+          // 空 selections = 全量发送（用户确认的完整清单）。
+          return { ok: true, payload: rescueAgent.filterDiagnosisPayload(diag.payload, diag.sendManifest, []) };
+        },
+        analyze: async (payload) => {
+          const r = await rescueAgent.chatCompletions({
+            apiKey,
+            model: rescueAgent.DEFAULT_OPTS.MODEL,
+            messages: [{ role: 'system', content: rescueAgent.buildDiagnosisPrompt(payload) }],
+            timeoutMs: rescueAgent.DEFAULT_OPTS.AI_TIMEOUT_MS,
+          });
+          if (!r.ok) return r;
+          return rescueAgent.parseAiResponse(r.content);
+        },
+        execute: (s) => rescueAgent.applySuggestion(s, (x) => rescueExecuteSuggestion(x), (t, m) => log(t, m)),
+        retry: () => rescueExecuteSuggestion({ action: 'retry', params: {}, reason: 'AI 修复后自动重试', risk: 'low' }),
+        fallback: async () => {
+          const notes = [];
+          try {
+            const good = g.lastGoodSnapshot();
+            if (good && good.id) {
+              const rr = g.restore(good.id);
+              notes.push(rr.ok ? '已回滚最后良好快照 ' + good.id : '回滚失败: ' + String((rr && rr.error) || '?'));
+            } else {
+              notes.push('无最后良好快照可回滚');
+            }
+          } catch (err) {
+            notes.push('回滚异常: ' + String((err && err.message) || err));
+          }
+          try {
+            const sm = safeModeSet(true);
+            notes.push(sm.ok ? '已开启安全模式' : '安全模式开启失败');
+          } catch (err) {
+            notes.push('安全模式异常: ' + String((err && err.message) || err));
+          }
+          return { ok: true, result: notes.join('；') };
+        },
+        log: (t, m) => log(t, m),
+      });
+      log('rescue', '一键 AI 自动修复结束: ' + JSON.stringify({ ok: result.ok, rounds: result.rounds && result.rounds.length, error: result.error || null }));
+      return result;
+    } finally {
+      rescueBusy = false;
+    }
+  });
+
   // 插件保护中心（plugin-guard.js）：快照 / 回滚 / 体检 / 修复 / 事故报告。
   // 设置页「插件保护」分区（dsh-plugin-shield 插件）从这里取数与触发动作。
   ipcMain.handle('guard:action', async (event, { action, value } = {}) => {
@@ -3227,8 +3325,8 @@ function copyPluginPackage(profileDirP, src, name) {
   // lib 整目录随包（配套插件可能有 logic.js 等额外模块，按清单拷会漏文件
   // 导致 dsh web 启动时 ERR_MODULE_NOT_FOUND）。
   for (const f of ['package.json', 'skin.json', ...EXTRA_PACKAGE_FILES]) copyFile(f);
-  // 社区插件（soul-md / tdai-memory / tool-vision）入口在包根目录而非
-  // lib/，vendor/ 是其内置依赖，同样必须随包分发。
+  // 社区插件（soul-md / tool-vision 等）入口在包根目录而非 lib/，
+  // vendor/ 是其内置依赖，同样必须随包分发。
   for (const f of ['index.js', 'client.js', 'recall-inject.js', 'cordis.patch.yml']) copyFile(f);
   copyDir('lib');
   copyDir('preview');
@@ -3876,12 +3974,61 @@ function pluginManagerSetEnabled(id, enabled) {
   return { ok: true };
 }
 
+// 曾内置、现已从内置清单移除的插件（tdai-memory：唯一携带 node_modules 的
+// 内置插件，v4.5 起退役 —— 体积 ~310MB 占安装包近半，且 vendor 任一小缺失
+// 即 import 失败拖垮插件树）。老用户 profile 可能残留其 patch 行、node_modules
+// 副本与 package.json 依赖：行在包被清会拖垮插件树，包在行在则退役插件继续
+// 加载。启动时统一清理，避免任何残留路径。
+const RETIRED_BUILTIN_PLUGINS = [
+  { id: 'tdai-memory', name: 'dsh-tdai-memory' },
+];
+
+// 清理退役内置插件在 profile 的所有残留（patch 行 / 包副本 / 依赖项）。
+function retireRemovedBuiltinPlugins(profileDirP) {
+  for (const p of RETIRED_BUILTIN_PLUGINS) {
+    const patchFile = path.join(profileDirP, 'cordis.patch.yml');
+    try {
+      const text = fs.readFileSync(patchFile, 'utf8');
+      const patched = removePluginFromPatch(text, p.id);
+      if (patched !== text) {
+        const tmp = patchFile + '.tmp';
+        fs.writeFileSync(tmp, patched, 'utf8');
+        fs.renameSync(tmp, patchFile);
+        log('boot', `已清理退役内置插件 ${p.id} 的 profile 行`);
+      }
+    } catch (err) {
+      log('boot', `清理退役内置插件 ${p.id} 行失败: ${String((err && err.message) || err)}`);
+    }
+    const pkgDir = path.join(profileDirP, 'node_modules', ...p.name.split('/'));
+    try {
+      if (fs.existsSync(pkgDir)) {
+        fs.rmSync(pkgDir, { recursive: true, force: true });
+        log('boot', `已清理退役内置插件 ${p.id} 的 profile 包副本`);
+      }
+    } catch (err) {
+      log('boot', `清理退役内置插件 ${p.id} 包失败: ${String((err && err.message) || err)}`);
+    }
+    try {
+      const pkgFile = path.join(profileDirP, 'package.json');
+      const pkg = JSON.parse(fs.readFileSync(pkgFile, 'utf8'));
+      if (pkg.dependencies && pkg.dependencies[p.name]) {
+        delete pkg.dependencies[p.name];
+        fs.writeFileSync(pkgFile, JSON.stringify(pkg, null, 2) + '\n');
+        log('boot', `已清理退役内置插件 ${p.id} 的 package.json 依赖`);
+      }
+    } catch { /* package.json 缺失/损坏则跳过 */ }
+  }
+}
+
 function syncCompanionPlugins() {
   if (!IS_WIN) return;
   try {
     const home = dshHome || path.join(os.homedir(), '.dsh');
     // 桌面专属 profile 必须先存在（未知 profile 不会被 dsh 自动初始化）。
     ensureDesktopProfileInit();
+    // 清理已退役内置插件（tdai-memory 等）在 profile 的残留，避免
+    // 「行在包被清」拖垮插件树或退役插件继续加载。
+    retireRemovedBuiltinPlugins(desktopProfileDir());
     // V4 运行时补丁（幂等，随启动 / 服务重启 / agent 更新后重放）：
     //  · 对话删除/归档 —— dsh-session-manager 插件的全链路前置依赖；
     applySessionManageFix();

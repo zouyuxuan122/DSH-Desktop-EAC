@@ -58,8 +58,8 @@
 
 | 文件 | 说明 | 大小 |
 | --- | --- | --- |
-| [便携版 exe](https://github.com/zouyuxuan122/Deepseek-Harness-EAC/releases/latest/download/Deepseek-Harness-EAC-Portable-x64.exe) | 免安装，双击即用，可放 U 盘 | ~226 MB |
-| [安装版 exe](https://github.com/zouyuxuan122/Deepseek-Harness-EAC/releases/latest/download/Deepseek-Harness-EAC-Setup-x64.exe) | 安装到系统，创建桌面/开始菜单快捷方式 | ~241 MB |
+| [便携版 exe](https://github.com/zouyuxuan122/Deepseek-Harness-EAC/releases/latest/download/Deepseek-Harness-EAC-Portable-v4.4.1-x64.exe) | 免安装，双击即用，可放 U 盘 | ~226 MB |
+| [安装版 exe](https://github.com/zouyuxuan122/Deepseek-Harness-EAC/releases/latest/download/Deepseek-Harness-EAC-Setup-v4.4.1-x64.exe) | 安装到系统，创建桌面/开始菜单快捷方式 | ~241 MB |
 
 更多版本见 [Releases 页面](https://github.com/zouyuxuan122/Deepseek-Harness-EAC/releases)。
 
@@ -160,7 +160,6 @@ Linux 打包由社区开发者 [@Luoye-hb](https://github.com/Luoye-hb) 贡献�
 - **项目文件树 + HTML/端口预览**：VSCode 风格文件树，站内预览 HTML/本地端口服务（仅回环）
 - **社区插件市场（v2 新增，dsh-webui-market）**：设置 → 插件 → 市场，浏览 awesome-dsh-plugin.com 收录的 dsh 插件并一键安装/卸载到 profile；安装/卸载任务在服务重启窗口期排队执行，不打断当前会话
 - **外置视觉模型（v2 新增，dsh-tool-vision）**：`inspect_image` 工具把本地图片或图片 URL 发给任意 OpenAI 兼容视觉端点（qwen-vl / GLM-4V / Ollama 等），看图回答直接带回对话
-- **长期记忆（v2 新增，dsh-tdai-memory）**：腾讯云 Agent Memory 移植 —— L0 对话捕获 → L1 结构化记忆 → L2 场景 / L3 画像，自动召回注入 + 记忆/对话搜索工具，复用现有 `~/.memory-tencentdb/memory-tdai` 数据
 - **soul.md 人设热重载（v2 新增，dsh-soul-md）**：markdown 人设文件注入系统提示词（`soul:persona`），文件变更即时热重载，Agent 边干活边角色扮演
 - **移动端布局修复（v2 新增，dsh-web-mobile-fix）**：窄屏（≤400px）下设置面板、弹窗、侧栏、会话头布局修复，纯前端 CSS，不影响桌面布局
 - **快速配置（dsh-easy-setup）**：视觉模型提供商/模型一键选择、`soul.md` 人设可视化编辑、从 Codex / Claude Code 目录一键迁移 skills + MCP + 记忆
@@ -234,7 +233,7 @@ dsh-desktop/                  # Electron 桌面端
 │   └── plugins/              # 桌面壳配套：dsh-balance / dsh-file-changes / dsh-terminal
 │                             # / dsh-easy-setup / dsh-skin-switch
 │                             # 内置社区插件：dsh-webui-market / dsh-tool-vision
-│                             # / dsh-tdai-memory / dsh-soul-md / dsh-web-mobile-fix
+│                             # / dsh-soul-md / dsh-web-mobile-fix
 │                             # （含 vendor 与自包含运行时依赖，随仓库分发）
 ├── scripts/                  # 构建与开发辅助脚本
 ├── build/icon.png            # electron-builder 图标
@@ -247,8 +246,28 @@ research/                     # 第三方微信/桥接协议调研资料
 
 ## Contributors
 
-- [@zouyuxuan122](https://github.com/zouyuxuan122) — 项目发起者与维护者
-- [@Luoye-hb](https://github.com/Luoye-hb) — Linux 多发行版打包支持（[PR #12](https://github.com/zouyuxuan122/Deepseek-Harness-EAC/pull/12)）
+感谢每一位贡献者：
+
+<p align="center">
+  <a href="https://github.com/zouyuxuan122"><img src="https://avatars.githubusercontent.com/u/245557608?size=64" width="64" height="64" style="border-radius:50%" alt="zouyuxuan122" title="zouyuxuan122 · 27 commits"></a>
+  <a href="https://github.com/jiang8297"><img src="https://avatars.githubusercontent.com/u/242639667?size=64" width="64" height="64" style="border-radius:50%" alt="jiang8297" title="jiang8297 · 6 commits"></a>
+  <a href="https://github.com/zixin947"><img src="https://avatars.githubusercontent.com/u/318131693?size=64" width="64" height="64" style="border-radius:50%" alt="zixin947" title="zixin947 · 5 commits"></a>
+  <a href="https://github.com/dtyg123"><img src="https://avatars.githubusercontent.com/u/171705219?size=64" width="64" height="64" style="border-radius:50%" alt="dtyg123" title="dtyg123 · 3 commits"></a>
+  <a href="https://github.com/jing-hy"><img src="https://avatars.githubusercontent.com/u/281396152?size=64" width="64" height="64" style="border-radius:50%" alt="jing-hy" title="jing-hy · 2 commits"></a>
+  <a href="https://github.com/Luoye-hb"><img src="https://avatars.githubusercontent.com/u/238787898?size=64" width="64" height="64" style="border-radius:50%" alt="Luoye-hb" title="Luoye-hb · 1 commit"></a>
+  <a href="https://github.com/lanyun077"><img src="https://avatars.githubusercontent.com/u/186024291?size=64" width="64" height="64" style="border-radius:50%" alt="lanyun077" title="lanyun077 · 1 commit"></a>
+  <a href="https://github.com/lbn2011"><img src="https://avatars.githubusercontent.com/u/89037561?size=64" width="64" height="64" style="border-radius:50%" alt="lbn2011" title="lbn2011 · 1 commit"></a>
+</p>
+
+## Star History
+
+<a href="https://www.star-history.com/?repos=zouyuxuan122%2FDeepseek-Harness-EAC&type=date&legend=bottom-right">
+ <picture>
+   <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/chart?repos=zouyuxuan122/Deepseek-Harness-EAC&type=date&theme=dark&legend=bottom-right&sealed_token=5SkHr7TORH0WuK6eeH5IP-Q2hISGL0m3EDvMKDG6hAUNQssgWBUixIuZWP_ygvty93H_loEZ8JUEgXKy8xGAuH4-mq_DTlClZbM_mOYiomJbfc3zANNWFg" />
+   <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/chart?repos=zouyuxuan122/Deepseek-Harness-EAC&type=date&legend=bottom-right&sealed_token=5SkHr7TORH0WuK6eeH5IP-Q2hISGL0m3EDvMKDG6hAUNQssgWBUixIuZWP_ygvty93H_loEZ8JUEgXKy8xGAuH4-mq_DTlClZbM_mOYiomJbfc3zANNWFg" />
+   <img alt="Star History Chart" src="https://api.star-history.com/chart?repos=zouyuxuan122/Deepseek-Harness-EAC&type=date&legend=bottom-right&sealed_token=5SkHr7TORH0WuK6eeH5IP-Q2hISGL0m3EDvMKDG6hAUNQssgWBUixIuZWP_ygvty93H_loEZ8JUEgXKy8xGAuH4-mq_DTlClZbM_mOYiomJbfc3zANNWFg" />
+ </picture>
+</a>
 
 ## License
 

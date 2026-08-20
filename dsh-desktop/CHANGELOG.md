@@ -14,7 +14,45 @@ DeepSeek Harness（dsh）的 Windows 桌面客户端：内置独立 Node 运行�
 影响治理 + 内置接管同名市场包）→
 4.3.0（本版：内置插件更新 + 插件市场「更新」标签 + 市场插件更新）→
 4.4.0（本版：修复设置页「Skills 与 MCP → 打开目录」失效 + 安装版更新
-4 目录备份/回滚 + 结构化日志 + 插件自写 patch 行保护）。
+4 目录备份/回滚 + 结构化日志 + 插件自写 patch 行保护）→
+4.6.0（本版：AI 主动修复 —— 救援页一键自动诊断、自动执行修复、自动重启）→
+
+## [4.6.0] · 2026-08-20
+
+### 新增：AI 主动修复（一键全自动）
+- 救援页新增「AI 自动修复」按钮：一键串联 诊断 → AI 分析 → 自动执行修复 →
+  自动重启 全链路，最多迭代两轮；高风险动作（回滚/卸载）自动跳过，多轮
+  修复后仍无法启动则自动兜底（回滚最后良好快照 + 开启安全模式），过程
+  逐轮展示在救援页。
+- AI 可直接编辑白名单配置文件修复根因（`edit-file`）：仅限
+  `settings.yaml` 与 profile 的 `package.json`、`pnpm-lock.yaml`、
+  `pnpm-workspace.yaml`、`cordis.patch.yml`、`.dsh-builtin-plugins.json`，
+  支持最小化行级编辑（replace-line / delete-line / insert-after）与整文件
+  重建；写前快照备份、写后强制校验 YAML/JSON 可解析，非法内容绝不落盘。
+- 新增 `resync` 动作：一键重装/修复 profile 模块树（内置插件树同步 +
+  模块遮蔽清理）。
+- 诊断上下文新增全局 `settings.yaml`（快照与规则体检都不覆盖的配置面，
+  AI 主动修复的主要作战对象），纳入发送清单可选勾选。
+- 验证：`test/rescue-auto-repair.test.mjs`（自动修复循环）、
+  `test/rescue-agent.test.mjs`（编辑白名单/行级编辑/可解析校验）、
+  `test/rescue-integration.test.mjs`（IPC/桥接/救援页接线）覆盖。
+
+4.5.0（本版：崩溃救援模式 + 内置识图引擎更换为 picturereader）。
+
+## [4.5.0] — 2026-08-20
+
+### 新增：崩溃救援模式（日志/快照/安全模式/AI 诊断修复）
+- 启动失败不再束手无策：自动收集诊断包（日志尾部 / 事故报告 / profile 快照 /
+  插件清单），一键进入安全模式（禁用问题插件后再启动），并提供 AI 诊断修复
+  建议；完整视图可逐项查看与修复，事故现场全程留痕。
+- 验证：`test/rescue-agent.test.mjs`、`test/rescue-integration.test.mjs` 覆盖
+  诊断收集、安全模式降级、修复链路与看门狗集成。
+
+### 更换：内置识图引擎（dsh-tool-vision → picturereader）
+- 原内置 `dsh-tool-vision` 由社区成熟插件 `picturereader` 接管（PR #105）：
+  保留 `inspect_image` 工具语义，能力扩展为图片批量处理、文档转图、视觉问答，
+  并提供独立的视觉模型设置入口。
+- 配套测试：`tool-vision-stream-guard` 相应迁移至 picturereader 链路。
 
 ## [4.4.1] — 2026-08-20
 
@@ -25,6 +63,18 @@ DeepSeek Harness（dsh）的 Windows 桌面客户端：内置独立 Node 运行�
 ### 修复：客户端更新下载速度与桌面快捷方式
 - GitHub Release 安装包优先通过 `gh.geekertao.top` 下载，代理失败后自动回退到 GitHub 原地址及其他备用源。
 - 安装版与便携版统一维护桌面快捷方式，清理软件原样生成的重复项，同时保留用户自行改名、换图标或加参数的快捷方式。
+
+### 修复：代理缓存导致客户端更新 SHA-256 校验失败
+- 根因：`gh.geekertao.top` 加速代理会缓存旧的安装包文件（同名同大小、内容却是旧版），客户端下载后与当前 Release 的公布哈希不一致 → 强校验失败 → 删除安装包 → 更新报错。Release 本身正确，问题在代理缓存未及时刷新。
+- 修复：客户端生成代理地址时附加**缓存破坏参数** `?v=<版本>&sha256=<期望哈希>`（版本号必带、哈希加强到内容级），代理缓存键随版本/哈希变化自动回源；期望哈希在下载前求一次，既喂给代理 URL 又复用做下载后强校验（不再重复请求 SHA256SUMS）。从此每次发版升级自动绕开旧缓存，无需再清代理缓存。
+
+### 移除：内置插件 dsh-tdai-memory 退役（瘦身 + 消除崩溃隐患）
+- 原因：它是唯一携带 node_modules 的内置插件（未压缩约 310MB，占安装包近半）；且 vendor 任一小缺失（如 `@tencentdb-agent-memory/tcvdb-text` 编译产物未入库）即 import 失败、拖垮整棵插件树，全新安装即「启动失败」。
+- 处理：从内置清单/更新源/推荐清单移除，插件目录整树删除（安装包瘦身约 48MB）；新增退役清理逻辑，老用户 profile 残留的 patch 行/包副本/依赖项在启动时自动清除，杜绝「行在包被清」拖垮插件树。需要长期记忆的用户可自行从插件市场安装（非内置）。
+
+### 修复：首次安装 dsh-pet 行重复 config 导致启动失败
+- 根因：`healRowConfig` 自愈只判断 name 行后紧跟的一行，首次安装的向导/写入组合产生 `name → disabled → config` 形态时被误判「缺 config」补出第二份 config → YAML duplicated mapping key → dsh web 退出码 1。
+- 修复：改为扫描整个条目块（块内任意位置已有 `config:` 即不再补），真缺才补一次；新增回归测试覆盖事故形态/正常形态/幂等。
 
 ## [4.4.0] — 2026-08-19
 

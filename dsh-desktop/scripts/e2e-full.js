@@ -176,6 +176,21 @@ async function main() {
   }
   const hasKey = fs.existsSync(path.join(home, '.credentials.yaml'));
   console.log(`[full] root=${root} 真实API Key=${hasKey ? '有' : '无（对话测试将跳过）'}`);
+  // 对话测试需要可用的 DSH 默认模型：测试 home 里强制指向 deepseek 官方
+  // provider（用真实 DEEPSEEK_API_KEY）。本机 settings.yaml 的 agent-default-
+  // model 常指向无 key 的第三方端点（如 opencode zen），桥接会 502；测试
+  // 隔离 home 内的覆盖不影响真实数据。
+  if (hasKey) {
+    try {
+      const sf = path.join(home, 'settings.yaml');
+      let doc = {};
+      try { doc = require('js-yaml').load(fs.readFileSync(sf, 'utf8')) || {}; } catch {}
+      doc['agent-default-model'] = { provider: 'deepseek-official', model: 'deepseek-v4-flash' };
+      doc['llm-deepseek'] = doc['llm-deepseek'] || {};
+      fs.writeFileSync(sf, require('js-yaml').dump(doc));
+      console.log('[full] 测试 home 默认模型已覆盖为 deepseek-official/deepseek-v4-flash');
+    } catch (err) { console.log('[full] 覆盖默认模型失败（对话测试可能跳过）: ' + err.message); }
+  }
 
   const runExe = path.join(root, 'run', path.basename(EXE));
   fs.mkdirSync(path.dirname(runExe), { recursive: true });
@@ -252,7 +267,7 @@ async function main() {
     body: JSON.stringify({ method: 'install', source: INSTALL_TARGET }),
   });
   let opId = ins.json && ins.json.ok ? ins.json.opId : null;
-  // v4.4 生态：主流社区插件（dsh-tool-vision / dsh-soul-md / dsh-tdai-memory …）
+  // v4.4 生态：主流社区插件（dsh-tool-vision / dsh-soul-md …）
   // 已全部内置分发（COMPANION_PLUGINS），市场对内置包的拒装（builtin:true，
   // 拒绝理由附内置说明）本身是正确行为。受理成功（真第三方包）或 builtin
   // 拒装都算通过；仅异常拒绝（网络/registry 错误）才失败。
@@ -407,7 +422,8 @@ async function main() {
   let nodeLeak = true;
   while (Date.now() - tR < 60000) {
     const nowNode = tasklistPids('node.exe');
-    if (![...nowNode].some((p) => p !== process.pid)) { nodeLeak = false; break; }
+    const runnerPid = Number(process.env.E2E_RUNNER_PID || 0);
+    if (![...nowNode].some((p) => p !== process.pid && p !== runnerPid)) { nodeLeak = false; break; }
     await sleep(3000);
   }
   check('更新+重启全链路后无 node.exe 残留', !nodeLeak);

@@ -137,6 +137,12 @@
     <h2>AI 诊断与修复</h2>
     <div class="row"><span class="tag" id="ai-tag">—</span><span class="muted" id="ai-note"></span></div>
     <div class="hr"></div>
+    <div class="row" style="margin:10px 0 4px 0">
+      <button class="primary" id="btn-autorepair" type="button">AI 自动修复</button>
+      <span class="muted">一键全自动：诊断 → 自动执行低/中风险修复 → 自动重启；高风险动作自动跳过，多轮失败自动回滚并进入安全模式。诊断内容按上方清单全量发送。</span>
+    </div>
+    <pre class="details" id="auto-progress" style="text-align:left;margin-top:8px;white-space:pre-wrap"></pre>
+    <div class="hr"></div>
     <div id="ai-confirm" hidden>
       <p class="hint">发送给 AI 前请确认内容清单（取消勾选 = 不发送，版本环境始终保留）：</p>
       <div class="list" id="manifest" style="max-height:180px;margin:10px 0"></div>
@@ -186,7 +192,7 @@
 
       function setAiBusy(on) {
         busy = on;
-        ['btn-prepare', 'btn-diagnose', 'btn-apply', 'btn-retry', 'btn-safemode', 'btn-export', 'reload', 'restart'].forEach(function (id) {
+        ['btn-prepare', 'btn-diagnose', 'btn-apply', 'btn-retry', 'btn-safemode', 'btn-export', 'btn-autorepair', 'reload', 'restart'].forEach(function (id) {
           var b = $(id); if (b) b.disabled = on;
         });
       }
@@ -232,6 +238,8 @@
         var btn = $('btn-safemode');
         if (s.safeMode) { btn.textContent = '退出安全模式并恢复'; btn.className = 'danger'; }
         else { btn.textContent = '开启安全模式（只留核心插件）'; btn.className = ''; }
+        var ar = $('btn-autorepair');
+        if (ar) ar.disabled = !s.aiReady;
       }
 
       function renderAttribution() {
@@ -438,6 +446,43 @@
         });
       }
 
+      function runAutoRepair() {
+        var box = $('auto-progress');
+        box.textContent = 'AI 自动修复开始：收集诊断上下文 → AI 分析 → 自动执行低/中风险修复 → 自动重启服务（最多两轮）…';
+        setAiBusy(true);
+        setStatus('AI 自动修复进行中…');
+        bridge.rescue.autoRepair().then(function (r) {
+          setAiBusy(false);
+          if (!r) throw new Error('无响应');
+          var lines = [];
+          var rounds = (r && r.rounds) || [];
+          rounds.forEach(function (round) {
+            lines.push('— 第 ' + (round.round + 1) + ' 轮 —');
+            if (round.analysis) lines.push('分析: ' + round.analysis);
+            (round.applied || []).forEach(function (a) {
+              if (a.skipped) lines.push('  跳过（高风险）: ' + (a.action || '?'));
+              else if (a.ok) lines.push('  ✓ ' + (a.action || '?') + '：' + (a.result || '成功'));
+              else lines.push('  ✗ ' + (a.action || '?') + '：' + ((a.error && String(a.error)) || '失败'));
+            });
+            if (typeof round.retryOk === 'boolean') {
+              lines.push(round.retryOk ? '  ✓ 服务已重启成功' : '  ✗ 重启仍未成功');
+            }
+          });
+          if (!r.ok) {
+            lines.push('自动修复未成功：' + ((r.error && String(r.error)) || '未知原因'));
+            if (r.fallback && r.fallback.result) lines.push('兜底: ' + r.fallback.result);
+            lines.push('仍可手动尝试上方「重新启动 Web 服务」或「快照回滚」。');
+          }
+          box.textContent = lines.join('\n');
+          setStatus(r.ok ? 'AI 自动修复完成：服务已恢复正常。' : 'AI 自动修复未完成，请查看下方过程或手动操作。');
+          loadState();
+        }).catch(function (e) {
+          setAiBusy(false);
+          box.textContent = 'AI 自动修复失败：' + String(e && e.message || e);
+          showError(String(e && e.message || e));
+        });
+      }
+
       function init() {
         if (!bridge || !bridge.recovery || !bridge.rescue) {
           setStatus('无法连接桌面客户端桥接，请重启客户端。');
@@ -496,6 +541,7 @@
           $('btn-prepare').hidden = false;
         });
         $('btn-apply').addEventListener('click', applySelected);
+        $('btn-autorepair').addEventListener('click', runAutoRepair);
         loadState();
       }
 

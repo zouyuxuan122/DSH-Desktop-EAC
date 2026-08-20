@@ -4,9 +4,10 @@
 
 import { test } from 'node:test';
 import assert from 'node:assert';
-import { mkdtempSync, writeFileSync, rmSync, mkdirSync } from 'node:fs';
+import { mkdtempSync, writeFileSync, rmSync, mkdirSync, readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import yaml from 'js-yaml';
 import {
   DEFAULT_OPTS,
   readTail,
@@ -20,6 +21,8 @@ import {
   recordBootFailure,
   shouldEnterRescue,
   chatCompletions,
+  validateEditTarget,
+  applyProfileEdit,
 } from '../rescue-agent.js';
 
 function tempDir() {
@@ -72,7 +75,7 @@ function diagCtx(dir, over = {}) {
     profileDir,
     logsDir,
     profile: 'web-desktop',
-    versions: { app: '4.4.0', dsh: '0.1.0-rc.7', source: '内置' },
+    versions: { app: '4.6.0', dsh: '0.1.0-rc.7', source: '内置' },
     plugins: () => [{ id: 'bad-plugin', name: 'bad-plugin', enabled: true, core: false, toggleable: true }],
     snapshots: () => [{ id: 'snap-1', reason: 'boot', at: '2026-08-19T00:00:00.000Z' }],
     lastGood: () => ({ id: 'snap-1', reason: 'boot' }),
@@ -314,4 +317,171 @@ test('chatCompletions：注入 httpFn 失败 / 畸形响应 / 超时不炸', asy
   const r4 = await chatCompletions({ apiKey: 'k', httpFn: () => Promise.reject(new Error('network down')) });
   assert.equal(r4.ok, false);
   assert.match(r4.error, /network down/);
+});
+
+// ── AI 主动修复：edit-file 动作（validateSuggestion / validateEditTarget / applyProfileEdit） ──
+
+test('validateSuggestion：edit-file 结构化编辑合法参数', () => {
+  const ok1 = validateSuggestion({
+    action: 'edit-file',
+    params: { file: 'settings.yaml', ops: [{ op: 'replace-line', anchor: 'bad:', with: 'good: 1' }] },
+  });
+  assert.equal(ok1.ok, true);
+  assert.equal(ok1.suggestion.params.ops.length, 1);
+  const ok2 = validateSuggestion({
+    action: 'edit-file',
+    params: { file: 'cordis.patch.yml', newContent: '- id: core\n' },
+  });
+  assert.equal(ok2.ok, true);
+  const ok3 = validateSuggestion({
+    action: 'edit-file',
+    params: { file: 'package.json', ops: [{ op: 'insert-after', anchor: '{', with: '  "a": 1' }] },
+  });
+  assert.equal(ok3.ok, true);
+});
+
+test('validateSuggestion：edit-file 非法参数拒绝（越权文件/空操作/未知 op/缺锚点）', () => {
+  assert.equal(validateSuggestion({ action: 'edit-file', params: { file: 'C:\\windows\\evil.exe', ops: [{ op: 'replace-line', anchor: 'x', with: 'y' }] } }).ok, false, '绝对路径拒绝');
+  assert.equal(validateSuggestion({ action: 'edit-file', params: { file: '../evil.yml', ops: [{ op: 'replace-line', anchor: 'x', with: 'y' }] } }).ok, false, '路径穿越拒绝');
+  assert.equal(validateSuggestion({ action: 'edit-file', params: { file: 'settings.yaml', ops: [] } }).ok, false, '空 ops 拒绝');
+  assert.equal(validateSuggestion({ action: 'edit-file', params: { file: 'settings.yaml', ops: [{ op: 'rm -rf', anchor: 'x' }] } }).ok, false, '未知 op 拒绝');
+  assert.equal(validateSuggestion({ action: 'edit-file', params: { file: 'settings.yaml', ops: [{ op: 'replace-line', with: 'y' }] } }).ok, false, '缺 anchor 拒绝');
+  assert.equal(validateSuggestion({ action: 'edit-file', params: { file: 'not-in-whitelist.txt', ops: [{ op: 'replace-line', anchor: 'x', with: 'y' }] } }).ok, false, '白名单外文件名拒绝');
+  assert.equal(validateSuggestion({ action: 'edit-file', params: {} }).ok, false);
+});
+
+test('validateSuggestion：resync 动作合法', () => {
+  const r = validateSuggestion({ action: 'resync', params: {}, reason: '模块树损坏', risk: 'medium' });
+  assert.equal(r.ok, true);
+  assert.equal(r.suggestion.action, 'resync');
+});
+
+test('validateEditTarget：白名单文件解析且拒绝越权', () => {
+  const ctx = { home: 'H:\\dsh-home', profileDir: 'H:\\dsh-home\\profiles\\web-desktop' };
+  const p1 = validateEditTarget('settings.yaml', ctx);
+  assert.equal(p1.ok, true);
+  assert.equal(p1.abs, 'H:\\dsh-home\\settings.yaml');
+  const p2 = validateEditTarget('cordis.patch.yml', ctx);
+  assert.equal(p2.ok, true);
+  assert.equal(p2.abs, 'H:\\dsh-home\\profiles\\web-desktop\\cordis.patch.yml');
+  const p3 = validateEditTarget('pnpm-workspace.yaml', ctx);
+  assert.equal(p3.ok, true);
+  assert.equal(validateEditTarget('package.json', ctx).ok, true);
+  assert.equal(validateEditTarget('.dsh-builtin-plugins.json', ctx).ok, true);
+  assert.equal(validateEditTarget('pnpm-lock.yaml', ctx).ok, true);
+  assert.equal(validateEditTarget('evil.exe', ctx).ok, false);
+  assert.equal(validateEditTarget('..\\settings.yaml', ctx).ok, false);
+  assert.equal(validateEditTarget('profiles/web-desktop/settings.yaml', ctx).ok, false, '子路径也拒绝（只能白名单根内文件）');
+});
+
+test('applyProfileEdit：replace-line 改 YAML，备份先行、写后可解析', () => {
+  const t = tempDir();
+  try {
+    const file = join(t.dir, 'settings.yaml');
+    const home = t.dir;
+    writeFileSync(file, 'agent-default-model:\n  provider: open\n  model: x\n');
+    const writes = [];
+    const backups = [];
+    const r = applyProfileEdit({
+      file: 'settings.yaml',
+      ops: [{ op: 'replace-line', anchor: 'provider: open', with: '  provider: deepseek-official' }],
+    }, {
+      home,
+      profileDir: join(home, 'profiles', 'web-desktop'),
+      readFile: (f) => { try { return readFileSync(f, 'utf8'); } catch { return null; } },
+      writeFile: (f, text) => { writes.push([f, text]); writeFileSync(f, text); },
+      backup: (f) => { backups.push(f); },
+    });
+    assert.equal(r.ok, true);
+    assert.equal(r.opsApplied, 1);
+    assert.equal(backups.length, 1, '写前必须备份');
+    assert.equal(backups[0], file);
+    assert.equal(writes.length, 1);
+    const out = readFileSync(file, 'utf8');
+    assert.ok(out.includes('deepseek-official'));
+    assert.ok(!out.includes('provider: open'));
+    yaml.load(out); // 不抛 = 可解析
+  } finally { t.cleanup(); }
+});
+
+test('applyProfileEdit：newContent 整体替换 JSON 并校验可解析', () => {
+  const t = tempDir();
+  try {
+    const home = t.dir;
+    const profDir = join(home, 'profiles', 'web-desktop');
+    mkdirSync(profDir, { recursive: true });
+    const file = join(profDir, '.dsh-builtin-plugins.json');
+    writeFileSync(file, '{"a":1}');
+    const r = applyProfileEdit({
+      file: '.dsh-builtin-plugins.json',
+      newContent: '{"a":2,"b":["x"]}',
+    }, {
+      home, profileDir: profDir,
+      readFile: (f) => readFileSync(f, 'utf8'),
+      writeFile: (f, text) => writeFileSync(f, text),
+      backup: () => {},
+    });
+    assert.equal(r.ok, true);
+    assert.equal(JSON.parse(readFileSync(file, 'utf8')).b[0], 'x');
+  } finally { t.cleanup(); }
+});
+
+test('applyProfileEdit：改后不可解析的内容拒绝写入', () => {
+  const t = tempDir();
+  try {
+    const home = t.dir;
+    const file = join(home, 'settings.yaml');
+    writeFileSync(file, 'a: 1\n');
+    let wrote = false;
+    const r = applyProfileEdit({
+      file: 'settings.yaml',
+      ops: [{ op: 'replace-line', anchor: 'a: 1', with: 'a: [unclosed' }],
+    }, {
+      home, profileDir: join(home, 'profiles', 'web-desktop'),
+      readFile: (f) => readFileSync(f, 'utf8'),
+      writeFile: () => { wrote = true; },
+      backup: () => {},
+    });
+    assert.equal(r.ok, false);
+    assert.match(r.error, /解析|可解析/);
+    assert.equal(wrote, false, '非法内容绝不落盘');
+    assert.equal(readFileSync(file, 'utf8'), 'a: 1\n', '原文件不变');
+  } finally { t.cleanup(); }
+});
+
+test('applyProfileEdit：锚点未找到 / 白名单外文件 / 文件不存在都拒绝且不写', () => {
+  const t = tempDir();
+  try {
+    const home = t.dir;
+    const file = join(home, 'settings.yaml');
+    writeFileSync(file, 'a: 1\n');
+    let wrote = 0;
+    const ctx = {
+      home, profileDir: join(home, 'profiles', 'web-desktop'),
+      readFile: (f) => { try { return readFileSync(f, 'utf8'); } catch { return null; } },
+      writeFile: (f, text) => { wrote += 1; writeFileSync(f, text); },
+      backup: () => {},
+    };
+    const r1 = applyProfileEdit({ file: 'settings.yaml', ops: [{ op: 'delete-line', anchor: 'no-such-anchor' }] }, ctx);
+    assert.equal(r1.ok, false);
+    assert.match(r1.error, /锚点|未找到/);
+    const r2 = applyProfileEdit({ file: 'evil.exe', ops: [{ op: 'replace-line', anchor: 'a', with: 'b' }] }, ctx);
+    assert.equal(r2.ok, false);
+    assert.match(r2.error, /白名单|越权/);
+    const r3 = applyProfileEdit({ file: 'settings.yaml', newContent: 'b: 2\n' }, ctx);
+    assert.equal(r3.ok, true, '文件存在时允许用 newContent 整体替换');
+    assert.equal(wrote, 1, 'r1/r2 不得写入，仅 r3 写入一次');
+    assert.equal(readFileSync(file, 'utf8'), 'b: 2\n');
+  } finally { t.cleanup(); }
+});
+
+test('collectDiagnosis：settings.yaml 进入诊断 payload 与发送清单', () => {
+  const t = tempDir();
+  try {
+    writeFileSync(join(t.dir, 'settings.yaml'), 'agent-default-model:\n  provider: open\n');
+    const d = collectDiagnosis(diagCtx(t.dir));
+    assert.equal(d.ok, true);
+    assert.ok(d.payload.settingsYaml.includes('provider: open'), 'settings.yaml 内容必须进入 payload');
+    assert.ok(d.sendManifest.some((m) => m.kind === '配置面' && m.name === 'settings.yaml'), '发送清单含 settings.yaml');
+  } finally { t.cleanup(); }
 });

@@ -70,18 +70,28 @@ function resolveRepos(repos) {
   return { github, gitee };
 }
 
-/** 只为 GitHub Release 资产生成代理地址；其他来源保持原地址。 */
-function githubProxyUrl(url) {
+/**
+ * 只为 GitHub Release 资产生成代理地址；其他来源保持原地址。
+ * opts.version / opts.sha256 作为查询参数附加：gh.geekertao.top 这类加速代理
+ * 会缓存旧的安装包文件（同名同大小、内容却是旧版），客户端拿到旧文件导致
+ * SHA-256 校验失败、更新中止。附加版本号与公布哈希后，代理缓存键随内容变化，
+ * 自动绕开旧缓存（版本号必带，哈希可加强到内容级）。
+ */
+function githubProxyUrl(url, { version = '', sha256 = '' } = {}) {
   const value = String(url || '').trim();
   if (!/^https:\/\/github\.com\//i.test(value)) return null;
-  return GITHUB_DOWNLOAD_PROXY + value;
+  const params = [];
+  if (version) params.push(`v=${encodeURIComponent(String(version))}`);
+  if (sha256) params.push(`sha256=${encodeURIComponent(String(sha256))}`);
+  const suffix = params.length ? (value.includes('?') ? '&' : '?') + params.join('&') : '';
+  return GITHUB_DOWNLOAD_PROXY + value + suffix;
 }
 
-/** 组装下载候选：代理优先，随后原始地址，再接其他 Release 源。 */
-function downloadUrls(primaryUrl, fallbackUrls = []) {
+/** 组装下载候选：代理优先，随后原始地址，再接其他 Release 源。opts 透传给代理地址生成（缓存破坏参数）。 */
+function downloadUrls(primaryUrl, fallbackUrls = [], opts = {}) {
   const primary = String(primaryUrl || '').trim();
   const candidates = [];
-  const proxied = githubProxyUrl(primary);
+  const proxied = githubProxyUrl(primary, opts);
   if (proxied) candidates.push(proxied);
   if (primary) candidates.push(primary);
   for (const url of Array.isArray(fallbackUrls) ? fallbackUrls : []) {
@@ -276,12 +286,14 @@ function selectAsset(release) {
   if (direct) return { parts: [direct], name: direct.name, totalSize: direct.size };
 
   // Gitee 单文件 100MB 限制：安装包拆分为 <file>.part1 / <file>.part2 …
-  // v2.0.3 起 artifact 名不再带版本号，两个候选都试（覆盖旧 Release）。
+  // 候选覆盖各历史命名：固定名（v2.0.3 起）、版本在 Setup 前的两种旧形态、
+  // 以及当前命名（Setup-v<version>-x64.exe，版本在 Setup 后）。
   const kind = isPortable() ? 'Portable' : 'Setup';
   const bases = [
     `Deepseek-Harness-EAC-${kind}-x64.exe`,
     `Deepseek-Harness-EAC-v${release.version}-${kind}-x64.exe`,
     `Deepseek-Harness-EAC-${release.version}-${kind}-x64.exe`,
+    `Deepseek-Harness-EAC-${kind}-v${release.version}-x64.exe`,
   ];
   let base = '';
   let parts = [];
@@ -555,6 +567,10 @@ async function downloadRelease(ctx, release, { onProgress, onSourceChange, fallb
       if (fbSel.parts.length === sel.parts.length && fbSel.parts.every((p, i) => p.name === sel.parts[i].name)) fbSelections.push(fbSel);
     } catch {}
   }
+  // 下载前先求一次期望哈希：既作为代理 URL 的缓存破坏参数（sha256=…，
+  // 配合 version 让代理缓存键随内容变化、绕开旧缓存），又在下载完成后复用
+  // 做内容校验（单一来源，不在每个分片/校验时重复请求 SHA256SUMS）。
+  const expected = await expectedSha256(ctx, release, sel);
   for (let i = 0; i < sel.parts.length; i++) {
     const p = sel.parts[i];
     ctx.log('client-update', `下载 ${p.name}（${Math.round(p.size / 1048576)} MB）`);
@@ -562,6 +578,7 @@ async function downloadRelease(ctx, release, { onProgress, onSourceChange, fallb
     const urls = downloadUrls(
       p.url,
       fbSelections.map((f) => (f.parts[i] && f.parts[i].url) || ''),
+      { version: release.version, sha256: expected || '' },
     );
     const res = await downloadWithSourceSwitch(urls, dest, {
       ctx,
@@ -589,8 +606,7 @@ async function downloadRelease(ctx, release, { onProgress, onSourceChange, fallb
     throw new Error('下载文件异常（仅 ' + Math.round(stat.size / 1048576) + ' MB），已丢弃');
   }
   // V4：SHA-256 内容校验 —— 有公布哈希即强校验；不一致删除文件并中止
-  // 更新（绝不运行被篡改/损坏的安装包）。
-  const expected = await expectedSha256(ctx, release, sel);
+  // 更新（绝不运行被篡改/损坏的安装包）。复用下载前求得的 expected。
   if (expected) {
     ctx.log('client-update', `校验 SHA-256（期望 ${expected.slice(0, 16)}…）`);
     const actual = await computeSha256(finalPath);

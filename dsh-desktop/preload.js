@@ -118,6 +118,7 @@ const dshDesktop = {
     apply: (suggestion) => ipcRenderer.invoke('rescue:apply', { suggestion }),
     setSafeMode: (on) => ipcRenderer.invoke('safe-mode:set', { on }),
     retry: () => ipcRenderer.invoke('rescue:retry'),
+    autoRepair: () => ipcRenderer.invoke('rescue:auto-repair'),
   },
 };
 
