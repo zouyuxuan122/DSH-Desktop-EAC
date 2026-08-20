@@ -19,6 +19,19 @@ DeepSeek Harness（dsh）的 Windows 桌面客户端：内置独立 Node 运行�
 
 ## [4.6.0] · 2026-08-20
 
+### 修复：dsh web 重启时日志流重复写入（#137）
+- 根因：子进程的 `exit` 事件可能早于 stdout/stderr 管道排空；旧实现收到
+  `exit` 后立即 `end()` 日志文件，尾部 `data` 随后继续写入，触发
+  `ERR_STREAM_WRITE_AFTER_END`，在受限端口换端口重启和应用退出时尤其容易复现。
+- 修复：业务退出处理仍由 `exit` 驱动，但日志文件延后到 stdio 全部关闭后的
+  `close` 事件再结束；新增统一 Writable 生命周期保护，同时覆盖
+  `dsh-web.log` 与 `desktop.log`，迟到写入会被安全拒绝且保留关闭前尾部日志。
+- 调试期间一并修复隔离 DSH_HOME 初始化时 `home` 未定义，以及 Windows
+  CRLF/BOM 格式 `cordis.patch.yml` 无法清理退役插件的问题，保证重启后的新
+  dsh web 实例可以完整启动。
+- 验证：新增独立复现脚本 `scripts/debug-stream-write-after-end.js` 与流时序回归
+  测试；强制受限端口重启后新实例正常就绪，完整测试 538 项全部通过。
+
 ### 新增：AI 主动修复（一键全自动）
 - 救援页新增「AI 自动修复」按钮：一键串联 诊断 → AI 分析 → 自动执行修复 →
   自动重启 全链路，最多迭代两轮；高风险动作（回滚/卸载）自动跳过，多轮

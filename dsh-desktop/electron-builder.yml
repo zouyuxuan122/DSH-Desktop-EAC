@@ -42,6 +42,7 @@ files:
   - error-detail.js
   - bundle-integrity.js
   - stable-port.js
+  - stream-write-guard.js
   - koffi-preflight.js
   - renderer-recovery.js
   - watchdog.js

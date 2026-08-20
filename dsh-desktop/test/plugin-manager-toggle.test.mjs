@@ -147,3 +147,17 @@ test('hasEntryId：dsh 官方空块项格式命中与短 id 前缀不误配', ()
   assert.equal(hasEntryId(t, 'dsh-pet'), false, '短 id 不得命中长 id 兄弟（空块项格式）');
   assert.equal(hasEntryId(t, 'dsh-pet-settings'), true, '完整 id 应命中空块项格式');
 });
+
+test('移除：兼容带 BOM 的 Windows CRLF patch', () => {
+  const t =
+    '\uFEFF- insert:\r\n' +
+    '    - id: tdai-memory\r\n' +
+    "      name: 'dsh-tdai-memory'\r\n" +
+    '- insert:\r\n' +
+    '    - id: mobile-fix\r\n' +
+    "      name: 'dsh-web-mobile-fix'\r\n";
+  const r = removePluginFromPatch(t, 'tdai-memory');
+  assert.equal(hasEntryId(r, 'tdai-memory'), false);
+  assert.equal(hasEntryId(r, 'mobile-fix'), true);
+  assert.ok(r.includes('\r\n'), '应保留 Windows CRLF 换行');
+});

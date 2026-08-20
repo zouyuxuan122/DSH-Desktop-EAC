@@ -47,6 +47,16 @@ test('schemastery (the plugin\'s only missing server dep) is declared', () => {
     'schemastery must be in dependencies for fallback junction resolution');
 });
 
+test('desktop profile initialization resolves the DSH home before linking schemastery', () => {
+  const main = readFileSync(join(ROOT, 'main.js'), 'utf8');
+  const start = main.indexOf('function ensureDesktopProfileInit()');
+  const end = main.indexOf('\n}\n', start);
+  const body = main.slice(start, end);
+  assert.match(body, /const home = dshHome \|\| path\.join\(os\.homedir\(\), '\.dsh'\)/,
+    'ensureDesktopProfileInit must define home before path.join(home, ...)');
+  assert.match(body, /path\.join\(home, 'profiles', 'node_modules'\)/);
+});
+
 // issue #14 / zcode 报告：app 层声明不足以让 fallback 闭包（BFS 起点是
 // 捆绑的 dsh 包 package.json）包含 schemastery → 全新安装后
 // profiles/node_modules 永远缺 junction → dsh web 启动即崩（退出码 1）。

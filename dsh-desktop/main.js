@@ -34,6 +34,7 @@ const rescueAgent = require('./rescue-agent');
 const bundleIntegrity = require('./bundle-integrity');
 const { RendererRecovery } = require('./renderer-recovery');
 const { restrictedPortOf, chooseStableWebPort } = require('./stable-port');
+const { createStreamWriteGuard } = require('./stream-write-guard');
 const {
   STANDARD_SHORTCUT_NAME,
   RUNTIME_SHORTCUT_DESCRIPTION,
@@ -125,6 +126,7 @@ let userDataDir = '';
 let logsDir = '';
 let dshHome = '';
 let desktopLog = null;
+let desktopLogGuard = null;
 let tray = null;
 let forceQuit = false;
 let clientUpdateBusy = false;
@@ -178,6 +180,7 @@ function desktopProfileDir() {
 // 创建：package.json（bundles）+ pnpm-workspace.yaml + 空 patch 层。
 function ensureDesktopProfileInit() {
   try {
+    const home = dshHome || path.join(os.homedir(), '.dsh');
     const dir = desktopProfileDir();
     if (desktopProfile() === 'web') return; // 共享模式走官方模板
     fs.mkdirSync(dir, { recursive: true });
@@ -248,7 +251,7 @@ function log(tag, msg) {
     `${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}.${p(d.getMilliseconds(), 3)}` +
     ` UTC${sign}${p(Math.floor(Math.abs(off) / 60))}:${p(Math.abs(off) % 60)}`;
   const line = `[${ts}] [${tag}] ${msg}\n`;
-  try { if (desktopLog) desktopLog.write(line); } catch {}
+  if (desktopLogGuard) desktopLogGuard.write(line);
   if (process.env.DSH_DESKTOP_DEBUG) process.stdout.write(line);
   try {
     const level = /^(warn|warning|err|error|fatal)$/i.test(tag) ? 'warn'
@@ -774,12 +777,15 @@ function watchServerProc(proc, out, opts = {}) {
     let settled = false;
     let handedOff = false; // 受限端口重启：本实例的退出不再影响外层 Promise/弹窗
     let bootTimer = null;
+    const output = createStreamWriteGuard(out, {
+      onError: (err) => log('warn', 'dsh web 日志流异常: ' + String(err && err.message || err)),
+    });
     const finish = (fn, value) => {
       if (!settled) { settled = true; fn(value); }
       if (bootTimer) { clearTimeout(bootTimer); bootTimer = null; }
     };
     const onData = (chunk) => {
-      out.write(chunk);
+      output.write(chunk);
       const text = chunk.toString();
       for (const line of text.split(/\r?\n/)) {
         const m = line.match(/dsh web:\s+(https?:\/\/\S+)/);
@@ -820,9 +826,17 @@ function watchServerProc(proc, out, opts = {}) {
         finish(resolve, m[1]);
       }
     };
+    const onStderrData = (chunk) => output.write(chunk);
     proc.stdout.on('data', onData);
-    proc.stderr.on('data', (c) => out.write(c));
+    proc.stderr.on('data', onStderrData);
     proc.on('error', (err) => finish(reject, err));
+    // ChildProcess 的 close 在 exit 之后、stdio 全部关闭后触发。此时再结束
+    // 文件流既能保留尾部输出，也不会让迟到的 data 写入已 end 的 Writable。
+    proc.once('close', () => {
+      proc.stdout.removeListener('data', onData);
+      proc.stderr.removeListener('data', onStderrData);
+      output.end();
+    });
     // V4：HTTP 就绪探测与 stdout 就绪行并行竞争 —— 就绪行被管道缓冲吞掉
     // 或格式变化时不再白白等满 bootTimer（「启动 60 秒超时」的主要假阳性
     // 来源）。expectedPort 由 chooseStableWebPort 挑选、已避开 Chromium
@@ -846,7 +860,6 @@ function watchServerProc(proc, out, opts = {}) {
       })();
     }
     proc.on('exit', (code, signal) => {
-      out.end();
       log('dsh', `进程退出 code=${code} signal=${signal}`);
       // 原地重启（插件市场）或已替换为新进程时，不打扰用户、也不清掉新进程的句柄。
       const intentional = restartingServer || serverProc !== proc;
@@ -4944,6 +4957,10 @@ async function boot() {
     try { console.error('[logger.init fail]', e && e.message); } catch {}
   }
   desktopLog = fs.createWriteStream(path.join(logsDir, 'desktop.log'), { flags: 'a' });
+  desktopLogGuard = createStreamWriteGuard(desktopLog, {
+    // 不能调用 log()，否则日志流错误会递归写入同一个流。
+    onError: (err) => { try { console.error('[desktop.log]', err && err.message || err); } catch {} },
+  });
   log('boot', `Deepseek Harness EAC（封装 ${APP_VERSION}）  userData=${userDataDir}  dshHome=${dshHome || '(dsh 默认)'}  agent=${dshVersion()}(${dshVersionSource()})`);
 
   // 移除原生菜单栏（文件/视图/帮助），全部功能由自绘 chrome 与托盘提供。
@@ -5098,7 +5115,7 @@ if (!gotLock) {
         // 日志系统 flush：结构化 logger 先关（flush 缓冲区+结束 rotation stream），
         // 再关 desktop.log 纯文本，保证退出前两条通道都落盘。
         try { structuredLogger.close(); } catch {}
-        try { if (desktopLog) desktopLog.end(); } catch {}
+        if (desktopLogGuard) desktopLogGuard.end();
         app.exit(0);
       }
     })();

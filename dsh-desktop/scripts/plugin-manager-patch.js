@@ -26,12 +26,14 @@ function yamlQuote(s) {
   return "'" + String(s).replace(/'/g, "''") + "'";
 }
 
-const LEADING = /^([ \t]*)(.*)$/;
+// split('\n') 会在 Windows 文本中保留行尾 \r；显式接纳它，避免逐行
+// 解析返回 null。首行 BOM 也可能出现在用户/PowerShell 写入的 patch 中。
+const LEADING = /^([ \t]*)(.*)\r?$/;
 
 /** 行是否是指定 id 的条目起始行；返回缩进宽度，否则 null。indentLo/Hi 限定层级。 */
 function entryIndentOf(line, id, indentLo, indentHi) {
   const escapedId = id.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-  const m = new RegExp('^- id:\\s*' + escapedId + '(?![A-Za-z0-9_.-])').exec(line.replace(/^[ \t]+/, ''));
+  const m = new RegExp('^- id:\\s*' + escapedId + '(?![A-Za-z0-9_.-])').exec(line.replace(/^\uFEFF/, '').replace(/^[ \t]+/, ''));
   if (!m) return null;
   const ind = LEADING.exec(line)[1].length;
   if (ind < indentLo || ind > indentHi) return null;
@@ -50,7 +52,7 @@ function entryIndentOf(line, id, indentLo, indentHi) {
 function dashEntryIndentOf(lines, i, id, indentLo, indentHi) {
   const line = lines[i];
   const [, dashWs, dashRest] = LEADING.exec(line);
-  if (!/^-\s*$/.test(dashRest)) return null; // 不是纯 `-` 空块项
+  if (!/^-\s*$/.test(dashRest.replace(/^\uFEFF/, ''))) return null; // 不是纯 `-` 空块项
   const next = lines[i + 1];
   if (next === undefined) return null;
   const [, nextWs, nextRest] = LEADING.exec(next);
