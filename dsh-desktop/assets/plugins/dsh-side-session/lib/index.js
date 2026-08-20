@@ -24,9 +24,10 @@ import { join, isAbsolute } from "node:path";
 import { homedir } from "node:os";
 import { zstdDecompressSync } from "node:zlib";
 import {
-  normalizeReasoningEffort,
+  resolveReasoningEffort,
   shouldRetryWithoutReasoning,
 } from "./reasoning-compat.js";
+import { buildFinalPrompt as assembleFinalPrompt } from "./prompt.js";
 
 const NS = "dsh-side-session";
 const CONTEXT_ROUTE = "/api/dsh-side-session/context";
@@ -313,8 +314,9 @@ const EMPTY = {
   files: [],
   transcript: [],
   truncated: false,
-  provider: DEFAULT_PROVIDER,
-  model: DEFAULT_MODEL,
+  provider: "",
+  model: "",
+  reasoningEffort: "",
 };
 
 const parseCache = new Map(); // 文件 -> { mtimeMs, size, firstMagic, frameEnd, at, state }
@@ -349,12 +351,14 @@ function parseEventsInto(state, lines) {
       if (cfg) {
         if (cfg.provider) state.provider = String(cfg.provider);
         if (cfg.model) state.model = String(cfg.model);
-        if (cfg.reasoningEffort !== undefined) state.reasoningEffort = String(cfg.reasoningEffort);
+        if (cfg.reasoningEffort !== undefined && cfg.reasoningEffort !== null)
+          state.reasoningEffort = String(cfg.reasoningEffort);
       }
     } else if (ev.type === "request/context" && ev.data) {
       if (ev.data.provider) state.provider = String(ev.data.provider);
       if (ev.data.model) state.model = String(ev.data.model);
-      if (ev.data.reasoningEffort !== undefined) state.reasoningEffort = String(ev.data.reasoningEffort);
+      if (ev.data.reasoningEffort !== undefined && ev.data.reasoningEffort !== null)
+        state.reasoningEffort = String(ev.data.reasoningEffort);
     }
 
     // 文件捕获：tool/code-dispatch* 事件
@@ -443,8 +447,8 @@ function renderState(state) {
     files,
     transcript,
     truncated,
-    provider: state.provider || DEFAULT_PROVIDER,
-    model: state.model || readGlobalModel(),
+    provider: state.provider || "",
+    model: state.model || "",
     reasoningEffort: state.reasoningEffort || "",
   };
 }
@@ -578,40 +582,8 @@ function buildFileContext(sessionId) {
 
 // 将客户端消息拆分为「客户端 system」+「其余消息」，并拼上文件上下文块
 function buildFinalPrompt(body) {
-  const msgs = Array.isArray(body.messages) ? body.messages : [];
-  const firstIsSystem = msgs.length && msgs[0] && msgs[0].role === "system";
-  const clientSystem = firstIsSystem ? String(msgs[0].content || "") : "";
-  const isBlank = (c) => {
-    if (typeof c === "string") return c.trim().length === 0;
-    if (Array.isArray(c)) return !c.some((p) => p && typeof p.text === "string" && p.text.trim().length > 0);
-    return true;
-  };
-  const restAll = (firstIsSystem ? msgs.slice(1) : msgs).filter((m) => m && !isBlank(m.content));
-  // 找到最后一条用户消息；它之前的全部临时会话消息作为「临时会话上下文」折叠进 system，
-  // 避免把助手历史再以消息数组回灌给宿主 LLM（某些 provider 在多轮 assistant 回灌时
-  // 会触发 DSH LLM 流协议 bug：finish chunk 缺 reason）。
-  let lastUserIndex = -1;
-  for (let i = restAll.length - 1; i >= 0; i--) {
-    if (restAll[i] && restAll[i].role === "user") { lastUserIndex = i; break; }
-  }
-  const rest = lastUserIndex >= 0 ? [restAll[lastUserIndex]] : [];
-  const textOf = (m) => {
-    const c = m && m.content;
-    if (typeof c === "string") return c;
-    if (Array.isArray(c)) return c.map((p) => (p && typeof p.text === "string" ? p.text : "")).join("");
-    return "";
-  };
-  const tempHistory = restAll.slice(0, lastUserIndex).map((m) => {
-    const who = m.role === "assistant" ? "助手" : "用户";
-    return "[" + who + "] " + textOf(m).slice(0, 4000);
-  }).join("\n");
-  const tempBlock = tempHistory
-    ? "==== 临时会话上下文 ====\n" + tempHistory + "\n"
-
-    : "";
   const fileBlock = buildFileContext(String(body.sessionId || "").trim());
-  const system = (fileBlock ? fileBlock + "\n\n" : "") + (tempBlock ? tempBlock + "\n" : "") + clientSystem;
-  return { system, rest };
+  return assembleFinalPrompt(body, fileBlock);
 }
 
 // ---------------------------------------------------------------------------
@@ -693,6 +665,7 @@ async function handleContext(req, res) {
         truncated: parsed.truncated,
         provider: parsed.provider,
         model: parsed.model,
+        reasoningEffort: parsed.reasoningEffort,
         updatedAt,
       });
       return;
@@ -790,7 +763,7 @@ async function handleAskMode3(req, res, body, sessionId) {
     const llmOptions = { provider, model, system, messages: llmMessages };
 
     const globalReasoning = readGlobalReasoning();
-    const reasoning = normalizeReasoningEffort(parsedReasoning || globalReasoning);
+    const reasoning = resolveReasoningEffort(provider, parsedReasoning || globalReasoning);
     if (reasoning !== undefined) llmOptions.reasoningEffort = reasoning;
 
     const maxAttempts = 3;
@@ -874,7 +847,7 @@ async function handleAsk(req, res) {
     sendJson(res, 400, { error: "invalid JSON body" });
     return;
   }
-  const mode = String(body.mode || "1");
+  const mode = String(body.mode || "3");
   const sessionId = String(body.sessionId || "").trim();
   const messages = Array.isArray(body.messages) ? body.messages : [];
   if (messages.length === 0) {
@@ -1049,4 +1022,4 @@ function apply(ctx, config) {
   };
 }
 
-export { apply, inject, name, parseSession, resetParseCacheForTest };
+export { apply, buildFinalPrompt, inject, name, parseSession, resetParseCacheForTest };

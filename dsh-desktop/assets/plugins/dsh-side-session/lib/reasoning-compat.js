@@ -4,6 +4,16 @@ export function normalizeReasoningEffort(value) {
   return effort;
 }
 
+const OFFICIAL_PROVIDERS = new Set(["deepseek-official", "deepseek-vision", "deepseek"]);
+
+export function resolveReasoningEffort(provider, value) {
+  const effort = normalizeReasoningEffort(value);
+  if (effort !== undefined) return effort;
+
+  const providerName = String(provider || "deepseek-official").trim().toLowerCase();
+  return OFFICIAL_PROVIDERS.has(providerName) ? undefined : "off";
+}
+
 function errorText(value) {
   if (value == null) return "";
   if (typeof value === "string") return value;

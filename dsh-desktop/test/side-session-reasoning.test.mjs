@@ -4,6 +4,7 @@ import test from "node:test";
 import {
   isUnsupportedReasoningEffortError,
   normalizeReasoningEffort,
+  resolveReasoningEffort,
   shouldRetryWithoutReasoning,
 } from "../assets/plugins/dsh-side-session/lib/reasoning-compat.js";
 
@@ -18,6 +19,14 @@ test("side session preserves provider-supported reasoning levels", () => {
   assert.equal(normalizeReasoningEffort("low"), "low");
   assert.equal(normalizeReasoningEffort("none"), "none");
   assert.equal(normalizeReasoningEffort("max"), "max");
+});
+
+test("side session sends off when a third-party provider has no reasoning setting", () => {
+  assert.equal(resolveReasoningEffort("q", undefined), "off");
+  assert.equal(resolveReasoningEffort("q", "off"), "off");
+  assert.equal(resolveReasoningEffort("q", "high"), "high");
+  assert.equal(resolveReasoningEffort("deepseek-official", undefined), undefined);
+  assert.equal(resolveReasoningEffort("deepseek-vision", "off"), undefined);
 });
 
 test("side session recognizes unsupported reasoning errors", () => {
