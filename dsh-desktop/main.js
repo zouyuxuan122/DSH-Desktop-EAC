@@ -3355,36 +3355,6 @@ function copyPluginPackage(profileDirP, src, name) {
 // 随插件/皮肤包一起拷贝到 profile 的许可与出处文件（存在才拷贝）。
 const EXTRA_PACKAGE_FILES = ['LICENSE', 'LICENSE.md', 'NOTICE', 'NOTICE.md', 'README.md', 'README.zh.md', 'THIRD-PARTY-NOTICES.md'];
 
-// tdai-memory 已从上游内置清单退役。老 profile 仍可能保留 patch 行、包副本
-// 或 package.json 依赖；在同步新插件前清理它们，避免退役插件继续加载并拖垮插件树。
-const RETIRED_BUILTIN_PLUGINS = [{ id: 'tdai-memory', name: 'dsh-tdai-memory' }];
-
-function retireRemovedBuiltinPlugins(profileDirP) {
-  for (const p of RETIRED_BUILTIN_PLUGINS) {
-    const patchFile = path.join(profileDirP, 'cordis.patch.yml');
-    try {
-      const text = fs.readFileSync(patchFile, 'utf8');
-      const patched = removePluginFromPatch(text, p.id);
-      if (patched !== text) fs.writeFileSync(patchFile, patched, 'utf8');
-    } catch (err) {
-      log('boot', `清理退役插件 ${p.id} 行失败: ${String((err && err.message) || err)}`);
-    }
-    try {
-      fs.rmSync(path.join(profileDirP, 'node_modules', p.name), { recursive: true, force: true });
-    } catch (err) {
-      log('boot', `清理退役插件 ${p.id} 包失败: ${String((err && err.message) || err)}`);
-    }
-    try {
-      const pkgFile = path.join(profileDirP, 'package.json');
-      const pkg = readJsonFile(pkgFile);
-      if (pkg?.dependencies?.[p.name]) {
-        delete pkg.dependencies[p.name];
-        fs.writeFileSync(pkgFile, JSON.stringify(pkg, null, 2) + '\n');
-      }
-    } catch { /* package.json 缺失/损坏则跳过 */ }
-  }
-}
-
 // pnpm（dsh plugin add / 插件市场）hoist 进 profile node_modules 的
 // @deepseek-ai 核心包真实拷贝，会遮蔽 <home>/profiles/node_modules 里指向
 // 随应用分发的安装闭包 junction，形成模块双实例：Symbol 身份不一致，
