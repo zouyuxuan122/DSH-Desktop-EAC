@@ -237,10 +237,14 @@ window.__ModuleLoader__.load({
             }
           }
         }
-        // Initial load from server
-        scope.load().then(function () {
-          if (alive) syncFromScope();
-        }).catch(function () {});
+        // Initial load from server (some DSH versions don't have load())
+        if (typeof scope.load === "function") {
+          scope.load().then(function () {
+            if (alive) syncFromScope();
+          }).catch(function () {});
+        } else {
+          syncFromScope();
+        }
         // Subscribe to scope changes (triggers after save)
         var unsubscribe = typeof scope.subscribe === "function" ? scope.subscribe(function () {
           if (alive) syncFromScope();
@@ -367,7 +371,7 @@ window.__ModuleLoader__.load({
       var [error, setError] = react.useState(null);
 
       react.useEffect(function () {
-        scope.load();
+        if (typeof scope.load === "function") scope.load();
         var alive = true;
         var sync = function () { if (alive) setSnapshot(scope.getSnapshot()); };
         var un = typeof scope.subscribe === "function" ? scope.subscribe(sync) : null;

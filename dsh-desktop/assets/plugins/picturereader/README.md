@@ -1,6 +1,6 @@
 # picturereader
 
-> **v3.0.4** — 给纯文本模型（DeepSeek / text-only）的全能「看图 / 读文档」能力：**粘贴即用、原生缩略图**。
+> **v3.0.5** — 给纯文本模型（DeepSeek / text-only）的全能「看图 / 读文档」能力：**粘贴即用、原生缩略图**。
 > 融合 **视觉孪生 adapter**（把任意文本模型原位包装成「支持图片」→ DSH 原生缩略图 + 图片块自动分析）、**三模式路由**、**本地像素级工具链**（scan / OCR×3 引擎 / crop / palette / compare / batch）、**文档转图片**（pdf / word / excel / ppt）与**可选外部 VLM 桥**。一个插件全包，无需另装。
 
 [![dsh-plugin](https://awesome-dsh-plugin.com/badge.svg)](https://github.com/awesome-dsh-plugin/awesome-dsh-plugin)
@@ -297,6 +297,10 @@ await main()
 | 三模式路由 | ✅ | privacy/smart/strict 逻辑全部正确 |
 | 视觉孪生 adapter | ✅ | 3 个 provider 激活 |
 | 设置持久化 | ✅ | vision_models / ocr_engine / mode 全部保留 |
+
+### v3.0.5 修复
+
+- **scope.load() 兼容性修复**：修复了在某些 DSH 版本中设置页「图片阅读」卡片打开空白的问题。根因是 `client.js` 直接调用 `scope.load()` 但该宿主版本的 `settingsScope` API 没有 `load` 方法（只有 getSnapshot/subscribe/set/unset），导致组件渲染时抛出 `TypeError: scope.load is not a function`。修复方案：在调用前检查 `typeof scope.load === "function"`，不存在时直接从 `scope.getSnapshot()` 读取。
 
 ### v3.0.3 修复
 
