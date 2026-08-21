@@ -1,6 +1,5 @@
-// Tests for the three new companion plugins' client bundles:
+// Tests for desktop companion plugins' client bundles:
 //   · dsh-font-custom   — config sanitization + CSS generation
-//   · dsh-auto-compact  — occupancy math + config clamping
 //   · dsh-dock-settings — MCP import parsers (Claude JSON / Codex TOML)
 //
 // Client bundles load through window.__ModuleLoader__.load(); the test host
@@ -85,30 +84,6 @@ test('font-custom: buildCss emits variable overrides for configured fields only'
   assert.ok(css.includes('--dsw-alias-label-primary:#112233'));
   const empty = ex.buildCss(ex.sanitize({}));
   assert.equal(empty, '', 'defaults emit no overrides');
-});
-
-// ── dsh-auto-compact ────────────────────────────────────────────────────────
-
-test('auto-compact: occupancy follows the official ContextMeter formula', () => {
-  const ex = loadBundle('assets/plugins/dsh-auto-compact/lib/client.js').__internals;
-  const occ = ex.occupancyOf({ projectedTokens: 80_000, pressureTokens: 60_000, contextWindow: 100_000 });
-  assert.equal(occ.percent, 80);
-  // 无 projectedTokens 时回落到压力采样（与官方一致）。
-  const occ2 = ex.occupancyOf({ pressureTokens: 50_000, contextWindow: 100_000 });
-  assert.equal(occ2.percent, 50);
-  // 缺口字段 → null（不触发）。
-  assert.equal(ex.occupancyOf({ projectedTokens: 10 }), null);
-  assert.equal(ex.occupancyOf(null), null);
-  // 超上限按 100 计。
-  assert.equal(ex.occupancyOf({ projectedTokens: 120_000, contextWindow: 100_000 }).percent, 100);
-});
-
-test('auto-compact: config clamps threshold into 60..95 and defaults to enabled', () => {
-  const ex = loadBundle('assets/plugins/dsh-auto-compact/lib/client.js').__internals;
-  assert.deepEqual(ex.sanitizeConfig({ threshold: 40 }), { enabled: true, threshold: 60 });
-  assert.deepEqual(ex.sanitizeConfig({ threshold: 99 }), { enabled: true, threshold: 95 });
-  assert.deepEqual(ex.sanitizeConfig({ enabled: false }), { enabled: false, threshold: 80 });
-  assert.deepEqual(ex.sanitizeConfig({}), { enabled: true, threshold: 80 });
 });
 
 // ── dsh-dock-settings: MCP import parsers ───────────────────────────────────

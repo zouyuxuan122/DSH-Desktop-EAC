@@ -65,7 +65,7 @@ function collectPluginRows(entries, ctx = {}) {
     const hasConfig = !!(user && user.hasConfig);
     const isRemoved = !!(extra && extra.removed);
     const isCore = !!(extra && extra.core);
-    const toggleable = group !== 'core' && !(hasConfig && !disabled);
+    const toggleable = group !== 'core' && !isCore && !(hasConfig && !disabled);
     rows.push({
       id,
       name: name || id,

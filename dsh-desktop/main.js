@@ -50,6 +50,7 @@ const {
 } = require('./koffi-preflight');
 const { configLinesFor, healSoulMdPatchRow, healRowConfig, removeBundledRowDuplicates, collectBundleEntryIds } = require('./patch-row-heal');
 const { syncBundledPresets, ensureDefaultAgentPreset } = require('./preset-sync');
+const { migrateManagedCompactPresets } = require('./compact-preset-migrate');
 const { buildErrorDetail } = require('./error-detail');
 const { SessionWatcher, scanZstdFrames } = require('./session-watcher');
 const { isEncodingMismatch, healSessionEncodingConflicts } = require('./session-encoding-heal');
@@ -3109,9 +3110,9 @@ const COMPANION_PLUGINS = [
   // 外观自定义：字体家族/字号/文字与代码颜色的设置页分区，实时预览，
   // localStorage 持久化（纯客户端，无宿主半边）。
   { id: 'font-custom', name: 'dsh-font-custom', dir: 'dsh-font-custom' },
-  // 自动压缩：监听 contextPressure 投影，接近上下文上限（默认 80%）时
-  // 自动向当前会话发送 /compact（dsh 原生命令，压缩事务由内核执行）。
-  { id: 'auto-compact', name: 'dsh-auto-compact', dir: 'dsh-auto-compact' },
+  // 请求路径自动压缩：在模型请求前按真实 Token 压力调用 DSH 原生压缩
+  // 引擎；上下文溢出时最多压缩并重试原请求一次，不再模拟输入 /compact。
+  { id: 'compact', name: 'dsh-compact', dir: 'dsh-compact' },
   // 插件保护中心 UI：快照列表/一键回滚/健康检查/事故报告，经桌面壳
   // IPC（guard:action）驱动 plugin-guard.js 引擎。
   { id: 'plugin-shield', name: 'dsh-plugin-shield', dir: 'dsh-plugin-shield' },
@@ -3922,6 +3923,9 @@ function imagePasteSave(dataUrl, name) {
 // 默认禁用的配套插件（dsh-pet）被用户启用后不会被下次 sync 重新插回
 // disabled 行（sync 的「已有行不重写」规则自然接管）。
 function pluginManagerSetEnabled(id, enabled) {
+  if (onboardingLogic.CORE_PLUGIN_IDS.has(id)) {
+    return { ok: false, error: '核心插件不可停用: ' + String(id) };
+  }
   const file = path.join(desktopProfileDir(), 'cordis.patch.yml');
   let text = '';
   try { text = fs.readFileSync(file, 'utf8'); } catch {}
@@ -3955,6 +3959,7 @@ function pluginManagerSetEnabled(id, enabled) {
 // 加载。启动时统一清理，避免任何残留路径。
 const RETIRED_BUILTIN_PLUGINS = [
   { id: 'tdai-memory', name: 'dsh-tdai-memory' },
+  { id: 'auto-compact', name: 'dsh-auto-compact' },
 ];
 
 // 清理退役内置插件在 profile 的所有残留（patch 行 / 包副本 / 依赖项）。
@@ -4017,6 +4022,16 @@ function syncCompanionPlugins() {
       (m) => log('boot', m)
     );
     if (presetsSynced.installed.length) log('boot', '已安装内置 agent preset: ' + presetsSynced.installed.join(', '));
+    const compactPresetResults = migrateManagedCompactPresets(
+      path.join(home, '.agent-presets'),
+      (m) => log('boot', m)
+    );
+    const compactPresetMigrated = compactPresetResults
+      .filter((result) => result.status === 'migrated')
+      .map((result) => path.basename(path.dirname(result.file)));
+    if (compactPresetMigrated.length) {
+      log('boot', '已将内置 agent preset 迁移到 dsh-compact: ' + compactPresetMigrated.join(', '));
+    }
     // 默认 preset 指到内置的 anchored-standard（用户已在 settings.yaml 写过
     // default 则一律保留）。失败只降级为官方默认 preset，不影响启动。
     const defaultResult = ensureDefaultAgentPreset(home, 'anchored-standard', (m) => log('boot', m));
