@@ -23,19 +23,23 @@ dsh-compact/
 ├─ LICENSE
 └─ lib/
    ├─ index.js
+   ├─ agent.js
    ├─ engine.js
    ├─ policy.js
    └─ client.js
 ```
 
-- `lib/index.js`：在 host-plane 注册 `dsh-compact` 设置命名空间和可选 Web
-  状态接口。
+- `lib/index.js`：唯一的产品级 Loader 条目，在 host-plane 注册设置、状态接口
+  和客户端。
+- `lib/agent.js`：Agent preset 的复合入口；一个 Loader 条目内部挂载压缩引擎、
+  `/compact` 命令和工具结果裁剪器。
 - `lib/engine.js`：导出 `DshCompactEngine`，继承
   `@deepseek-ai/dsh-compaction-basic` 的 `BasicCompactionEngine`。
 - `lib/policy.js`：配置净化、模型专属策略和压缩状态辅助逻辑。
 - `lib/client.js`：设置页和当前会话压缩状态，不模拟输入 `/compact`。
-- `cordis.patch.yml`：只注册 host/client；Agent preset 必须显式使用
-  `dsh-compact/engine`，以保证每个 Agent realm 只有一个 `ctx.compaction`。
+- `cordis.patch.yml`：注册产品级 host/client；Agent preset 只显式使用一个
+  `dsh-compact/agent` 复合条目，以保证每个 Agent realm 只有一个
+  `ctx.compaction`，同时不向插件列表暴露三个实现组件。
 
 ## 默认策略
 
@@ -118,23 +122,42 @@ Headless DSH 没有 Web UI 时仍可自动压缩并使用标准 `/compact`。
 - 将 EAC 自带 Agent preset 中完全匹配的：
 
   ```yaml
-  id: compaction-basic
-  name: '@deepseek-ai/dsh-compaction-basic'
+  - id: compaction
+    name: cordis:group
+    group: true
+    isolate:
+      compaction: true
+      toolResultPruner: true
+    config:
+      - id: compaction-basic
+        name: '@deepseek-ai/dsh-compaction-basic'
+      - id: command-compact
+        name: '@deepseek-ai/dsh-command-compact'
+      - id: tool-result-pruner
+        name: '@deepseek-ai/dsh-compaction-tool-result-pruner'
   ```
 
   替换为：
 
   ```yaml
-  id: compaction-basic
-  name: 'dsh-compact/engine'
+  - id: compact-agent
+    name: 'dsh-compact/agent'
+    isolate:
+      compaction: true
+      toolResultPruner: true
   ```
 
-- 已安装的 EAC 内置 preset 使用语法解析后迁移，首次改动前保留 `.bak`；
+- 已安装的 EAC 内置 preset 使用支持 DSH `!!js` 标量的语法解析后迁移，
+  首次改动前保留 `.bak`；
 - 用户未知的自定义 preset 不自动修改；
 - 迁移必须幂等，解析失败只记录诊断，不破坏原文件；
 - 旧 localStorage 配置只由客户端做一次清理，不迁移为错误的宿主设置。
+- 官方插件清单按 Loader 条目展示；客户端在该只读清单中隐藏
+  `compaction-basic`、`command-compact`、`tool-result-pruner` 和
+  `compact-agent` 等实现级条目，只保留产品级 `dsh-compact`。
 
-普通 DSH 用户安装包后，在所用 Agent preset 中手动替换压缩引擎行。
+普通 DSH 用户安装包后，在所用 Agent preset 中用上述单个
+`dsh-compact/agent` 条目替换原压缩组。
 
 ## 配置校验
 
