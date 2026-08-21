@@ -7,7 +7,11 @@ window.__ModuleLoader__.load({
 
 		const react = require("react");
 		const { jsx, jsxs } = require("react/jsx-runtime");
-		const { bindSnapshotSelector } = require("@deepseek-ai/dsh-client-web-react");
+		const bindSnapshotSelector = (source) => {
+			const subscribe = (listener) => source.subscribe(listener);
+			const getSnapshot = () => source.getSnapshot();
+			return (select) => select(react.useSyncExternalStore(subscribe, getSnapshot, getSnapshot));
+		};
 
 		// ------------------------------------------------------------------
 		// Settings

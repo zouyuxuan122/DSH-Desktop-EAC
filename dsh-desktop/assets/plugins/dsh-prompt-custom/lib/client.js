@@ -13,8 +13,12 @@ window.__ModuleLoader__.load({
 
 		const react = require("react");
 		const { jsx, jsxs } = require("react/jsx-runtime");
-		const { bindSnapshotSelector } = require("@deepseek-ai/dsh-client-web-react");
-		const { Button } = require("@deepseek-ai/dsh-client-ui-primitives");
+		const bindSnapshotSelector = (source) => {
+			const subscribe = (listener) => source.subscribe(listener);
+			const getSnapshot = () => source.getSnapshot();
+			return (select) => select(react.useSyncExternalStore(subscribe, getSnapshot, getSnapshot));
+		};
+		const Button = ({ variant, size, loading, ...props }) => jsx("button", { type: "button", disabled: loading || props.disabled, ...props });
 
 		const NS = "dsh-prompt";
 

@@ -16,9 +16,6 @@ window.__ModuleLoader__.load({
 
 		const react = require("react");
 		const { jsx, jsxs } = require("react/jsx-runtime");
-		const { bindSnapshotSelector } = require("@deepseek-ai/dsh-client-web-react");
-		const { Button } = require("@deepseek-ai/dsh-client-ui-primitives");
-
 		const NS = "dsh-session-manager";
 		const L = {
 			nav: "归档对话管理",

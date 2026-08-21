@@ -3,7 +3,11 @@ window.__ModuleLoader__.load({
   factory: (require) => {
     const module = { exports: {} }
     const React = require('react')
-    const { bindSnapshotSelector } = require('@deepseek-ai/dsh-client-web-react')
+    const bindSnapshotSelector = (source) => {
+      const subscribe = (listener) => source.subscribe(listener)
+      const getSnapshot = () => source.getSnapshot()
+      return (select) => select(React.useSyncExternalStore(subscribe, getSnapshot, getSnapshot))
+    }
     const h = React.createElement
     const NS = 'dsh-compact'
     const STATUS_ENDPOINT = '/plugins/dsh-compact/status'
