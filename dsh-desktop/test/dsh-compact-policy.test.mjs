@@ -56,14 +56,14 @@ test('dsh-compact policy: exact provider/model override wins without affecting d
   assert.equal(resolvePolicy(config, { provider: 'openai', model: 'other' }).thresholdRatio, 0.75)
 })
 
-test('dsh-compact policy: parent engine config is immutable and never auto-registers twice', () => {
+test('dsh-compact policy: parent engine performs one compaction attempt per pressure check', () => {
   const config = toBasicResolvedConfig({
     thresholdRatio: 0.7,
     retainRatio: 0.1,
     modelPolicies: [{ provider: 'p', model: 'm', thresholdRatio: 0.8 }],
   })
   assert.equal(config.auto, false)
-  assert.equal(config.compactionRetries, 1)
+  assert.equal(config.compactionRetries, 0)
   assert.equal(config.modelPolicies[0].thresholdRatio, 0.8)
   assert.ok(Object.isFrozen(config))
   assert.ok(Object.isFrozen(config.modelPolicies))

@@ -222,34 +222,13 @@
 
 # ── compaction ──────────────────────────────────────────────────────────────
 
-# `compaction-basic` reads `toolResultPrune` through `ctx.get`, so the pruner must
-# share this realm rather than sit outside it.
-#
-# `tokenMeter` is deliberately NOT in this realm: the meter stays on the HOST
-# plane, and the rows here resolve that one instance. It takes no configuration,
-# keys every fold by Session, and owns the context-meter projection units the
-# browser reads for every session — behind a realm those units would come and go
-# with whichever presets happen to be mounted. What a preset chooses is whether
-# its agent compacts at all, which is `compaction-basic` below.
-- id: compaction
-  name: cordis:group
-  group: true
+# `dsh-compact/agent` keeps the engine, `/compact` command, and tool-result
+# pruner in one agent-local realm while exposing a single product-level entry.
+- id: compact-agent
+  name: 'dsh-compact/agent'
   isolate:
     compaction: true
     toolResultPruner: true
-  config:
-    - id: compaction-basic
-      name: 'dsh-compact/engine'
-
-    - id: command-compact
-      name: '@deepseek-ai/dsh-command-compact'
-
-    - id: tool-result-pruner
-      name: '@deepseek-ai/dsh-compaction-tool-result-pruner'
-      config:
-        thresholdChars: 8192
-        headChars: 4096
-        tailChars: 1024
 
 # ── delegation and workflows ────────────────────────────────────────────────
 

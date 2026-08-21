@@ -10,36 +10,88 @@ const {
   MANAGED_PRESETS,
   migrateManagedCompactPresets,
   migratePresetFile,
-  replaceCompactionEngine,
+  parsePreset,
+  replaceCompactionGroup,
 } = require('../compact-preset-migrate.js')
 
-test('dsh-compact migration: only replaces the exact compaction-basic row', () => {
+test('dsh-compact migration: replaces the complete known compaction group with one agent entry', () => {
   const before = [
-    'config:',
-    '  - id: compaction-basic',
-    "    name: '@deepseek-ai/dsh-compaction-basic'",
-    '  - id: other',
-    "    name: '@deepseek-ai/dsh-compaction-basic'",
-    "note: '@deepseek-ai/dsh-compaction-basic'",
+    '- id: before',
+    "  name: 'before'",
+    '# ── compaction ──────────────────────────────────────────────────────────────',
+    '',
+    '# stale compaction-basic explanation',
+    '- id: compaction',
+    '  name: cordis:group',
+    '  group: true',
+    '  isolate:',
+    '    compaction: true',
+    '    toolResultPruner: true',
+    '  config:',
+    '    - id: compaction-basic',
+    "      name: '@deepseek-ai/dsh-compaction-basic'",
+    '    - id: command-compact',
+    "      name: '@deepseek-ai/dsh-command-compact'",
+    '    - id: tool-result-pruner',
+    "      name: '@deepseek-ai/dsh-compaction-tool-result-pruner'",
+    '- id: after',
+    "  name: 'after'",
     '',
   ].join('\n')
-  const result = replaceCompactionEngine(before)
+  const result = replaceCompactionGroup(before)
   assert.equal(result.changed, true)
-  assert.match(result.text, /id: compaction-basic\n\s+name: 'dsh-compact\/engine'/)
-  assert.match(result.text, /id: other\n\s+name: '@deepseek-ai\/dsh-compaction-basic'/)
-  assert.match(result.text, /note: '@deepseek-ai\/dsh-compaction-basic'/)
+  assert.match(result.text, /- id: compact-agent\n  name: 'dsh-compact\/agent'/)
+  assert.doesNotMatch(result.text, /id: compaction-basic|id: command-compact|id: tool-result-pruner/)
+  assert.doesNotMatch(result.text, /stale compaction-basic explanation/)
+  assert.match(result.text, /single product-level entry/)
+  assert.match(result.text, /- id: before/)
+  assert.match(result.text, /- id: after/)
+  parsePreset(result.text)
 })
 
 test('dsh-compact migration: creates one backup and is idempotent', () => {
   const dir = mkdtempSync(join(tmpdir(), 'dsh-compact-migrate-'))
   try {
     const file = join(dir, 'agent.cordis.yml')
-    const before = "config:\n  - id: compaction-basic\n    name: '@deepseek-ai/dsh-compaction-basic'\n"
+    const before = [
+      "- id: platform",
+      "  name: 'x'",
+      "  disabled: !!js process.platform !== 'win32'",
+      '- id: compaction',
+      '  name: cordis:group',
+      '  group: true',
+      '  isolate:',
+      '    compaction: true',
+      '    toolResultPruner: true',
+      '  config:',
+      '    - id: compaction-basic',
+      "      name: 'dsh-compact/engine'",
+      '    - id: command-compact',
+      "      name: '@deepseek-ai/dsh-command-compact'",
+      '    - id: tool-result-pruner',
+      "      name: '@deepseek-ai/dsh-compaction-tool-result-pruner'",
+      '      config:',
+      '        thresholdChars: 9000',
+      '        headChars: 5000',
+      '        tailChars: 1200',
+      '',
+      '# ── delegation and workflows ────────────────────────────────────────────────',
+      '# this comment must survive migration',
+      '- id: delegation',
+      '  name: cordis:group',
+      '',
+    ].join('\r\n')
     writeFileSync(file, before)
     assert.equal(migratePresetFile(file).status, 'migrated')
     assert.equal(readFileSync(file + '.bak', 'utf8'), before)
     const migrated = readFileSync(file, 'utf8')
-    assert.match(migrated, /dsh-compact\/engine/)
+    assert.match(migrated, /dsh-compact\/agent/)
+    assert.match(migrated, /!!js process\.platform/)
+    assert.match(migrated, /thresholdChars: 9000/)
+    assert.match(migrated, /headChars: 5000/)
+    assert.match(migrated, /tailChars: 1200/)
+    assert.match(migrated, /this comment must survive migration/)
+    assert.equal(migrated.includes('\r\n'), true)
     assert.equal(migratePresetFile(file).status, 'kept')
     assert.equal(readFileSync(file + '.bak', 'utf8'), before)
   } finally {
@@ -61,6 +113,47 @@ test('dsh-compact migration: invalid YAML is never modified or backed up', () =>
   }
 })
 
+test('dsh-compact migration: accepts BOM and preserves !!js as inert data', () => {
+  const source = [
+    '\uFEFF- id: platform',
+    "  name: 'x'",
+    "  disabled: !!js (() => { throw new Error('must not execute') })()",
+    '- id: compaction',
+    '  name: cordis:group',
+    '  group: true',
+    '  isolate:',
+    '    compaction: true',
+    '    toolResultPruner: true',
+    '  config:',
+    '    - id: compaction-basic',
+    "      name: '@deepseek-ai/dsh-compaction-basic'",
+    '    - id: command-compact',
+    "      name: '@deepseek-ai/dsh-command-compact'",
+    '    - id: tool-result-pruner',
+    "      name: '@deepseek-ai/dsh-compaction-tool-result-pruner'",
+    '',
+  ].join('\n')
+  const parsed = parsePreset(source)
+  assert.deepEqual(parsed[0].disabled, { __jsExpr: "(() => { throw new Error('must not execute') })()" })
+  const result = replaceCompactionGroup(source)
+  assert.equal(result.changed, true)
+  assert.equal(result.text.charCodeAt(0), 0xFEFF)
+  assert.match(result.text, /!!js \(\(\) =>/)
+})
+
+test('dsh-compact migration: leaves incomplete or unfamiliar compaction groups untouched', () => {
+  const before = [
+    '- id: compaction',
+    '  name: cordis:group',
+    '  group: true',
+    '  config:',
+    '    - id: compaction-basic',
+    "      name: '@deepseek-ai/dsh-compaction-basic'",
+    '',
+  ].join('\n')
+  assert.deepEqual(replaceCompactionGroup(before), { text: before, changed: false })
+})
+
 test('dsh-compact migration: only scans EAC-managed preset names', () => {
   const dir = mkdtempSync(join(tmpdir(), 'dsh-compact-managed-'))
   try {
@@ -68,12 +161,27 @@ test('dsh-compact migration: only scans EAC-managed preset names', () => {
       mkdirSync(join(dir, name), { recursive: true })
       writeFileSync(
         join(dir, name, 'agent.cordis.yml'),
-        "config:\n  - id: compaction-basic\n    name: '@deepseek-ai/dsh-compaction-basic'\n",
+        [
+          '- id: compaction',
+          '  name: cordis:group',
+          '  group: true',
+          '  isolate:',
+          '    compaction: true',
+          '    toolResultPruner: true',
+          '  config:',
+          '    - id: compaction-basic',
+          "      name: '@deepseek-ai/dsh-compaction-basic'",
+          '    - id: command-compact',
+          "      name: '@deepseek-ai/dsh-command-compact'",
+          '    - id: tool-result-pruner',
+          "      name: '@deepseek-ai/dsh-compaction-tool-result-pruner'",
+          '',
+        ].join('\n'),
       )
     }
     migrateManagedCompactPresets(dir)
     for (const name of MANAGED_PRESETS) {
-      assert.match(readFileSync(join(dir, name, 'agent.cordis.yml'), 'utf8'), /dsh-compact\/engine/)
+      assert.match(readFileSync(join(dir, name, 'agent.cordis.yml'), 'utf8'), /dsh-compact\/agent/)
     }
     assert.match(
       readFileSync(join(dir, 'custom-user-preset', 'agent.cordis.yml'), 'utf8'),

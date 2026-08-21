@@ -27,6 +27,12 @@ window.__ModuleLoader__.load({
       '.dshc-error{font-size:12px;color:var(--dsw-alias-state-error-primary,#d33)}',
       '.dshc-ok{font-size:12px;color:var(--dsw-alias-state-success-primary,#16803a)}',
       '.dshc-json{width:100%;min-height:88px;resize:vertical;font:12px/1.5 ui-monospace,monospace;box-sizing:border-box}',
+      // 官方插件清单按 Loader entry 展示。下面这些是 dsh-compact 的实现
+      // 细节或被 Web profile 停用的上游占位行；产品层只展示 compact。
+      '[data-plugin-entry="compaction-basic"],[data-plugin-entry$=":compaction-basic"],' +
+        '[data-plugin-entry="command-compact"],[data-plugin-entry$=":command-compact"],' +
+        '[data-plugin-entry="tool-result-pruner"],[data-plugin-entry$=":tool-result-pruner"],' +
+        '[data-plugin-entry="compact-agent"],[data-plugin-entry$=":compact-agent"]{display:none!important}',
     ].join('')
 
     function ensureCss() {

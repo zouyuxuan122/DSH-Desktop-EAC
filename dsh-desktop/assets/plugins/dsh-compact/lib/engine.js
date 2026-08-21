@@ -23,6 +23,19 @@ function logResult(ctx, result, trigger) {
   )
 }
 
+const EMPTY_SUMMARY_ERROR = 'summarization produced no text summary content'
+
+export async function summarizeWithToolFreeFallback(summarize, input, onRetry = () => {}) {
+  try {
+    return await summarize(input)
+  } catch (error) {
+    if (!(error instanceof Error) || error.message !== EMPTY_SUMMARY_ERROR) throw error
+    onRetry(error)
+    const { system: _system, tools: _tools, ...fallbackInput } = input
+    return summarize(fallbackInput)
+  }
+}
+
 export function registerAutomaticCompaction(ctx, engine) {
   const overflowRetries = new WeakMap()
   const overflowAgents = new WeakMap()
@@ -119,6 +132,16 @@ export class DshCompactEngine extends BasicCompactionEngine {
 
   policyFor(agent) {
     return resolvePolicy(this.currentConfig(), routedTargetOf(agent))
+  }
+
+  summarize(input, agent, signal) {
+    return summarizeWithToolFreeFallback(
+      (nextInput) => super.summarize(nextInput, agent, signal),
+      input,
+      () => this.ctx.logger?.warn?.(
+        'dsh-compact summary returned no text; retrying once without the agent system prompt and tools',
+      ),
+    )
   }
 
   async withPolicySnapshot(agent, trigger, operation) {

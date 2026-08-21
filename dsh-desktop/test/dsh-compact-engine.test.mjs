@@ -1,7 +1,10 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import { CONTEXT_WINDOW_EXCEEDED_CODE } from '@deepseek-ai/dsh-llm'
-import { registerAutomaticCompaction } from '../assets/plugins/dsh-compact/lib/engine.js'
+import {
+  registerAutomaticCompaction,
+  summarizeWithToolFreeFallback,
+} from '../assets/plugins/dsh-compact/lib/engine.js'
 
 function harness(policy = {}) {
   const handlers = new Map()
@@ -117,4 +120,39 @@ test('dsh-compact engine hooks: aborted overflow is never retried', async () => 
     signal: controller.signal,
   }, () => { nextCalls += 1 })
   assert.equal(nextCalls, 1)
+})
+
+test('dsh-compact summarizer: empty text retries once without system prompt or tools', async () => {
+  const inputs = []
+  let retryCount = 0
+  const input = {
+    system: 'coding-agent system prompt',
+    tools: [{ name: 'read' }],
+    messages: [{ role: 'user', content: [] }],
+  }
+  const result = await summarizeWithToolFreeFallback(async (nextInput) => {
+    inputs.push(nextInput)
+    if (inputs.length === 1) throw new Error('summarization produced no text summary content')
+    return { summary: [{ type: 'text', text: 'usable summary' }] }
+  }, input, () => { retryCount += 1 })
+
+  assert.equal(retryCount, 1)
+  assert.equal(inputs.length, 2)
+  assert.equal(inputs[0], input)
+  assert.equal('system' in inputs[1], false)
+  assert.equal('tools' in inputs[1], false)
+  assert.equal(inputs[1].messages, input.messages)
+  assert.equal(result.summary[0].text, 'usable summary')
+})
+
+test('dsh-compact summarizer: unrelated failures are never retried', async () => {
+  let calls = 0
+  await assert.rejects(
+    summarizeWithToolFreeFallback(async () => {
+      calls += 1
+      throw new Error('provider unavailable')
+    }, { messages: [] }),
+    /provider unavailable/,
+  )
+  assert.equal(calls, 1)
 })

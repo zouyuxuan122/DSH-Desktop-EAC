@@ -148,7 +148,9 @@ export function toBasicResolvedConfig(config) {
     summarizationProvider: '',
     summarizationModel: '',
     maxTokens: 8192,
-    compactionRetries: 1,
+    // BasicCompactionEngine counts this as extra attempts after the first one.
+    // Keep one pressure check to one durable summary; a later turn can compact again.
+    compactionRetries: 0,
     maxOverflowRetries: resolved.maxOverflowRetries,
     modelPolicies: Object.freeze(resolved.modelPolicies.map((policy) => Object.freeze({
       provider: policy.provider,

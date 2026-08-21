@@ -5,7 +5,8 @@ const path = require('node:path');
 const yaml = require('js-yaml');
 
 const OLD_ENGINE = '@deepseek-ai/dsh-compaction-basic';
-const NEW_ENGINE = 'dsh-compact/engine';
+const TRANSITION_ENGINE = 'dsh-compact/engine';
+const NEW_AGENT = 'dsh-compact/agent';
 const MANAGED_PRESETS = Object.freeze([
   'anchored-standard',
   'router-standard',
@@ -16,34 +17,95 @@ const MANAGED_PRESETS = Object.freeze([
   'zero-anchored-standard',
 ]);
 
-function replaceCompactionEngine(text) {
+const JsExpr = new yaml.Type('tag:yaml.org,2002:js', {
+  kind: 'scalar',
+  resolve: (data) => typeof data === 'string',
+  construct: (data) => ({ __jsExpr: data }),
+});
+const DSH_YAML_SCHEMA = yaml.JSON_SCHEMA.extend(JsExpr);
+
+function parsePreset(text) {
+  return yaml.load(text, { schema: DSH_YAML_SCHEMA });
+}
+
+function readPrunerConfig(block) {
+  const lines = block.split('\n');
+  const start = lines.findIndex((line) => /^\s*-\s*id:\s*tool-result-pruner\s*(?:#.*)?$/.test(line));
+  if (start < 0) return [];
+  const result = [];
+  for (let i = start + 1; i < lines.length; i++) {
+    if (/^\s*-\s*id:\s*/.test(lines[i])) break;
+    const match = /^\s+(thresholdChars|headChars|tailChars):(\s*.+)$/.exec(lines[i]);
+    if (match) result.push(`    ${match[1]}:${match[2]}`);
+  }
+  return result;
+}
+
+function compactionSectionBodyStart(lines, groupIndex) {
+  for (let i = groupIndex - 1; i >= 0; i--) {
+    const line = lines[i].trim();
+    if (line === '' || line.startsWith('#')) {
+      if (/^# ── compaction\b/.test(line)) return i + 1;
+      continue;
+    }
+    break;
+  }
+  return groupIndex;
+}
+
+function replaceCompactionGroup(text) {
   if (typeof text !== 'string' || text === '') return { text, changed: false };
   const lines = text.split(/\r?\n/);
-  let changed = false;
+  const eol = text.includes('\r\n') ? '\r\n' : '\n';
   for (let i = 0; i < lines.length; i++) {
-    if (!/^[ \t]*-\s*id:\s*compaction-basic\s*(?:#.*)?$/.test(lines[i])) continue;
-    for (let j = i + 1; j < lines.length; j++) {
-      if (/^[ \t]*-\s*id:/.test(lines[j])) break;
-      const match = /^([ \t]*name:\s*)(['"])@deepseek-ai\/dsh-compaction-basic\2(\s*(?:#.*)?)$/.exec(lines[j]);
-      if (!match) continue;
-      lines[j] = `${match[1]}${match[2]}${NEW_ENGINE}${match[2]}${match[3]}`;
-      changed = true;
-      break;
+    if (!/^- id:\s*compaction\s*(?:#.*)?$/.test(lines[i])) continue;
+    let end = i + 1;
+    while (
+      end < lines.length
+      && !/^- id:\s*/.test(lines[end])
+      && !/^# ── /.test(lines[end])
+    ) end += 1;
+    const block = lines.slice(i, end).join('\n');
+    const hasEngine = block.includes(`name: '${OLD_ENGINE}'`)
+      || block.includes(`name: "${OLD_ENGINE}"`)
+      || block.includes(`name: '${TRANSITION_ENGINE}'`)
+      || block.includes(`name: "${TRANSITION_ENGINE}"`);
+    if (!hasEngine || !/\bid:\s*command-compact\b/.test(block) || !/\bid:\s*tool-result-pruner\b/.test(block)) {
+      return { text, changed: false };
     }
+    const replacement = [
+      '- id: compact-agent',
+      `  name: '${NEW_AGENT}'`,
+      '  isolate:',
+      '    compaction: true',
+      '    toolResultPruner: true',
+    ];
+    const prunerConfig = readPrunerConfig(block);
+    if (prunerConfig.length) replacement.push('  config:', ...prunerConfig);
+    const start = compactionSectionBodyStart(lines, i);
+    if (start < i) {
+      replacement.unshift(
+        '',
+        '# `dsh-compact/agent` keeps the engine, `/compact` command, and tool-result',
+        '# pruner in one agent-local realm while exposing a single product-level entry.',
+      );
+    }
+    lines.splice(start, end - start, ...replacement);
+    return { text: lines.join(eol), changed: true };
   }
-  return { text: changed ? lines.join(text.includes('\r\n') ? '\r\n' : '\n') : text, changed };
+  return { text, changed: false };
 }
 
 function migratePresetFile(file, log = () => {}) {
   let before;
   try { before = fs.readFileSync(file, 'utf8'); } catch { return { status: 'missing', file }; }
-  try { yaml.load(before); } catch (error) {
+  try { parsePreset(before); } catch (error) {
     log(`跳过无法解析的 preset: ${file}: ${error.message}`);
     return { status: 'invalid', file, error: error.message };
   }
-  const replaced = replaceCompactionEngine(before);
+  const replaced = replaceCompactionGroup(before);
   if (!replaced.changed) return { status: 'kept', file };
-  try { yaml.load(replaced.text); } catch (error) {
+  try { parsePreset(replaced.text); } catch (error) {
     log(`跳过迁移后无法解析的 preset: ${file}: ${error.message}`);
     return { status: 'invalid-result', file, error: error.message };
   }
@@ -69,9 +131,12 @@ function migrateManagedCompactPresets(presetsRoot, log = () => {}) {
 
 module.exports = {
   MANAGED_PRESETS,
-  NEW_ENGINE,
+  NEW_AGENT,
   OLD_ENGINE,
+  TRANSITION_ENGINE,
+  DSH_YAML_SCHEMA,
   migrateManagedCompactPresets,
   migratePresetFile,
-  replaceCompactionEngine,
+  parsePreset,
+  replaceCompactionGroup,
 };
