@@ -305,6 +305,11 @@ async function applyUpdate(ctx, version, { onProgress = null, stallMs = NPM_STAL
       const args = [
         'install', '--prefix', staging, PKG + '@' + version,
         '--save-exact', '--omit=dev', '--no-audit', '--no-fund', '--no-update-notifier',
+        // dsh is an aggregator whose runtime packages cross-reference each other
+        // through a dense peer graph. npm 11's peer solver can spend minutes
+        // backtracking here without output; the isolated overlay already gets
+        // every runtime package from dsh's explicit dependency list.
+        '--legacy-peer-deps',
         '--loglevel=info',
       ];
       if (registry) args.push('--registry=' + registry);

@@ -34,7 +34,11 @@ function makeFakeNpmCli(dir, behavior) {
     const key = reg ? reg.slice('--registry='.length).replace(/\\/+$/, '') : '(default)';
     const behavior = ${JSON.stringify(behavior)};
     const out = behavior[key] || behavior['(default)'];
-    if (out === 'ok') {
+    if (out === 'require-legacy-peer-deps' && !args.includes('--legacy-peer-deps')) {
+      process.stderr.write('ERESOLVE peer dependency conflict\\n');
+      process.exit(1);
+    }
+    if (out === 'ok' || out === 'require-legacy-peer-deps') {
       const prefixArg = args[args.indexOf('--prefix') + 1];
       const fs = require('node:fs');
       const path = require('node:path');
@@ -88,6 +92,16 @@ test('applyUpdate: first registry fails -> automatically switches to mirror and 
   assert.ok(events.some((e) => e.stage === 'done'), '成功阶段应上报');
   assert.ok(logs.some((l) => l.includes('自动切换镜像源')), '日志应记录切换');
   assert.ok(fs.existsSync(path.join(userDataDir, 'agent', 'node_modules', '@deepseek-ai', 'dsh', 'lib', 'bin.js')));
+  rmRetry(userDataDir);
+});
+
+test('applyUpdate: bypasses npm peer-tree backtracking for the isolated dsh overlay', async () => {
+  const userDataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'upd-peer-deps-'));
+  const cli = makeFakeNpmCli(userDataDir, { '(default)': 'require-legacy-peer-deps' });
+  const { ctx, logs } = makeCtx(cli, userDataDir);
+  const res = await updater.applyUpdate(ctx, '0.1.1-rc.2', { onProgress: () => {} });
+  assert.equal(res.version, '0.1.1-rc.2');
+  assert.ok(logs.some((l) => l.includes('--legacy-peer-deps')), 'npm command must disable peer-tree solving');
   rmRetry(userDataDir);
 });
 
