@@ -1,0 +1,3 @@
+name: Anchored Standard (experimental)
+description: Bootstrap with the Minimal preset's real tool pair (persistent bash + str_replace_editor) and no auto-injected workspace or skill context, then expose the full Standard catalog after the first durable tool call or reply.
+order: 5

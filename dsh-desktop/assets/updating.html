@@ -1,0 +1,97 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8" />
+<title>正在更新</title>
+<style>
+  :root { color-scheme: dark; }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 16px;
+    padding: 28px;
+    background: radial-gradient(700px 380px at 50% -10%, #1b2a6b 0%, #0b1220 60%);
+    color: #e6ecff;
+    font-family: "Segoe UI", "Microsoft YaHei", system-ui, sans-serif;
+    user-select: none;
+    text-align: center;
+  }
+  .icon { width: 72px; height: 72px; border-radius: 22%; background: #f6f8fc; padding: 10px; box-sizing: border-box; box-shadow: 0 8px 24px rgba(0,0,0,.4); }
+  .spinner {
+    width: 40px; height: 40px;
+    border: 4px solid rgba(122, 150, 255, 0.25);
+    border-top-color: #5b8cff;
+    border-radius: 50%;
+    animation: spin 0.9s linear infinite;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  h1 { font-size: 16px; font-weight: 600; }
+  p { font-size: 12px; color: #93a5d8; line-height: 1.7; }
+  .progress { width: min(320px, 86%); display: none; }
+  .track {
+    width: 100%; height: 8px; border-radius: 999px;
+    background: rgba(122, 150, 255, 0.18); overflow: hidden;
+  }
+  .bar { height: 100%; width: 0%; border-radius: 999px; background: linear-gradient(90deg, #5b8cff, #8ab2ff); transition: width .25s ease; }
+  .bar.indeterminate { width: 100% !important; background: linear-gradient(90deg, transparent, #5b8cff, transparent); animation: slide 1.2s linear infinite; }
+  @keyframes slide { from { transform: translateX(-100%); } to { transform: translateX(100%); } }
+  .pct { font-size: 11px; color: #7c8fc0; margin-top: 8px; font-variant-numeric: tabular-nums; }
+</style>
+<script>
+  window.__init = function (opts) {
+    const version = (opts && opts.version) || '';
+    const kind = opts && opts.kind === 'client' ? 'client' : 'agent';
+    document.getElementById('title').textContent = kind === 'client'
+      ? '正在下载 Deepseek Harness EAC 封装 v' + version + ' …'
+      : '正在更新 @deepseek-ai/dsh → ' + version;
+    document.getElementById('note').textContent = kind === 'client'
+      ? '从上游仓库下载新版本客户端，完成后自动替换并重启应用。'
+      : '正在下载新版本及其依赖。首次更新约需下载 250MB，请耐心等待；详细进度见日志目录中的 update.log。';
+  };
+  function fmtDur(sec) {
+    sec = Math.max(0, Math.round(sec || 0));
+    if (!isFinite(sec)) return '--:--';
+    const h = Math.floor(sec / 3600);
+    const m = Math.floor((sec % 3600) / 60);
+    const s = sec % 60;
+    const mm = String(m).padStart(2, '0');
+    const ss = String(s).padStart(2, '0');
+    return h > 0 ? h + ':' + mm + ':' + ss : mm + ':' + ss;
+  }
+  window.__setProgress = function (pct, receivedMB, totalMB, meta) {
+    document.getElementById('spinner').style.display = 'none';
+    document.getElementById('progress').style.display = 'block';
+    const bar = document.getElementById('bar');
+    const pctEl = document.getElementById('pct');
+    const m = meta || {};
+    if (pct < 0) {
+      bar.className = 'bar indeterminate';
+      pctEl.textContent = m.stage || '正在下载…';
+    } else {
+      bar.className = 'bar';
+      const p = Math.max(2, Math.min(100, pct));
+      bar.style.width = p + '%';
+      let t = (receivedMB || 0) + ' / ' + (totalMB || '?') + ' MB · ' + p + '%';
+      if (typeof m.speedMBps === 'number') t += ' · ' + m.speedMBps.toFixed(1) + ' MB/s';
+      if (typeof m.etaSec === 'number') t += ' · 剩余 ' + fmtDur(m.etaSec);
+      if (m.stage) t += ' · ' + m.stage;
+      pctEl.textContent = t;
+    }
+  };
+</script>
+</head>
+<body>
+  <img class="icon" src="icon.png" alt="" draggable="false" />
+  <div class="spinner" id="spinner"></div>
+  <h1 id="title">正在更新…</h1>
+  <p id="note">正在准备更新。</p>
+  <div class="progress" id="progress">
+    <div class="track"><div class="bar" id="bar"></div></div>
+    <div class="pct" id="pct"></div>
+  </div>
+</body>
+</html>

@@ -1,0 +1,48 @@
+{
+  "name": "@vlln/dsh-navbar",
+  "description": "对话节点导航条——user 消息快速跳转（自渲染 DOM，官方 client 通道）",
+  "version": "0.3.0",
+  "type": "module",
+  "main": "lib/index.mjs",
+  "files": [
+    "lib",
+    "cordis.patch.yml"
+  ],
+  "publishConfig": {
+    "access": "public"
+  },
+  "exports": {
+    ".": {
+      "default": "./lib/index.mjs"
+    },
+    "./client": "./lib/client.js",
+    "./cordis.patch.yml": "./cordis.patch.yml",
+    "./package.json": "./package.json"
+  },
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    },
+    "client": {
+      "inject": [
+        "@deepseek-ai/dsh-client-runtime",
+        "@deepseek-ai/dsh-client-ui-primitives"
+      ],
+      "platform": "web"
+    }
+  },
+  "peerDependencies": {
+    "@deepseek-ai/cordis": "^4.0.1"
+  },
+  "engines": {
+    "node": ">=22.19.0",
+    "dsh": ">=0.1.0-rc.5"
+  },
+  "scripts": {
+    "build": "tsdown --config ./tsdown.config.ts"
+  },
+  "devDependencies": {
+    "tsdown": "0.22.2"
+  },
+  "license": "MIT"
+}

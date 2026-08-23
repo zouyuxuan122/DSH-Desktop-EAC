@@ -1,0 +1,39 @@
+{
+  "name": "@deepseek-ai/dsh-third-party-thinking",
+  "version": "0.1.0",
+  "private": true,
+  "description": "让接入的第三方模型也能在使用时调整思考强度（reasoning effort）：为未声明推理能力的 OpenAI 兼容第三方模型注入 off/high/max 思考强度控件，并把所选档位注入到请求体",
+  "type": "module",
+  "main": "lib/index.js",
+  "exports": {
+    ".": {
+      "default": "./lib/index.js"
+    },
+    "./client": {
+      "default": "./lib/client.js"
+    },
+    "./package.json": "./package.json"
+  },
+  "license": "MIT",
+  "dsh": {
+    "client": {
+      "inject": [
+        "@deepseek-ai/dsh-client-runtime",
+        "@deepseek-ai/dsh-client-ui-settings"
+      ],
+      "platform": "web",
+      "external": [
+        "@deepseek-ai/dsh-client-ui-renderer"
+      ]
+    }
+  },
+  "peerDependencies": {
+    "@deepseek-ai/schemastery": "*",
+    "@deepseek-ai/dsh-settings": "*",
+    "@deepseek-ai/dsh-llm": "*",
+    "@deepseek-ai/dsh-client-ui-settings": "*",
+    "@deepseek-ai/dsh-client-ui-primitives": "*",
+    "react": ">=18",
+    "@deepseek-ai/dsh-client-ui-renderer": ">=0.0.1-rc <2"
+  }
+}

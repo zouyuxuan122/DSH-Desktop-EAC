@@ -1,0 +1,323 @@
+/**
+ * dsh-plugin-shield — browser half: the 插件保护中心 settings section.
+ *
+ *   - 状态卡：当前 profile、快照份数、最后良好快照时间
+ *   - 快照：立即快照 / 列表（时间 · 原因 · 插件行数）/ 一键回滚
+ *   - 健康检查：静态体检（模块遮蔽 / patch 行 / junction 归属 / 高危扫描）
+ *     + 一键修复（只动插件与配置层，绝不碰内核与用户数据）
+ *   - 事故报告：守护启动自动回滚/修复的记录，可查看与标记解决
+ *
+ * All actions ride the window.dshDesktop.guard IPC bridge (desktop shell's
+ * plugin-guard.js engine). Outside the desktop shell the section renders a
+ * short note instead of half-broken controls.
+ *
+ * Hand-written ModuleLoader bundle — no build step required.
+ */
+window.__ModuleLoader__.load({
+  id: "dsh-plugin-shield",
+  factory: (require) => {
+    var module = { exports: {} };
+    var exports = module.exports;
+    var react = require("react");
+    var h = react.createElement;
+
+    var CSS = ".__sh_root{max-width:640px;display:flex;flex-direction:column;gap:12px}" +
+      ".__sh_hint{font-size:12px;line-height:18px;color:var(--dsw-alias-label-tertiary);margin:0}" +
+      ".__sh_cards{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:8px}" +
+      ".__sh_card{border:1px solid var(--dsw-alias-border-l2);border-radius:10px;padding:8px 10px;background:var(--dsw-alias-bg-layer-3)}" +
+      ".__sh_cardk{font-size:11px;color:var(--dsw-alias-label-tertiary)}" +
+      ".__sh_cardv{font-size:14px;font-weight:600;margin-top:2px;word-break:break-all}" +
+      ".__sh_btn{border:1px solid var(--dsw-alias-border-l2);background:var(--dsw-alias-bg-layer-3);color:var(--dsw-alias-label-primary);border-radius:8px;padding:6px 14px;font:inherit;font-size:13px;cursor:pointer}" +
+      ".__sh_btn:hover:not(:disabled){border-color:var(--dsw-alias-state-business-primary)}" +
+      ".__sh_btn:disabled{opacity:.5;cursor:default}" +
+      ".__sh_btnPrimary{border-color:var(--dsw-alias-state-business-primary);background:var(--dsw-alias-state-business-primary);color:var(--dsw-alias-label-on-accent)}" +
+      ".__sh_btnDanger{border-color:var(--dsw-alias-state-error-primary);color:var(--dsw-alias-state-error-primary)}" +
+      ".__sh_actions{display:flex;gap:8px;align-items:center;flex-wrap:wrap}" +
+      ".__sh_list{display:flex;flex-direction:column;gap:6px;max-height:320px;overflow:auto}" +
+      ".__sh_row{border:1px solid var(--dsw-alias-border-l2);border-radius:10px;padding:8px 10px;background:var(--dsw-alias-bg-layer-3);display:flex;gap:10px;align-items:center}" +
+      ".__sh_rowmain{flex:1;min-width:0}" +
+      ".__sh_rowtitle{font-size:13px;font-weight:600}" +
+      ".__sh_rowsub{font-size:11px;color:var(--dsw-alias-label-tertiary);margin-top:1px;word-break:break-all}" +
+      ".__sh_ok{font-size:12px;color:var(--dsw-alias-state-success-primary)}" +
+      ".__sh_err{font-size:12px;color:var(--dsw-alias-state-error-primary)}" +
+      ".__sh_warn{font-size:12px;color:#e6a23c}" +
+      ".__sh_finding{border:1px solid var(--dsw-alias-border-l2);border-radius:10px;padding:8px 10px;background:var(--dsw-alias-bg-layer-3);font-size:12px;line-height:18px}" +
+      ".__sh_fcode{font-family:var(--dsw-alias-font-mono,monospace);font-size:11px;color:var(--dsw-alias-label-tertiary)}" +
+      ".__sh_pre{white-space:pre-wrap;font-family:var(--dsw-alias-font-mono,monospace);font-size:11px;line-height:1.5;max-height:260px;overflow:auto;border:1px solid var(--dsw-alias-border-l2);border-radius:8px;padding:8px 10px;background:var(--dsw-alias-bg-layer-2)}" +
+      ".__sh_h3{font-size:13px;font-weight:600;margin:0}";
+    var tagId = "dsh-plugin-shield/main.css";
+    if (typeof document !== "undefined" && document.querySelector("style[data-plugin-css=" + JSON.stringify(tagId) + "]") === null) {
+      var tag = document.createElement("style");
+      tag.dataset.plugin = "dsh-plugin-shield";
+      tag.dataset.pluginCss = tagId;
+      tag.textContent = CSS;
+      document.head.appendChild(tag);
+    }
+
+    var NS = "pluginShield";
+    var zh = {
+      nav: "插件保护",
+      intro: "桌面端内置的插件安全网（融合 dsh-plugin-guard / dsh-web-plugin-manager / dsh-plugin-healthcheck 并内置）：每次安装与启动前自动快照，启动失败自动体检修复、必要时回滚到最后良好快照，全程留事故报告。此页面用于手动快照、回滚与体检。",
+      needDesktop: "插件保护中心需要 Deepseek Harness EAC 桌面端运行（此页面在浏览器/CLI 模式下只读展示）。",
+      statProfile: "受保护 profile",
+      statSnapshots: "快照份数",
+      statLastGood: "最后良好快照",
+      statIncidents: "待处理事故",
+      none: "（无）",
+      snapshotNow: "立即快照",
+      check: "运行健康检查",
+      repair: "一键修复",
+      refresh: "刷新",
+      snapshotsTitle: "快照",
+      snapshotDone: "已创建快照",
+      restore: "回滚到此快照",
+      restoreConfirm: "回滚将把 profile 的插件配置（package.json / 锁文件 / cordis.patch.yml）恢复到该快照时刻，之后重启 Web 服务生效。确定继续？",
+      restoreRunning: "服务正在运行，请先重启 Web 服务（或关掉重开客户端）再回滚。",
+      restored: "已回滚，重启 Web 服务后生效",
+      findingsTitle: "体检发现",
+      findingsClean: "一切正常：模块遮蔽 / patch 行 / junction 归属 / 高危静态扫描均无发现。",
+      fixable: "可修复",
+      manual: "需人工处理",
+      repaired: "已应用修复",
+      repairedNone: "没有可自动修复的项",
+      incidentsTitle: "事故报告",
+      incidentsEmpty: "（暂无事故报告 —— 守护启动一切正常）",
+      view: "查看",
+      resolve: "标记解决",
+      close: "关闭",
+      busy: "处理中…",
+      reason: "原因",
+      pluginRows: "插件行",
+      files: "文件"
+    };
+    var en = {
+      nav: "Plugin Guard",
+      intro: "Built-in plugin safety net (fuses dsh-plugin-guard / dsh-web-plugin-manager / dsh-plugin-healthcheck): snapshots before every install and boot, auto-repairs and rolls back failed boots, and files incident reports. Use this page for manual snapshots, rollback and health checks.",
+      needDesktop: "The guard center needs the Deepseek Harness EAC desktop shell (read-only outside it).",
+      statProfile: "protected profile",
+      statSnapshots: "snapshots",
+      statLastGood: "last good boot",
+      statIncidents: "open incidents",
+      none: "(none)",
+      snapshotNow: "Snapshot now",
+      check: "Run health check",
+      repair: "Repair",
+      refresh: "Refresh",
+      snapshotsTitle: "Snapshots",
+      snapshotDone: "Snapshot created",
+      restore: "Roll back here",
+      restoreConfirm: "Rollback restores the profile's plugin configuration (package.json / lockfile / cordis.patch.yml) to this snapshot, then restart the web service. Continue?",
+      restoreRunning: "The web service is running — restart it (or reopen the app) before rolling back.",
+      restored: "Rolled back — restart the web service to apply",
+      findingsTitle: "Findings",
+      findingsClean: "All clear: module shadowing / patch rows / junction ownership / static threat scan found nothing.",
+      fixable: "fixable",
+      manual: "manual",
+      repaired: "Repairs applied",
+      repairedNone: "Nothing auto-repairable",
+      incidentsTitle: "Incidents",
+      incidentsEmpty: "(no incidents — guarded boots are all healthy)",
+      view: "View",
+      resolve: "Resolve",
+      close: "Close",
+      busy: "Working…",
+      reason: "reason",
+      pluginRows: "plugin rows",
+      files: "files"
+    };
+
+    var inject = ["slots", "locale"];
+
+    function fmtTime(iso) {
+      try {
+        var d = new Date(iso);
+        return d.toLocaleString(undefined, { hour12: false });
+      } catch (e) {
+        return String(iso || "");
+      }
+    }
+
+    function ShieldSection(props) {
+      var t = props.t;
+      var bridge = (typeof window !== "undefined" && window.dshDesktop && window.dshDesktop.guard) || null;
+
+      var state = react.useState({ status: "loading" });
+      var data = state[0];
+      var setData = state[1];
+      var busyState = react.useState(null);
+      var busy = busyState[0];
+      var setBusy = busyState[1];
+      var reportState = react.useState(null);
+      var report = reportState[0];
+      var setReport = reportState[1];
+      var incidentState = react.useState(null);
+      var incident = incidentState[0];
+      var setIncident = incidentState[1];
+
+      var call = function (action, value) {
+        if (!bridge) return Promise.resolve({ ok: false, error: "no-bridge" });
+        return bridge.action(action, value);
+      };
+
+      var load = react.useCallback(function () {
+        if (!bridge) { setData({ status: "no-bridge" }); return; }
+        setData({ status: "loading" });
+        call("status").then(function (r) {
+          if (r && r.ok) setData({ status: "ready", profile: r.profile, snapshots: r.snapshots || [], incidents: r.incidents || [], lastGood: r.lastGood || null });
+          else setData({ status: "error", error: (r && r.error) || "failed" });
+        }).catch(function (e) { setData({ status: "error", error: String(e) }); });
+      }, [bridge]);
+      react.useEffect(load, [load]);
+
+      if (data.status === "loading") return h("div", { className: "__sh_root" }, h("p", { className: "__sh_hint" }, "…"));
+      if (data.status === "no-bridge") {
+        return h("div", { className: "__sh_root" },
+          h("p", { className: "__sh_hint" }, t("needDesktop")));
+      }
+      if (data.status === "error") {
+        return h("div", { className: "__sh_root" }, h("p", { className: "__sh_err" }, String(data.error)));
+      }
+
+      var doSnapshot = function () {
+        setBusy("snapshot");
+        call("snapshot", "manual").then(function () { setBusy(null); load(); }).catch(function () { setBusy(null); });
+      };
+      var doCheck = function () {
+        setBusy("check");
+        setReport(null);
+        call("check").then(function (r) {
+          setBusy(null);
+          if (r && r.ok) setReport(r.report || { findings: [] });
+        }).catch(function () { setBusy(null); });
+      };
+      var doRepair = function () {
+        setBusy("repair");
+        call("repair").then(function (r) {
+          setBusy(null);
+          setReport({ repaired: (r && r.applied) || [], at: new Date().toISOString() });
+        }).catch(function () { setBusy(null); });
+      };
+      var doRestore = function (id) {
+        if (!window.confirm(t("restoreConfirm"))) return;
+        setBusy("restore:" + id);
+        call("restore", id).then(function (r) {
+          setBusy(null);
+          if (r && r.ok) window.alert(t("restored"));
+          else if (r && r.error === "service-running") window.alert(t("restoreRunning"));
+          else window.alert(String((r && r.error) || "failed"));
+        }).catch(function () { setBusy(null); });
+      };
+      var openIncident = function (id) {
+        setBusy("incident:" + id);
+        call("incident", id).then(function (r) {
+          setBusy(null);
+          if (r && r.ok) setIncident({ id: id, content: r.content });
+        }).catch(function () { setBusy(null); });
+      };
+      var resolveIncident = function (id) {
+        setBusy("resolve:" + id);
+        call("resolve-incident", id).then(function () { setBusy(null); setIncident(null); load(); }).catch(function () { setBusy(null); });
+      };
+
+      var findings = report && report.findings ? report.findings : null;
+      var repairedList = report && report.repaired ? report.repaired : null;
+
+      return h("div", { className: "__sh_root" },
+        h("p", { className: "__sh_hint", style: { margin: 0 } }, t("intro")),
+        h("div", { className: "__sh_cards" },
+          h("div", { className: "__sh_card" }, h("div", { className: "__sh_cardk" }, t("statProfile")), h("div", { className: "__sh_cardv" }, data.profile || "—")),
+          h("div", { className: "__sh_card" }, h("div", { className: "__sh_cardk" }, t("statSnapshots")), h("div", { className: "__sh_cardv" }, String(data.snapshots.length))),
+          h("div", { className: "__sh_card" }, h("div", { className: "__sh_cardk" }, t("statLastGood")), h("div", { className: "__sh_cardv" }, data.lastGood ? fmtTime(data.lastGood.at) : t("none"))),
+          h("div", { className: "__sh_card" }, h("div", { className: "__sh_cardk" }, t("statIncidents")), h("div", { className: "__sh_cardv" }, String(data.incidents.length)))
+        ),
+        h("div", { className: "__sh_actions" },
+          h("button", { className: "__sh_btn __sh_btnPrimary", disabled: !!busy, onClick: doSnapshot }, busy === "snapshot" ? t("busy") : t("snapshotNow")),
+          h("button", { className: "__sh_btn", disabled: !!busy, onClick: doCheck }, busy === "check" ? t("busy") : t("check")),
+          h("button", { className: "__sh_btn", disabled: !!busy, onClick: doRepair }, busy === "repair" ? t("busy") : t("repair")),
+          h("button", { className: "__sh_btn", disabled: !!busy, onClick: load }, t("refresh"))
+        ),
+
+        findings ? h("div", null,
+          h("h3", { className: "__sh_h3" }, t("findingsTitle")),
+          findings.length === 0 ? h("p", { className: "__sh_ok" }, t("findingsClean")) :
+            findings.map(function (f, i) {
+              return h("div", { className: "__sh_finding", key: String(i) },
+                h("span", { className: f.severity === "high" ? "__sh_err" : "__sh_warn" },
+                  "[" + f.severity + "] " + (f.fixable ? t("fixable") : t("manual")) + " · "),
+                h("span", { className: "__sh_fcode" }, f.code),
+                h("div", null, f.message)
+              );
+            })
+        ) : null,
+        repairedList ? h("div", null,
+          repairedList.length ? h("p", { className: "__sh_ok" }, t("repaired") + "：") : h("p", { className: "__sh_ok" }, t("repairedNone")),
+          repairedList.length ? h("ul", { className: "__sh_hint" }, repairedList.map(function (a, i) { return h("li", { key: String(i) }, a); })) : null
+        ) : null,
+
+        h("div", null,
+          h("h3", { className: "__sh_h3" }, t("snapshotsTitle")),
+          data.snapshots.length === 0 ? h("p", { className: "__sh_hint" }, t("none")) :
+            h("div", { className: "__sh_list" }, data.snapshots.map(function (s) {
+              return h("div", { className: "__sh_row", key: s.id },
+                h("div", { className: "__sh_rowmain" },
+                  h("div", { className: "__sh_rowtitle" }, fmtTime(s.at)),
+                  h("div", { className: "__sh_rowsub" }, t("reason") + "：" + (s.reason || "manual") + " · " + t("pluginRows") + " " + String((s.pluginRows || []).length) + " · " + t("files") + " " + String((s.files || []).length))
+                ),
+                h("button", {
+                  className: "__sh_btn __sh_btnDanger",
+                  disabled: !!busy,
+                  onClick: function () { doRestore(s.id); }
+                }, busy === "restore:" + s.id ? t("busy") : t("restore"))
+              );
+            }))
+        ),
+
+        h("div", null,
+          h("h3", { className: "__sh_h3" }, t("incidentsTitle")),
+          data.incidents.length === 0 ? h("p", { className: "__sh_hint" }, t("incidentsEmpty")) :
+            h("div", { className: "__sh_list" }, data.incidents.map(function (it) {
+              return h("div", { className: "__sh_row", key: it.id },
+                h("div", { className: "__sh_rowmain" },
+                  h("div", { className: "__sh_rowtitle" }, it.title),
+                  incident && incident.id === it.id
+                    ? h("div", { style: { marginTop: 6 } },
+                        h("pre", { className: "__sh_pre" }, incident.content),
+                        h("div", { className: "__sh_actions", style: { marginTop: 6 } },
+                          h("button", { className: "__sh_btn", onClick: function () { setIncident(null); } }, t("close")),
+                          h("button", { className: "__sh_btn", disabled: !!busy, onClick: function () { resolveIncident(it.id); } }, busy === "resolve:" + it.id ? t("busy") : t("resolve"))
+                        )
+                      )
+                    : null
+                ),
+                incident && incident.id === it.id ? null : h("button", {
+                  className: "__sh_btn",
+                  disabled: !!busy,
+                  onClick: function () { openIncident(it.id); }
+                }, busy === "incident:" + it.id ? t("busy") : t("view"))
+              );
+            }))
+        )
+      );
+    }
+
+    function apply(ctx) {
+      var t = ctx.locale.bind(NS);
+      ctx.effect(function () { return ctx.locale.register(NS, { zh: zh, en: en }); }, "dsh-plugin-shield: dictionaries");
+      ctx.slots.inject("settings.section", function () {
+        return ctx.slots.register({
+          name: "settings.section",
+          id: "plugin-shield",
+          order: 23,
+          label: function () { return t("nav"); },
+          locale: NS
+        }, function (props) {
+          return h(ShieldSection, props);
+        });
+      });
+    }
+
+    exports.apply = apply;
+    exports.inject = inject;
+    return module.exports;
+  }
+});

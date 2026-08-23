@@ -1,0 +1,39 @@
+{
+  "name": "dsh-settings-scroll-fix",
+  "version": "2.0.0",
+  "private": true,
+  "description": "DSH settings scrolling repair without version-specific CSS-module hashes.",
+  "type": "module",
+  "main": "./lib/index.js",
+  "exports": {
+    ".": "./lib/index.js",
+    "./client": "./lib/client.js",
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "lib",
+    "src",
+    "scripts",
+    "tests",
+    "cordis.patch.yml",
+    "README.md",
+    "AUDIT.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "build": "node scripts/build.mjs",
+    "test": "node tests/smoke.mjs",
+    "check": "node --check src/index.js && node --check src/client.js"
+  },
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    },
+    "client": {
+      "inject": ["@deepseek-ai/dsh-client-runtime"],
+      "platform": "web",
+      "immediately": true
+    }
+  },
+  "license": "MIT"
+}

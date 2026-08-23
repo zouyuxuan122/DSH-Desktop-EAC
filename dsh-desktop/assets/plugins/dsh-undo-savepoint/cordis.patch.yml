@@ -1,0 +1,6 @@
+# dsh-undo bundle patch layer: installable via `dsh plugin add` (or
+# `dsh plugin add github:lire1131/dsh-undo-plugin#main`).
+# This declares the plugin's own loader entry, inserted into the profile tree.
+- insert:
+    - id: dsh-undo
+      name: 'dsh-undo-savepoint'

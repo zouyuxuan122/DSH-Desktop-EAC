@@ -1,0 +1,24 @@
+{
+  "$schema": "https://raw.githubusercontent.com/microsoft/TypeScript/main/src/compiler/configSchema.json",
+  // Wave 0 构建策略（HANDOVER-TS-MIGRATION.md §4）：tsc 直出、产物就地。
+  // 源码 = 同目录 .ts（唯一事实源），编译产物 = 同名 .js（gitignore，勿手改）。
+  // 这样 require 路径 / electron-builder.yml 精确清单 / 测试 import 全部零改动，
+  // 只有契约测试在文件转换时把读取路径从 .js 切到 .ts。
+  "compilerOptions": {
+    "target": "ES2023",
+    "lib": ["ES2023"],
+    "module": "commonjs",
+    "types": ["node"],
+    "strict": true,
+    "esModuleInterop": true,
+    "skipLibCheck": true,
+    "forceConsistentCasingInFileNames": true,
+    "noEmitOnError": true,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
+    "noFallthroughCasesInSwitch": true
+  },
+  // 只纳入已转换的 .ts；allowJs 保持关闭——未转换的 .js 是手写事实源，
+  // 绝不允许被编译器触碰或覆盖（TS5055 保护 + 打包清单防呆）。
+  "include": ["lib/desktop/**/*.ts", "../tauri-shell/sidecar/**/*.ts", "*.ts"]
+}

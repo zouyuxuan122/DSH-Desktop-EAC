@@ -1,0 +1,39 @@
+# The `minimal-win` agent preset: the official `minimal` preset adapted for
+# Windows. It keeps the same fixed persona and the same bare local filesystem +
+# editor tool set, but replaces the bash/PTY shell rows with the stateless
+# PowerShell tool (`@deepseek-ai/dsh-tool-pwsh`) shipped in this deployment.
+#
+# Unlike upstream `minimal`, the pwsh tool starts a fresh `pwsh -Command` for
+# every call: state does NOT persist between calls. Models should pass
+# `workdir` instead of `cd`, use Windows paths (C:\...) and `$env:` variables.
+
+- id: persona
+  name: '@deepseek-ai/dsh-persona'
+  config:
+    text: You are a helpful software engineer assistant.
+    complete: true
+    includeRuntimeContext: false
+
+# The pwsh tool consumes the host shell executor (`dsh-pwsh-local` on Windows)
+# and registers only a model-facing tool, so it stays loose like the standard
+# preset's tool-pwsh row.
+- id: tool-pwsh
+  name: '@deepseek-ai/dsh-tool-pwsh'
+
+# The bare local filesystem shadows the host's sandboxed provider only for this
+# preset. The editor shares that realm and requires absolute paths.
+- id: filesystem
+  name: cordis:group
+  group: true
+  isolate:
+    fs: true
+  config:
+    - id: fs-local
+      name: '@deepseek-ai/dsh-fs-local'
+      config:
+        cwd: !!js process.env.DSH_CWD ?? process.cwd()
+
+    - id: str-replace-editor
+      name: '@deepseek-ai/dsh-tool-str-replace-editor'
+      config:
+        maxOutputChars: 16000

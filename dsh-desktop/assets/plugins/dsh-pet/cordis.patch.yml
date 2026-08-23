@@ -1,0 +1,29 @@
+# ============================================================================
+# dsh-pet 的 bundle patch —— 把宠物插件挂进 DSH 配置树
+# ============================================================================
+#
+# 【这是什么】
+#   这是 dsh-pet 的"挂载声明"。DSH 启动时按 bundle 层栈把各个插件的
+#   patch 叠起来组成配置树。本文件就是 dsh-pet 这一层的内容。
+#
+# 【工作原理】
+#   - insert：往配置树里添加新的插件行（entry）
+#   - 每个 entry 有 id（行标识，patch 覆盖时按它定位）和 name（插件模块）
+#   - name: 'dsh-pet' 会解析包入口 lib/index.js（宿主半侧）
+#   - 因为 package.json 声明了 dsh.client，DSH 的模块系统同时会把
+#     这个包扫描为"浏览器插件"，提供 /plugins/dsh-pet/client.js 给页面
+#
+# 【config 说明】
+#   这里写的 config 会传给 host 半侧的 apply(ctx, config)。
+#   注意：浏览器半侧（client）目前收不到这些配置（DSH 客户端配置管线
+#   限制，client 收到的是空对象），所以这些值目前只影响 host 半侧。
+#   宠物行为参数（size/position 等）在 client 里走代码默认值。
+#
+# ============================================================================
+
+- insert:
+    - id: pet                     # 插件行 id（唯一）
+      name: 'dsh-pet'             # 模块名：解析到 lib/index.js
+      config:
+        size: 260                 # 宠物显示高度（px）—— 目前未传到 client
+        position: bottom-right    # 默认角落位置 —— 目前未传到 client

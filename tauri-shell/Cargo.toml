@@ -1,0 +1,25 @@
+[package]
+name = "dsh-eac-tauri-shell"
+version = "0.1.0"
+description = "Deepseek Harness EAC — Tauri ShellHost PoC (ADR 0002 L1)"
+edition = "2021"
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = ["tray-icon", "devtools"] }
+tauri-plugin-single-instance = "2"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+tokio = { version = "1", features = ["rt", "net", "macros", "io-util", "process", "sync", "time"] }
+tokio-tungstenite = "0.24"
+futures-util = "0.3"
+http = "1"
+
+[[bin]]
+name = "dsh-eac-shell"
+path = "src/main.rs"
+
+[profile.dev]
+incremental = true

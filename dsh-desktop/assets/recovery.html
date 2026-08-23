@@ -1,0 +1,556 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8" />
+<title>DSH Desktop 救援模式</title>
+<style>
+  :root { color-scheme: dark; }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body { height: 100%; }
+  body {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 28px 16px 48px;
+    gap: 14px;
+    background: radial-gradient(1200px 600px at 50% -10%, #2a1b4d 0%, #0b1220 55%);
+    color: #e6ecff;
+    font-family: "Segoe UI", "Microsoft YaHei", system-ui, sans-serif;
+    user-select: none;
+  }
+  .card {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 14px;
+    max-width: 520px;
+    padding: 30px 36px;
+    border: 1px solid rgba(255, 255, 255, 0.09);
+    border-radius: 16px;
+    background: rgba(255, 255, 255, 0.03);
+  }
+  .mark { width: 56px; height: 56px; border-radius: 50%; display: grid; place-items: center; background: rgba(255, 122, 133, 0.14); color: #ff7a85; font-size: 30px; line-height: 1; }
+  h1 { font-size: 20px; font-weight: 600; letter-spacing: 0.5px; }
+  h2 { font-size: 15px; font-weight: 600; margin-bottom: 10px; }
+  .desc { font-size: 13px; color: #a9b8de; line-height: 22px; text-align: center; }
+  .note { font-size: 12px; color: #6f82b8; line-height: 20px; text-align: center; }
+  .details { font-size: 11.5px; color: #5f6f9c; line-height: 18px; text-align: center; font-family: Consolas, "Courier New", monospace; white-space: pre-wrap; }
+  .actions { display: flex; gap: 10px; margin-top: 4px; flex-wrap: wrap; justify-content: center; }
+  button {
+    appearance: none; border: 1px solid rgba(255, 255, 255, 0.16);
+    background: rgba(255, 255, 255, 0.06); color: #e6ecff;
+    font: inherit; font-size: 13px; line-height: 20px;
+    padding: 8px 18px; border-radius: 9px; cursor: pointer;
+    transition: background 0.12s, border-color 0.12s;
+  }
+  button:hover { background: rgba(255, 255, 255, 0.12); border-color: rgba(255, 255, 255, 0.3); }
+  button:disabled { opacity: 0.45; cursor: not-allowed; }
+  button.primary { background: #3d5ce6; border-color: #4d6bf0; }
+  button.primary:hover { background: #4d6bf0; }
+  button.danger { color: #ffb3ba; }
+  button.danger:hover { background: rgba(232, 17, 35, 0.25); border-color: rgba(255, 122, 133, 0.5); }
+  button.small { font-size: 12px; padding: 4px 10px; border-radius: 7px; }
+  .status { font-size: 12px; color: #8b9ac4; min-height: 16px; }
+  .panel {
+    width: 100%; max-width: 760px;
+    border: 1px solid rgba(255, 255, 255, 0.09); border-radius: 16px;
+    background: rgba(255, 255, 255, 0.03); padding: 18px 20px;
+  }
+  .panel + .panel { margin-top: 2px; }
+  .row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; font-size: 12.5px; line-height: 18px; }
+  .row + .row { margin-top: 8px; }
+  .tag { font-size: 10.5px; padding: 1px 8px; border-radius: 999px; border: 1px solid rgba(255,255,255,.14); color: #93a5d8; }
+  .tag.ok { color: #3ddc84; border-color: rgba(61,220,132,.35); }
+  .tag.warn { color: #ffb454; border-color: rgba(255,180,84,.35); }
+  .tag.bad { color: #ff7a85; border-color: rgba(255,122,133,.4); }
+  .muted { color: #6f82b8; }
+  .list { display: flex; flex-direction: column; gap: 6px; max-height: 220px; overflow: auto; }
+  .item {
+    display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+    font-size: 12.5px; padding: 7px 10px; border: 1px solid rgba(255,255,255,.08);
+    border-radius: 9px; background: rgba(255,255,255,.03); line-height: 18px;
+  }
+  .item .grow { flex: 1; min-width: 0; }
+  .item .mono { font-family: Consolas, "Courier New", monospace; font-size: 11.5px; color: #a9b8de; }
+  .item input[type="checkbox"] { accent-color: #3d5ce6; }
+  .risk { font-size: 10px; padding: 1px 7px; border-radius: 999px; }
+  .risk.low { color: #3ddc84; border: 1px solid rgba(61,220,132,.35); }
+  .risk.medium { color: #ffb454; border: 1px solid rgba(255,180,84,.35); }
+  .risk.high { color: #ff7a85; border: 1px solid rgba(255,122,133,.4); }
+  .analysis { font-size: 13px; line-height: 22px; white-space: pre-wrap; color: #dbe4f8; }
+  textarea {
+    width: 100%; resize: vertical; min-height: 52px;
+    background: rgba(255,255,255,.05); color: #e6ecff; border: 1px solid rgba(255,255,255,.14);
+    border-radius: 9px; padding: 8px 10px; font: inherit; font-size: 12.5px; line-height: 20px;
+  }
+  .hint { font-size: 12px; color: #8b9ac4; line-height: 20px; }
+  .hr { height: 1px; background: rgba(255,255,255,.08); margin: 14px 0; }
+  .err { color: #ff7a85; font-size: 12.5px; line-height: 20px; }
+  .result { color: #3ddc84; font-size: 12.5px; line-height: 20px; }
+  .busy { opacity: 0.6; pointer-events: none; }
+</style>
+</head>
+<body>
+  <div class="card">
+    <div class="mark">⚠</div>
+    <h1>界面遇到问题 — 救援模式</h1>
+    <p class="desc">界面渲染进程多次异常退出，已暂停自动恢复。<br>救援模式中你可以查看日志与快照、手动修复、或让 AI 诊断后按建议修复。</p>
+    <p class="details" id="details"></p>
+    <div class="actions">
+      <button class="primary" id="reload" type="button">重新加载界面</button>
+      <button id="openLogs" type="button">打开日志目录</button>
+      <button class="danger" id="restart" type="button">重启客户端</button>
+    </div>
+    <p class="status" id="status"></p>
+  </div>
+
+  <div class="panel">
+    <h2>运行状态</h2>
+    <div class="row"><span class="tag" id="st-server">检查中…</span><span class="tag" id="st-safe">—</span><span class="tag" id="st-crash">—</span></div>
+    <div class="row muted" id="st-extra"></div>
+    <div class="actions" style="margin-top:12px">
+      <button id="btn-retry" type="button">重新启动 Web 服务</button>
+      <button id="btn-safemode" type="button">—</button>
+      <button id="btn-export" type="button">导出诊断日志 zip</button>
+    </div>
+    <p class="hint">重启服务会走「守护启动」全链路：体检 → 自动修复 → 回滚最后良好快照 → 事故报告。安全模式只保留核心插件，保证一定能启动。</p>
+  </div>
+
+  <div class="panel">
+    <h2>启动失败归因</h2>
+    <div id="attribution" class="hint">加载中…</div>
+  </div>
+
+  <div class="panel">
+    <h2>快照回滚</h2>
+    <div class="list" id="snapshots"></div>
+    <p class="hint" id="snap-hint"></p>
+  </div>
+
+  <div class="panel">
+    <h2>事故报告</h2>
+    <div class="list" id="incidents"></div>
+    <pre class="details" id="incident-body" style="text-align:left;margin-top:8px"></pre>
+  </div>
+
+  <div class="panel">
+    <h2>AI 诊断与修复</h2>
+    <div class="row"><span class="tag" id="ai-tag">—</span><span class="muted" id="ai-note"></span></div>
+    <div class="hr"></div>
+    <div class="row" style="margin:10px 0 4px 0">
+      <button class="primary" id="btn-autorepair" type="button">AI 自动修复</button>
+      <span class="muted">一键全自动：诊断 → 自动执行低/中风险修复 → 自动重启；高风险动作自动跳过，多轮失败自动回滚并进入安全模式。诊断内容按上方清单全量发送。</span>
+    </div>
+    <pre class="details" id="auto-progress" style="text-align:left;margin-top:8px;white-space:pre-wrap"></pre>
+    <div class="hr"></div>
+    <div id="ai-confirm" hidden>
+      <p class="hint">发送给 AI 前请确认内容清单（取消勾选 = 不发送，版本环境始终保留）：</p>
+      <div class="list" id="manifest" style="max-height:180px;margin:10px 0"></div>
+      <p class="hint">可补充信息（可选）：</p>
+      <textarea id="ai-note-input" placeholder="例如：我昨天刚装了 XX 插件、改过 settings.yaml…"></textarea>
+      <div class="actions" style="margin-top:10px">
+        <button class="primary" id="btn-diagnose" type="button">发送给 AI 诊断</button>
+        <button id="btn-cancel-diag" type="button">取消</button>
+      </div>
+    </div>
+    <div id="ai-result" hidden>
+      <p class="analysis" id="ai-analysis"></p>
+      <div class="hr"></div>
+      <p class="hint">AI 建议（勾选后点击批准执行；每项都会校验白名单动作并即时反馈）：</p>
+      <div class="list" id="suggestions" style="margin:10px 0"></div>
+      <div class="actions" style="margin-top:10px">
+        <button class="primary" id="btn-apply" type="button">批准执行选中项</button>
+        <button id="btn-ai-back" type="button">返回</button>
+      </div>
+      <div id="apply-results" class="result"></div>
+    </div>
+    <div id="ai-idle" class="hint">点击上方「准备 AI 诊断」开始。</div>
+    <button class="primary" id="btn-prepare" type="button" style="margin-top:10px">准备 AI 诊断</button>
+  </div>
+
+  <p class="status" id="status2"></p>
+
+  <script>
+    (function () {
+      var $ = function (id) { return document.getElementById(id); };
+      var setStatus = function (text) { $('status').textContent = text || ''; $('status2').textContent = text || ''; };
+      var esc = function (s) {
+        return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) {
+          return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
+        });
+      };
+      var bridge = window.dshDesktop;
+      var state = null;
+      var manifest = null;
+      var suggestions = [];
+      var busy = false;
+
+      function withBusy(btn, on) {
+        if (btn) btn.disabled = on;
+        document.body.classList.toggle('busy', busy && on === true);
+      }
+
+      function setAiBusy(on) {
+        busy = on;
+        ['btn-prepare', 'btn-diagnose', 'btn-apply', 'btn-retry', 'btn-safemode', 'btn-export', 'btn-autorepair', 'reload', 'restart'].forEach(function (id) {
+          var b = $(id); if (b) b.disabled = on;
+        });
+      }
+
+      function showError(text) { setStatus('错误：' + text); }
+
+      function renderState() {
+        var s = state;
+        if (!s) return;
+        var st = s.state;
+        var lines = [];
+        if (s.appVersion) lines.push('DSH Desktop v' + esc(s.appVersion));
+        if (st && st.lastFailure) {
+          var f = st.lastFailure;
+          lines.push('最近异常: ' + esc(f.reason) + (f.exitCode != null ? ' (exitCode=' + esc(f.exitCode) + ')' : ''));
+          lines.push('发生时间: ' + esc(String(f.at || '').replace('T', ' ').slice(0, 19)));
+          lines.push('尝试次数: ' + esc(st.failures));
+        }
+        if (s.logsDir) lines.push('日志目录: ' + esc(s.logsDir));
+        if (s.crashDumpsDir) lines.push('崩溃转储: ' + esc(s.crashDumpsDir));
+        $('details').textContent = lines.join('\n');
+
+        var sv = $('st-server');
+        if (s.serverAlive) { sv.textContent = 'Web 服务运行中'; sv.className = 'tag ok'; }
+        else { sv.textContent = 'Web 服务已停止'; sv.className = 'tag bad'; }
+        var sm = $('st-safe');
+        if (s.safeMode) { sm.textContent = '安全模式已开启'; sm.className = 'tag warn'; }
+        else { sm.textContent = '正常模式'; sm.className = 'tag ok'; }
+        var sc = $('st-crash');
+        if (s.crash && s.crash.bootFailures >= 1) {
+          sc.textContent = '本窗口内启动失败 ' + esc(s.crash.bootFailures) + '/' + esc(s.threshold) + ' 次';
+          sc.className = s.crash.bootFailures >= s.threshold ? 'tag bad' : 'tag warn';
+        } else { sc.textContent = '启动无连续失败'; sc.className = 'tag ok'; }
+        var ex = [];
+        ex.push('agent v' + esc(s.dshVersion) + '（' + esc(s.agentSource) + '）');
+        ex.push('profile: ' + esc(s.profile));
+        if (s.aiReady) ex.push('AI 诊断可用');
+        else ex.push('AI 诊断不可用（未配置 DEEPSEEK_API_KEY）');
+        if (s.crash && s.crash.lastErrText) ex.push('上次错误: ' + esc(s.crash.lastErrText).slice(0, 160));
+        $('st-extra').textContent = ex.join('  ·  ');
+        $('st-extra').textContent = ex.join('\n');
+
+        var btn = $('btn-safemode');
+        if (s.safeMode) { btn.textContent = '退出安全模式并恢复'; btn.className = 'danger'; }
+        else { btn.textContent = '开启安全模式（只留核心插件）'; btn.className = ''; }
+        var ar = $('btn-autorepair');
+        if (ar) ar.disabled = !s.aiReady;
+      }
+
+      function renderAttribution() {
+        var el = $('attribution');
+        var a = state && state.attribution;
+        if (!a) { el.textContent = '未能从报错文案归因出具体插件（仍可在快照/安全模式中修复）。'; return; }
+        el.innerHTML = '报错指向插件「' + esc(a.name) + '」（' + esc(a.kind === 'patchRow' ? 'patch 行 ' + a.rowId : a.kind) + '）。' +
+          '<div class="actions" style="margin-top:8px"><button class="small danger" id="btn-disable-blame">停用该插件并重启服务</button></div>';
+        var b = $('btn-disable-blame');
+        if (b) b.addEventListener('click', function () {
+          setAiBusy(true);
+          bridge.rescue.apply({ action: 'disable', params: { pluginId: a.rowId || a.name }, reason: '启动失败归因（人工确认）', risk: 'medium' }).then(function (r) {
+            setAiBusy(false);
+            if (r && r.ok) { setStatus('已停用插件，正在重启服务…'); return bridge.rescue.retry(); }
+            throw new Error((r && r.error) || '停用失败');
+          }).then(function (r) {
+            if (r && r.ok) { setStatus('服务已启动：' + (r.url || r.result)); loadState(); }
+            else throw new Error((r && r.error) || '重启失败');
+          }).catch(function (e) { setAiBusy(false); showError(String(e && e.message || e)); });
+        });
+      }
+
+      function renderSnapshots() {
+        var list = $('snapshots');
+        list.innerHTML = '';
+        var snaps = (state && state.snapshots) || [];
+        if (!snaps.length) { $('snap-hint').textContent = '暂无快照（安装插件/更新/启动时会自动创建）。'; return; }
+        $('snap-hint').textContent = '回滚发生在服务未运行的重启间隙；若服务在运行会提示先重启。';
+        snaps.forEach(function (s) {
+          var div = document.createElement('div');
+          div.className = 'item';
+          var isLastGood = state.lastGood && state.lastGood.id === s.id;
+          div.innerHTML = '<span class="mono grow">' + esc(s.id) + '</span>' +
+            '<span class="muted">' + esc(s.reason || '') + '</span>' +
+            (isLastGood ? '<span class="tag ok">最后良好</span>' : '') +
+            '<button class="small danger" data-snap="' + esc(s.id) + '">回滚到此快照</button>';
+          div.querySelector('[data-snap]').addEventListener('click', function () {
+            setAiBusy(true);
+            bridge.rescue.apply({ action: 'restore', params: { snapshotId: s.id }, reason: '用户手动选择回滚', risk: 'medium' }).then(function (r) {
+              setAiBusy(false);
+              if (r && r.ok) { setStatus('已回滚到 ' + s.id + '，请重启服务生效'); loadState(); }
+              else throw new Error((r && r.error) || '回滚失败');
+            }).catch(function (e) { setAiBusy(false); showError(String(e && e.message || e)); });
+          });
+          list.appendChild(div);
+        });
+      }
+
+      function renderIncidents() {
+        var list = $('incidents');
+        list.innerHTML = '';
+        var incs = (state && state.incidents) || [];
+        if (!incs.length) { list.innerHTML = '<span class="hint">暂无事故报告。</span>'; return; }
+        incs.forEach(function (inc) {
+          var div = document.createElement('div');
+          div.className = 'item';
+          div.innerHTML = '<span class="mono grow">' + esc(inc.title) + '</span>' +
+            '<button class="small" data-inc="' + esc(inc.id) + '">查看</button>';
+          div.querySelector('[data-inc]').addEventListener('click', function () {
+            bridge.guard.action('incident', inc.id).then(function (r) {
+              $('incident-body').textContent = (r && r.ok && r.content) ? r.content : '无法读取报告';
+            }).catch(function () { $('incident-body').textContent = '无法读取报告'; });
+          });
+          list.appendChild(div);
+        });
+      }
+
+      function renderManifest() {
+        var box = $('manifest');
+        box.innerHTML = '';
+        if (!manifest || !manifest.sendManifest || !manifest.sendManifest.length) {
+          box.innerHTML = '<span class="hint">没有可发送的内容。</span>';
+          return;
+        }
+        manifest.sendManifest.forEach(function (m) {
+          var label = document.createElement('label');
+          label.className = 'item';
+          var checked = true;
+          label.innerHTML = '<input type="checkbox" data-mname="' + esc(m.name) + '" checked />' +
+            '<span class="tag">' + esc(m.kind) + '</span><span class="grow">' + esc(m.name) + '</span>' +
+            '<span class="muted">' + (m.size > 1024 ? Math.round(m.size / 1024) + ' KB' : m.size + ' B') + '</span>';
+          box.appendChild(label);
+        });
+      }
+
+      function selectedManifestNames() {
+        var out = [];
+        document.querySelectorAll('#manifest input[type="checkbox"]').forEach(function (c) {
+          if (c.checked) out.push(c.dataset.mname);
+        });
+        return out;
+      }
+
+      function renderSuggestions(result) {
+        suggestions = (result && result.suggestions) || [];
+        var list = $('suggestions');
+        list.innerHTML = '';
+        if (!suggestions.length) {
+          list.innerHTML = '<span class="hint">AI 未给出可执行建议' + ((result && result.invalid && result.invalid.length) ? '（' + esc(result.invalid[0]) + '）' : '') + '。</span>';
+        }
+        suggestions.forEach(function (s, idx) {
+          var div = document.createElement('div');
+          div.className = 'item';
+          var paramText = JSON.stringify(s.params || {});
+          div.innerHTML = '<input type="checkbox" data-sidx="' + idx + '" checked />' +
+            '<span class="tag warn">' + esc(s.action) + '</span>' +
+            '<span class="mono">' + esc(paramText) + '</span>' +
+            '<span class="risk ' + esc(s.risk) + '">' + esc(s.risk) + '</span>' +
+            '<div class="grow" style="width:100%;color:#a9b8de">' + esc(s.reason || '') + '</div>';
+          list.appendChild(div);
+        });
+      }
+
+      function selectedSuggestions() {
+        var out = [];
+        document.querySelectorAll('#suggestions input[type="checkbox"]').forEach(function (c) {
+          if (c.checked) out.push(suggestions[Number(c.dataset.sidx)]);
+        });
+        return out;
+      }
+
+      function loadState() {
+        Promise.all([bridge.recovery.getState(), bridge.rescue.getState()]).then(function (rs) {
+          state = Object.assign({}, rs[0] || {}, rs[1] || {});
+          renderState();
+          renderAttribution();
+          renderSnapshots();
+          renderIncidents();
+        }).catch(function (e) {
+          showError('无法读取状态：' + String(e && e.message || e));
+        });
+      }
+
+      function prepareDiagnosis() {
+        setAiBusy(true);
+        bridge.rescue.confirm().then(function (r) {
+          setAiBusy(false);
+          if (!r || !r.ok) throw new Error((r && r.error) || '收集清单失败');
+          manifest = r;
+          renderManifest();
+          $('ai-confirm').hidden = false;
+          $('ai-result').hidden = true;
+          $('ai-idle').hidden = true;
+          $('btn-prepare').hidden = true;
+        }).catch(function (e) {
+          setAiBusy(false);
+          showError(String(e && e.message || e));
+        });
+      }
+
+      function runDiagnosis() {
+        var names = selectedManifestNames();
+        var note = $('ai-note-input').value.trim();
+        setAiBusy(true);
+        setStatus('正在发送诊断…（每次发送前已由你确认内容清单）');
+        bridge.rescue.diagnose(names, note).then(function (r) {
+          setAiBusy(false);
+          if (!r || !r.ok) throw new Error((r && (r.error || r.hint)) || '诊断失败');
+          $('ai-analysis').textContent = r.analysis || '';
+          renderSuggestions(r);
+          $('ai-confirm').hidden = true;
+          $('ai-result').hidden = false;
+          $('apply-results').textContent = '';
+          setStatus('诊断完成。勾选建议后点击「批准执行选中项」。');
+        }).catch(function (e) {
+          setAiBusy(false);
+          showError(String(e && e.message || e));
+        });
+      }
+
+      function applySelected() {
+        var sel = selectedSuggestions();
+        if (!sel.length) { showError('未勾选任何建议'); return; }
+        var results = $('apply-results');
+        results.textContent = '';
+        setAiBusy(true);
+        var chain = Promise.resolve();
+        var logs = [];
+        sel.forEach(function (s) {
+          chain = chain.then(function () {
+            return bridge.rescue.apply(s).then(function (r) {
+              if (r && r.ok) {
+                logs.push('✓ ' + s.action + '：' + (r.result || '成功'));
+                return r;
+              }
+              logs.push('✗ ' + s.action + '：' + ((r && r.error) || '失败'));
+              return null;
+            });
+          }).catch(function (e) {
+            logs.push('✗ ' + s.action + '：' + String(e && e.message || e));
+            return null;
+          });
+        });
+        chain.then(function () {
+          setAiBusy(false);
+          results.textContent = logs.join('\n');
+          var any = logs.some(function (l) { return l.indexOf('✓') === 0; });
+          if (any) {
+            setStatus('修复已应用。若提示需要重启服务，请点击上方「重新启动 Web 服务」。');
+            setTimeout(loadState, 400);
+          } else {
+            setStatus('本次未应用任何修复。');
+          }
+        });
+      }
+
+      function runAutoRepair() {
+        var box = $('auto-progress');
+        box.textContent = 'AI 自动修复开始：收集诊断上下文 → AI 分析 → 自动执行低/中风险修复 → 自动重启服务（最多两轮）…';
+        setAiBusy(true);
+        setStatus('AI 自动修复进行中…');
+        bridge.rescue.autoRepair().then(function (r) {
+          setAiBusy(false);
+          if (!r) throw new Error('无响应');
+          var lines = [];
+          var rounds = (r && r.rounds) || [];
+          rounds.forEach(function (round) {
+            lines.push('— 第 ' + (round.round + 1) + ' 轮 —');
+            if (round.analysis) lines.push('分析: ' + round.analysis);
+            (round.applied || []).forEach(function (a) {
+              if (a.skipped) lines.push('  跳过（高风险）: ' + (a.action || '?'));
+              else if (a.ok) lines.push('  ✓ ' + (a.action || '?') + '：' + (a.result || '成功'));
+              else lines.push('  ✗ ' + (a.action || '?') + '：' + ((a.error && String(a.error)) || '失败'));
+            });
+            if (typeof round.retryOk === 'boolean') {
+              lines.push(round.retryOk ? '  ✓ 服务已重启成功' : '  ✗ 重启仍未成功');
+            }
+          });
+          if (!r.ok) {
+            lines.push('自动修复未成功：' + ((r.error && String(r.error)) || '未知原因'));
+            if (r.fallback && r.fallback.result) lines.push('兜底: ' + r.fallback.result);
+            lines.push('仍可手动尝试上方「重新启动 Web 服务」或「快照回滚」。');
+          }
+          box.textContent = lines.join('\n');
+          setStatus(r.ok ? 'AI 自动修复完成：服务已恢复正常。' : 'AI 自动修复未完成，请查看下方过程或手动操作。');
+          loadState();
+        }).catch(function (e) {
+          setAiBusy(false);
+          box.textContent = 'AI 自动修复失败：' + String(e && e.message || e);
+          showError(String(e && e.message || e));
+        });
+      }
+
+      function init() {
+        if (!bridge || !bridge.recovery || !bridge.rescue) {
+          setStatus('无法连接桌面客户端桥接，请重启客户端。');
+          return;
+        }
+        $('reload').addEventListener('click', function () {
+          setStatus('正在重新加载…');
+          bridge.recovery.reload().then(function (r) {
+            if (r && r.ok) setStatus('正在加载界面…');
+            else setStatus('重新加载失败：' + ((r && r.error) || '未知错误'));
+          }).catch(function (e) { setStatus('重新加载失败：' + String(e && e.message || e)); });
+        });
+        $('restart').addEventListener('click', function () {
+          setStatus('正在重启客户端…');
+          bridge.recovery.restart();
+        });
+        $('openLogs').addEventListener('click', function () {
+          bridge.menu.action('open-logs');
+        });
+        $('btn-export').addEventListener('click', function () {
+          setStatus('正在导出诊断日志…');
+          bridge.recovery.exportLogs().then(function (r) {
+            if (r && r.ok) setStatus('诊断 zip 已导出：' + (r.zipPath || ''));
+            else setStatus('导出失败：' + ((r && r.error) || '未知错误'));
+          }).catch(function (e) { setStatus('导出失败：' + String(e && e.message || e)); });
+        });
+        $('btn-retry').addEventListener('click', function () {
+          setAiBusy(true);
+          setStatus('正在重启 Web 服务（守护启动）…');
+          bridge.rescue.retry().then(function (r) {
+            setAiBusy(false);
+            if (r && r.ok) { setStatus('服务已启动：' + (r.url || r.result)); loadState(); }
+            else throw new Error((r && r.error) || '重启失败');
+          }).catch(function (e) { setAiBusy(false); showError(String(e && e.message || e)); });
+        });
+        $('btn-safemode').addEventListener('click', function () {
+          var on = !(state && state.safeMode);
+          setAiBusy(true);
+          setStatus(on ? '正在开启安全模式…' : '正在退出安全模式…');
+          bridge.rescue.setSafeMode(on).then(function (r) {
+            setAiBusy(false);
+            if (r && r.ok) { setStatus('已' + (on ? '开启' : '退出') + '安全模式，请重启服务生效'); loadState(); }
+            else throw new Error((r && (r.error || r.hint)) || '操作失败');
+          }).catch(function (e) { setAiBusy(false); showError(String(e && e.message || e)); });
+        });
+        $('btn-prepare').addEventListener('click', prepareDiagnosis);
+        $('btn-diagnose').addEventListener('click', runDiagnosis);
+        $('btn-cancel-diag').addEventListener('click', function () {
+          $('ai-confirm').hidden = true;
+          $('ai-idle').hidden = false;
+          $('btn-prepare').hidden = false;
+        });
+        $('btn-ai-back').addEventListener('click', function () {
+          $('ai-result').hidden = true;
+          $('ai-idle').hidden = false;
+          $('btn-prepare').hidden = false;
+        });
+        $('btn-apply').addEventListener('click', applySelected);
+        $('btn-autorepair').addEventListener('click', runAutoRepair);
+        loadState();
+      }
+
+      if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', init);
+      } else {
+        init();
+      }
+    })();
+  </script>
+</body>
+</html>

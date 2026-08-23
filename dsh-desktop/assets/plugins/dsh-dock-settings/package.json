@@ -1,0 +1,45 @@
+{
+  "name": "dsh-dock-settings",
+  "description": "Skills and MCP management for the dsh web GUI: browse installed skills (with source badges and directory shortcuts) and add/edit/remove @deepseek-ai/dsh-mcp-client rows in the profile patch layer",
+  "version": "0.1.0",
+  "type": "module",
+  "main": "lib/host.js",
+  "exports": {
+    ".": "./lib/host.js",
+    "./client": "./lib/client.js",
+    "./cordis.patch.yml": "./cordis.patch.yml",
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "lib/",
+    "cordis.patch.yml",
+    "README.md",
+    "LICENSE"
+  ],
+  "keywords": [
+    "dsh",
+    "agent-harness",
+    "plugin",
+    "skills",
+    "mcp",
+    "settings"
+  ],
+  "license": "MIT",
+  "engines": {
+    "node": "^22.19.0 || >=24.0.0"
+  },
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    },
+    "client": {
+      "platform": "web"
+    }
+  },
+  "peerDependencies": {
+    "react": "^18.2.0",
+    "@deepseek-ai/cordis": "*",
+    "@deepseek-ai/dsh-client-runtime": "*",
+    "@deepseek-ai/dsh-client-ui-slots": "*"
+  }
+}

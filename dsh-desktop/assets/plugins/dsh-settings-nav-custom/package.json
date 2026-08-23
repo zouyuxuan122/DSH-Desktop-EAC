@@ -1,0 +1,22 @@
+{
+  "name": "dsh-settings-nav-custom",
+  "description": "设置页左侧边栏自定义（DSH Desktop 配套插件）：设置面板底部「自定义边栏」——按需显示/隐藏与排序设置页左侧导航项（通用/模型/外观/插件/市场等 settings.section 条目），localStorage 持久化，默认全显零行为改变。纯客户端实现。",
+  "version": "0.1.0",
+  "type": "module",
+  "main": "lib/index.js",
+  "exports": {
+    ".": "./lib/index.js",
+    "./client": "./lib/client.js",
+    "./package.json": "./package.json"
+  },
+  "dsh": {
+    "client": {
+      "platform": "web",
+      "inject": [
+        "@deepseek-ai/dsh-client-runtime",
+        "@deepseek-ai/dsh-client-ui-slots"
+      ]
+    }
+  },
+  "license": "MIT"
+}

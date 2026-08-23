@@ -1,0 +1,294 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8" />
+<title>内置插件选择向导</title>
+<style>
+  :root { color-scheme: dark; }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body { height: 100%; }
+  body {
+    display: flex;
+    flex-direction: column;
+    background: radial-gradient(1100px 500px at 50% -8%, #1b2a6b 0%, #0b1220 55%);
+    color: #e6ecff;
+    font-family: "Segoe UI", "Microsoft YaHei", system-ui, sans-serif;
+    user-select: none;
+    font-size: 13px;
+  }
+  /* 自绘标题栏（无边框窗口） */
+  .bar {
+    flex: none;
+    height: 40px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 0 8px 0 12px;
+    -webkit-app-region: drag;
+    border-bottom: 1px solid rgba(255,255,255,.07);
+    background: rgba(11,18,32,.55);
+  }
+  .bar .icon { width: 20px; height: 20px; border-radius: 6px; }
+  .bar .title { font-size: 12.5px; font-weight: 600; letter-spacing: .2px; }
+  .bar .mode { font-size: 10.5px; color: #93a5d8; border: 1px solid rgba(255,255,255,.1); border-radius: 999px; padding: 1px 8px; }
+  .bar .spacer { flex: 1; }
+  .bar button {
+    -webkit-app-region: no-drag;
+    width: 30px; height: 28px; border: none; border-radius: 8px; cursor: pointer;
+    background: transparent; color: #b8c5ea; display: grid; place-items: center;
+  }
+  .bar button:hover { background: #e81123; color: #fff; }
+  .hero { flex: none; padding: 18px 24px 12px; }
+  .hero h1 { font-size: 19px; font-weight: 600; }
+  .hero p { margin-top: 6px; font-size: 12.5px; line-height: 20px; color: #93a5d8; max-width: 760px; }
+  .toolbar {
+    flex: none;
+    display: flex; align-items: center; gap: 10px;
+    padding: 0 24px 10px;
+  }
+  .toolbar .count { font-size: 12px; color: #b8c5ea; }
+  .toolbar .count b { color: #5b8cff; }
+  .toolbar .spacer { flex: 1; }
+  .toolbar .mini {
+    border: 1px solid rgba(255,255,255,.12); background: rgba(255,255,255,.03);
+    color: #b8c5ea; border-radius: 7px; padding: 3px 12px; font: inherit; font-size: 12px; cursor: pointer;
+  }
+  .toolbar .mini:hover { border-color: #5b8cff; color: #e6ecff; }
+  .toolbar .preset {
+    border: 1px solid rgba(91,140,255,.4); background: rgba(91,140,255,.1);
+    color: #a9c2ff; border-radius: 7px; padding: 3px 12px; font: inherit; font-size: 12px; font-weight: 600; cursor: pointer;
+  }
+  .toolbar .preset:hover { background: rgba(91,140,255,.22); color: #e6ecff; }
+  .groups { flex: 1; min-height: 0; overflow-y: auto; padding: 0 24px 16px; }
+  .group-title {
+    font-size: 12px; font-weight: 600; color: #93a5d8; letter-spacing: .5px;
+    margin: 14px 0 8px; display: flex; align-items: center; gap: 8px;
+  }
+  .group-title .badge { font-size: 10px; font-weight: 400; border-radius: 999px; padding: 1px 8px; }
+  .badge-lock { color: #ffd666; border: 1px solid rgba(255,214,102,.35); }
+  .badge-rec { color: #3ddc84; border: 1px solid rgba(61,220,132,.35); }
+  .badge-opt { color: #8b9ac4; border: 1px solid rgba(255,255,255,.12); }
+  .row {
+    display: flex; align-items: flex-start; gap: 10px;
+    border: 1px solid rgba(255,255,255,.08); border-radius: 10px;
+    background: rgba(255,255,255,.025); padding: 9px 12px; margin-bottom: 6px;
+  }
+  .row:hover { border-color: rgba(91,140,255,.4); }
+  .row input[type=checkbox] {
+    margin-top: 2px; width: 15px; height: 15px; flex: none; cursor: pointer;
+    accent-color: #5b8cff;
+  }
+  .row input[type=checkbox]:disabled { cursor: not-allowed; }
+  .row .main { flex: 1; min-width: 0; }
+  .row .name { font-weight: 600; font-size: 13px; display: flex; align-items: center; gap: 6px; }
+  .row .pkg { font-size: 10px; color: #5f6f9c; font-family: Consolas, monospace; }
+  .row .desc { font-size: 11.5px; color: #8b9ac4; margin-top: 2px; line-height: 17px; word-break: break-all; }
+  .row .size {
+    flex: none; font-size: 10.5px; color: #5f6f9c; border: 1px solid rgba(255,255,255,.1);
+    border-radius: 6px; padding: 1px 7px; margin-top: 1px; white-space: nowrap;
+  }
+  .row .tag { flex: none; font-size: 10px; border-radius: 5px; padding: 0 6px; margin-top: 1px; white-space: nowrap; }
+  .row .tag-off { color: #e6a23c; border: 1px solid rgba(230,162,60,.4); }
+  .footer {
+    flex: none;
+    display: flex; align-items: center; gap: 12px;
+    padding: 12px 24px 16px;
+    border-top: 1px solid rgba(255,255,255,.07);
+    background: rgba(11,18,32,.6);
+  }
+  .footer .note { flex: 1; font-size: 11.5px; color: #5f6f9c; line-height: 17px; }
+  .footer .skip {
+    border: none; background: transparent; color: #8b9ac4; font: inherit; font-size: 12.5px;
+    cursor: pointer; padding: 8px 10px; border-radius: 8px;
+  }
+  .footer .skip:hover { color: #e6ecff; background: rgba(255,255,255,.05); }
+  .footer .go {
+    border: none; border-radius: 9px; padding: 9px 22px; font: inherit; font-size: 13px; font-weight: 600;
+    cursor: pointer; background: #5b8cff; color: #fff;
+  }
+  .footer .go:hover:not(:disabled) { background: #6f9bff; }
+  .footer .go:disabled { opacity: .6; cursor: default; }
+  .status { font-size: 12px; color: #3ddc84; margin-right: 4px; }
+  .status.err { color: #ff7a85; }
+  ::-webkit-scrollbar { width: 9px; }
+  ::-webkit-scrollbar-thumb { background: rgba(255,255,255,.14); border-radius: 5px; }
+  ::-webkit-scrollbar-thumb:hover { background: rgba(255,255,255,.25); }
+</style>
+</head>
+<body>
+  <div class="bar">
+    <img class="icon" src="icon.png" alt="" draggable="false" />
+    <span class="title">Deepseek Harness EAC</span>
+    <span class="mode" id="modeTag">首次引导</span>
+    <span class="spacer"></span>
+    <button id="closeBtn" title="关闭（跳过）" aria-label="关闭">✕</button>
+  </div>
+
+  <div class="hero">
+    <h1>内置插件选择向导</h1>
+    <p id="intro">选择要在 DeepSeek Harness 中默认启用的内置插件。未勾选的插件也会安装，但会处于停用状态，之后可在「设置 → 插件 → 管理」或重新打开本向导随时启用。</p>
+  </div>
+
+  <div class="toolbar">
+    <span class="count">已勾选 <b id="selCount">0</b> / <span id="totalCount">0</span> 个</span>
+    <span class="spacer"></span>
+    <button class="preset" id="pureBtn" title="仅保留核心必装插件（最精简）">纯净版（仅核心）</button>
+    <button class="preset" id="fullBtn" title="勾选全部插件（含可选增强）">满血版（全选）</button>
+    <button class="mini" id="noneBtn">清空（仅非核心）</button>
+  </div>
+
+  <div class="groups" id="groups"></div>
+
+  <div class="footer">
+    <span class="note" id="footerNote">停用不等于卸载：插件包与「插件管理」页保持完整，随时可一键启用。</span>
+    <button class="skip" id="skipBtn" hidden>跳过（保持全部启用）</button>
+    <button class="go" id="goBtn" disabled>安装所选插件</button>
+  </div>
+
+<script>
+(function () {
+  'use strict';
+  var bridge = window.onboarding;
+  var state = { mode: 'first', catalog: [], current: null, selected: new Set(), busy: false };
+
+  var $ = function (id) { return document.getElementById(id); };
+  var groupsEl = $('groups');
+  var selCountEl = $('selCount');
+  var totalCountEl = $('totalCount');
+  var goBtn = $('goBtn');
+  var skipBtn = $('skipBtn');
+
+  function fmtSize(bytes) {
+    if (!bytes || bytes <= 0) return '';
+    if (bytes >= 1024 * 1024) return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
+    return Math.max(1, Math.round(bytes / 1024)) + ' KB';
+  }
+
+  function esc(s) {
+    return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) {
+      return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
+    });
+  }
+
+  function render() {
+    var core = state.catalog.filter(function (p) { return p.core; });
+    var rec = state.catalog.filter(function (p) { return !p.core && p.recommended; });
+    var opt = state.catalog.filter(function (p) { return !p.core && !p.recommended; });
+    totalCountEl.textContent = String(state.catalog.length);
+    selCountEl.textContent = String(state.selected.size);
+    goBtn.disabled = state.busy;
+    goBtn.textContent = state.busy ? '正在应用…' : (state.mode === 'rerun' ? '应用更改' : '安装所选插件');
+
+    var html = '';
+    html += section('核心必装', 'badge-lock', '始终启用（主界面/设置页底座）', core);
+    html += section('推荐', 'badge-rec', '常用功能增强', rec);
+    html += section('可选增强', 'badge-opt', '按需启用', opt);
+    groupsEl.innerHTML = html;
+
+    groupsEl.querySelectorAll('input[type=checkbox]').forEach(function (box) {
+      box.addEventListener('change', function () {
+        if (box.checked) state.selected.add(box.dataset.id);
+        else state.selected.delete(box.dataset.id);
+        selCountEl.textContent = String(state.selected.size);
+      });
+    });
+  }
+
+  function section(title, cls, hint, items) {
+    if (!items.length) return '';
+    var h = '<div class="group-title">' + esc(title) + ' <span class="badge ' + cls + '">' + esc(hint) + '</span></div>';
+    return h + items.map(function (p) {
+      var checked = p.core || state.selected.has(p.id);
+      var size = fmtSize(p.size);
+      var tag = (p.registryDisabled && !p.core) ? '<span class="tag tag-off">默认停用</span>' : '';
+      return '<div class="row">' +
+        '<input type="checkbox" data-id="' + esc(p.id) + '"' + (checked ? ' checked' : '') + (p.core || state.busy ? ' disabled' : '') + ' />' +
+        '<div class="main">' +
+          '<div class="name">' + esc(p.name.split('/').pop()) + '<span class="pkg">' + esc(p.name) + '</span></div>' +
+          (p.description ? '<div class="desc">' + esc(p.description) + '</div>' : '') +
+        '</div>' +
+        (size ? '<span class="size">' + size + '</span>' : '') +
+        tag +
+      '</div>';
+    }).join('');
+  }
+
+  function defaults(initial) {
+    state.selected = new Set(state.catalog.filter(function (p) {
+      if (p.core) return true;
+      if (initial && initial[p.id] !== undefined) return initial[p.id];
+      return p.recommended;
+    }).map(function (p) { return p.id; }));
+  }
+
+  function run() {
+    bridge.list().then(function (res) {
+      if (!res || !Array.isArray(res.catalog)) {
+        $('intro').textContent = '向导数据加载失败，请重试。';
+        return;
+      }
+      state.mode = res.mode || 'first';
+      state.catalog = res.catalog;
+      state.current = res.current || null;
+      if (state.mode === 'rerun') {
+        $('modeTag').textContent = '二次调整';
+        $('intro').textContent = '重新打开插件选择向导：勾选 = 启用，取消勾选 = 停用。改动会立即写入并重启 Web 服务生效。';
+        $('footerNote').textContent = '停用不等于卸载：插件包与「插件管理」页保持完整，随时可一键启用或再次调整。';
+        skipBtn.hidden = true;
+      }
+      defaults(state.current);
+      render();
+    }).catch(function (e) {
+      $('intro').textContent = '向导数据加载失败: ' + String((e && e.message) || e);
+    });
+  }
+
+  $('closeBtn').addEventListener('click', function () { bridge.close(); });
+  skipBtn.addEventListener('click', function () { bridge.close(); });
+
+  // 满血版：全部插件（含默认停用的，如 dsh-dafeiyu）。
+  $('fullBtn').addEventListener('click', function () {
+    state.catalog.forEach(function (p) { state.selected.add(p.id); });
+    render();
+  });
+  // 纯净版：仅保留核心必装插件。
+  $('pureBtn').addEventListener('click', function () {
+    state.catalog.forEach(function (p) { if (!p.core) state.selected.delete(p.id); });
+    render();
+  });
+  $('noneBtn').addEventListener('click', function () {
+    state.catalog.forEach(function (p) { if (!p.core) state.selected.delete(p.id); });
+    render();
+  });
+
+  goBtn.addEventListener('click', function () {
+    if (state.busy) return;
+    state.busy = true;
+    render();
+    var ids = Array.from(state.selected);
+    bridge.submit(ids).then(function (res) {
+      if (!res || res.ok !== true) {
+        state.busy = false;
+        $('footerNote').textContent = '应用失败：' + (res && res.error) || '未知错误';
+        render();
+        return;
+      }
+      if (res.errors && res.errors.length) {
+        $('footerNote').textContent = '部分插件未生效: ' + res.errors.join('；');
+      }
+    }).catch(function (e) {
+      state.busy = false;
+      $('footerNote').textContent = '应用失败: ' + String((e && e.message) || e);
+      render();
+    });
+  });
+
+  document.addEventListener('keydown', function (e) {
+    if (e.key === 'Escape') bridge.close();
+  });
+
+  run();
+})();
+</script>
+</body>
+</html>

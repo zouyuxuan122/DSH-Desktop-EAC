@@ -1,0 +1,58 @@
+node_modules/
+dist/
+vendor/
+*.log
+data/
+.playwright-mcp/
+.DS_Store
+# 涓存椂璋冭瘯 / 澶囦唤浜х墿涓嶅叆搴?
+debug-session-dump.cjs
+e2e-base.txt
+package.json.bak-*
+scripts/tmp-dbg*.cjs
+scripts/tmp-instrument.cjs
+# build/ 鍙繚鐣欏浘鏍囦笌 NSIS 瀹夎鑴氭湰锛屽叾浣欐瀯寤轰骇鐗╀笉鍏ュ簱
+build/*
+!build/icon.ico
+!build/icon.png
+!build/installer.nsh
+# 鍐呯疆绀惧尯鎻掍欢鐨?vendor / 鑷寘鍚繍琛屾椂渚濊禆 / 绂荤嚎鏁版嵁蹇呴』闅忎粨搴撳垎鍙戯紝
+# 鍚﹀垯鍏嬮殕鍚庢瀯寤哄嚭鐨勫畨瑁呭寘浼氬鐜扳€滄彃浠跺懡鍚嶇┖闂翠笉鍙敤鈥濓紙vendor 缂哄け锛?
+# 涓庘€渢dai-memory 鏃犳硶鍚姩鈥濓紙sqlite-vec / jieba / BM25 璇枡缂哄け锛?
+!assets/plugins/*/vendor/
+!assets/plugins/*/data/
+
+# ---- TypeScript 编译产物（源码为同名 .ts，tsc 就地产出，勿手改） ----
+/lib/desktop/guard-box.js
+
+/tauri-shell/sidecar/server.js
+/lib/desktop/proc.js
+/lib/desktop/runtime-paths.js
+/lib/desktop/file-roots.js
+/lib/desktop/profile.js
+/lib/desktop/runtime-patches.js
+/lib/desktop/plugin-ops.js
+/lib/desktop/market.js
+/lib/desktop/client-update.js
+/lib/desktop/junction-patrol.js
+/lib/desktop/shortcuts.js
+/lib/desktop/static-preview.js
+/lib/desktop/companion-sync.js
+/stable-port.js
+/error-detail.js
+/bundle-integrity.js
+/watchdog.js
+/lib/desktop/boot-server.js
+/stream-write-guard.js
+/session-encoding-heal.js
+/builtin-collision.js
+/koffi-preflight.js
+/balance.js
+/preset-sync.js
+/plugin-manager-state.js
+/profile-module-heal.js
+/compact-preset-migrate.js
+/session-watcher.js
+/patch-row-heal.js
+/shortcut-maintenance.js
+/wsl-backend.js

@@ -1,0 +1,24 @@
+{
+  "name": "@deepseek-ai/dsh-skin-switch",
+  "description": "设置页「皮肤」tab（DSH Desktop 配套插件）：列出并切换内置皮肤（dsh-web-ui 系列 / dsh-deep-whale maid-atelier），host 半边以 Typert Remote 重写 cordis.patch.yml 的 ui-skin-* 激活行",
+  "version": "0.1.0",
+  "type": "module",
+  "main": "lib/index.js",
+  "exports": {
+    ".": "./lib/index.js",
+    "./client": "./lib/client.js",
+    "./package.json": "./package.json"
+  },
+  "dsh": {
+    "client": {
+      "platform": "web",
+      "inject": [
+        "@deepseek-ai/dsh-api-remotes",
+        "@deepseek-ai/dsh-client-runtime",
+        "@deepseek-ai/dsh-client-ui-settings",
+        "@deepseek-ai/dsh-client-locale"
+      ]
+    }
+  },
+  "license": "MIT"
+}

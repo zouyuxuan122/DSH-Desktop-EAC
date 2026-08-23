@@ -1,0 +1,52 @@
+{
+  "name": "dsh-unified-market",
+  "description": "统一插件市场（Unified Plugin Market for DeepSeek Harness）：聚合精选目录（awesome-dsh-plugin.com）+ GitHub dsh-plugin 生态 + npm registry 三源；对 DSH Desktop（EAC）特化（web-desktop profile）；来源白名单 + 冲突预检 + 试装验证；后台自动检测 + 可配置自动升级 + 市场自更新；一键检查/全部更新/逐个更新，更新进度窗口",
+  "version": "0.2.1",
+  "license": "MIT",
+  "type": "module",
+  "main": "lib/host.js",
+  "exports": {
+    ".": "./lib/host.js",
+    "./client": "./lib/client.js",
+    "./package.json": "./package.json"
+  },
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    },
+    "client": {
+      "platform": "web"
+    }
+  },
+  "keywords": [
+    "dsh",
+    "deepseek-harness",
+    "plugin",
+    "marketplace",
+    "market",
+    "dsh-plugin",
+    "eac",
+    "desktop"
+  ],
+  "files": [
+    "lib/",
+    "data/",
+    "cordis.patch.yml",
+    "README.md",
+    "LICENSE"
+  ],
+  "engines": {
+    "node": ">=18.18"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/jing-hy/dsh-unified-market.git"
+  },
+  "homepage": "https://github.com/jing-hy/dsh-unified-market#readme",
+  "bugs": {
+    "url": "https://github.com/jing-hy/dsh-unified-market/issues"
+  },
+  "publishConfig": {
+    "access": "public"
+  }
+}
