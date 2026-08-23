@@ -724,6 +724,8 @@ function buildInstalledApplyScript() {
     '  [Parameter(Mandatory = $true)][AllowEmptyString()][string]$CurrentVersion,',
     '  [Parameter(Mandatory = $true)][AllowEmptyString()][string]$NewVersion,',
     '  [Parameter(Mandatory = $true)][int]$AppPid,',
+    '  [Parameter(Mandatory = $true)][string]$ReadyPath,',
+    '  [Parameter(Mandatory = $true)][string]$ReadyToken,',
     '  [Parameter(Mandatory = $true)][string]$LogPath,',
     '  [int]$WaitTimeoutSeconds = 20',
     ')',
@@ -741,10 +743,13 @@ function buildInstalledApplyScript() {
     '  if ($WaitTimeoutSeconds -lt 1 -or $WaitTimeoutSeconds -gt 120) { throw "Invalid wait timeout" }',
     '  $LogDir = Split-Path -Parent $LogPath',
     '  if ($LogDir) { New-Item -ItemType Directory -Path $LogDir -Force | Out-Null }',
-    '  Set-Content -LiteralPath $LogPath -Value "" -Encoding UTF8',
-    '  Write-ApplyLog ("installed apply-update start; appPid=" + $AppPid)',
+    '  if (-not $ReadyPath) { throw "Ready path missing" }',
+    '  if (-not $ReadyToken) { throw "Ready token missing" }',
     '  if (-not (Test-Path -LiteralPath $SetupPath -PathType Leaf)) { throw "Setup not found" }',
     '  if (-not (Test-Path -LiteralPath $ActionScriptPath -PathType Leaf)) { throw "Action script not found" }',
+    "  Set-Content -LiteralPath $ReadyPath -Value $ReadyToken -Encoding ascii",
+    '  Set-Content -LiteralPath $LogPath -Value "" -Encoding UTF8',
+    '  Write-ApplyLog ("installed apply-update start; appPid=" + $AppPid)',
     '  Write-ApplyLog "waiting for app exit"',
     '  $Deadline = [DateTime]::UtcNow.AddSeconds($WaitTimeoutSeconds)',
     '  while ((Get-AppProcess) -and [DateTime]::UtcNow -lt $Deadline) {',
@@ -1035,6 +1040,8 @@ function buildInstalledPowerShellArgs(script, {
   currentVersion,
   newVersion,
   appPid,
+  readyPath,
+  readyToken,
   logPath,
   waitTimeoutSeconds = 20,
 }) {
@@ -1056,9 +1063,42 @@ function buildInstalledPowerShellArgs(script, {
     '-CurrentVersion', currentVersion || '',
     '-NewVersion', newVersion || '',
     '-AppPid', String(appPid),
+    '-ReadyPath', readyPath,
+    '-ReadyToken', readyToken,
     '-LogPath', logPath,
     '-WaitTimeoutSeconds', String(waitTimeoutSeconds),
   ];
+}
+
+function waitForInstalledHelperReady(child, readyPath, readyToken, timeoutMs = 5000) {
+  return new Promise((resolve, reject) => {
+    const isReady = () => {
+      try { return fs.readFileSync(readyPath, 'ascii').trim() === readyToken; } catch { return false; }
+    };
+    let done = false;
+    const finish = (err) => {
+      if (done) return;
+      done = true;
+      clearInterval(poll);
+      clearTimeout(timer);
+      if (err) reject(err);
+      else resolve();
+    };
+    const poll = setInterval(() => {
+      if (isReady()) finish();
+    }, 25);
+    if (typeof poll.unref === 'function') poll.unref();
+    const timer = setTimeout(() => {
+      try { child.kill(); } catch {}
+      finish(new Error('更新助手启动超时，未写入就绪标记'));
+    }, timeoutMs);
+    if (typeof timer.unref === 'function') timer.unref();
+    child.once('error', (err) => finish(new Error('更新助手启动失败: ' + err.message)));
+    child.once('exit', (code, signal) => {
+      if (!isReady()) finish(new Error(`更新助手在就绪前退出（code=${code}, signal=${signal || 'none'}）`));
+    });
+    if (isReady()) finish();
+  });
 }
 
 function applyUpdate(ctx, pending, opts) {
@@ -1066,6 +1106,8 @@ function applyUpdate(ctx, pending, opts) {
   const portable = isPortable();
   const oldExe = process.env.PORTABLE_EXECUTABLE_FILE || process.execPath;
   const updateDir = path.join(ctx.userDataDir, 'updates');
+  const readyPath = path.join(updateDir, 'apply-update.ready');
+  const readyToken = crypto.randomBytes(16).toString('hex');
   const logPath = path.join(updateDir, 'apply-update.log');
   const userDataDir = (opts && opts.userDataDir) || ctx.userDataDir || '';
   const dshHome = (opts && opts.dshHome) || process.env.DSH_HOME || '';
@@ -1076,6 +1118,7 @@ function applyUpdate(ctx, pending, opts) {
   const nodeExe = (opts && opts.nodeExe) || '';
   let script;
   let child;
+  let ready = Promise.resolve();
   if (isTauriPortable()) {
     // Tauri 便携：exe + sidecar + dsh-desktop 目录树整体交换（P4/R6）。
     // 等待对象是壳进程 PID（Rust spawn sidecar 时经 DSH_SHELL_PID 注入）。
@@ -1115,6 +1158,7 @@ function applyUpdate(ctx, pending, opts) {
     });
     fs.writeFileSync(actionScript, actionLines.join('\r\n') + '\r\n');
     fs.writeFileSync(script, buildInstalledApplyScript().join('\r\n') + '\r\n', 'ascii');
+    try { fs.rmSync(readyPath, { force: true }); } catch {}
     const powershell = path.join(
       process.env.SystemRoot || 'C:\\Windows',
       'System32', 'WindowsPowerShell', 'v1.0', 'powershell.exe'
@@ -1131,6 +1175,8 @@ function applyUpdate(ctx, pending, opts) {
       currentVersion,
       newVersion,
       appPid: process.pid,
+      readyPath,
+      readyToken,
       logPath,
     });
     child = spawn(powershell, args, {
@@ -1138,11 +1184,15 @@ function applyUpdate(ctx, pending, opts) {
       stdio: 'ignore',
       windowsHide: true,
     });
+    ready = waitForInstalledHelperReady(child, readyPath, readyToken);
   }
   ctx.log('client-update', `启动更新助手: ${script}（新: ${newExe}，旧: ${oldExe}，备份根: ${userDataDir}\\backups\\<ts>，node: ${nodeExe || '(无，跳过备份)'}）`);
-  child.once('error', (err) => ctx.log('client-update', '更新助手启动失败: ' + err.message));
+  if (portable || isTauriPortable()) {
+    child.once('error', (err) => ctx.log('client-update', '更新助手启动失败: ' + err.message));
+  }
+  ready.catch((err) => ctx.log('client-update', err.message));
   child.unref();
-  return script;
+  return { script, ready };
 }
 
-module.exports = { checkLatest, selectAsset, downloadFile, downloadWithSourceSwitch, downloadRelease, releaseFallbacks, applyUpdate, buildApplyScript, buildInstalledApplyScript, buildInstalledPowerShellArgs, buildSpawnCommandLine, buildTauriPortableApplyScript, isPortable, isTauriPortable, resolveRepos, normalizeRelease, computeSha256, fetchSumsMap, expectedSha256, isNoSpaceError, githubProxyUrl, downloadUrls, DEFAULT_REPOS };
+module.exports = { checkLatest, selectAsset, downloadFile, downloadWithSourceSwitch, downloadRelease, releaseFallbacks, applyUpdate, buildApplyScript, buildInstalledApplyScript, buildInstalledPowerShellArgs, buildSpawnCommandLine, buildTauriPortableApplyScript, isPortable, isTauriPortable, resolveRepos, normalizeRelease, computeSha256, fetchSumsMap, expectedSha256, isNoSpaceError, githubProxyUrl, downloadUrls, DEFAULT_REPOS, waitForInstalledHelperReady };

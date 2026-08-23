@@ -19,7 +19,7 @@ const clientUpdater = require('../../client-updater') as {
   checkLatest(c: ReturnType<typeof updCtx>, currentVersion: string): Promise<{ isNewer: boolean; version: string; source: string; body?: string }>;
   releaseFallbacks(c: ReturnType<typeof updCtx>, release: unknown): Promise<unknown[]>;
   downloadRelease(c: ReturnType<typeof updCtx>, release: unknown, opts: Record<string, unknown>): Promise<{ filePath: string; size: number }>;
-  applyUpdate(c: ReturnType<typeof updCtx>, pending: unknown, opts: Record<string, unknown>): void;
+  applyUpdate(c: ReturnType<typeof updCtx>, pending: unknown, opts: Record<string, unknown>): { script: string; ready: Promise<void> };
 };
 
 /** 注入接口：由宿主（Electron main / Tauri sidecar）在启动时提供。 */
@@ -165,7 +165,6 @@ export async function runClientUpdateFlow(manual: boolean): Promise<void> {
       cancelId: 1,
     });
     if (r2 === 0) {
-      await mod.prepareQuitForClientUpdate();
       const clientUpdateOpts = {
         userDataDir: mod.getUserDataDir(),
         dshHome: mod.getDshHome(),
@@ -175,7 +174,9 @@ export async function runClientUpdateFlow(manual: boolean): Promise<void> {
         newVersion: release.version,
         nodeExe: nodeExe(),
       };
-      clientUpdater.applyUpdate(ctx, settings.pendingClientUpdate, clientUpdateOpts);
+      const updateAssistant = clientUpdater.applyUpdate(ctx, settings.pendingClientUpdate, clientUpdateOpts);
+      await updateAssistant.ready;
+      await mod.prepareQuitForClientUpdate();
       setTimeout(() => mod.exitProcess(), 400);
     }
   } catch (err) {
@@ -218,17 +219,29 @@ export function offerPendingClientUpdate(): void {
     cancelId: 1,
   }).then(async ({ response }) => {
     if (response !== 0) return;
-    await mod.prepareQuitForClientUpdate();
-    const clientUpdateOpts2 = {
-      userDataDir: mod.getUserDataDir(),
-      dshHome: mod.getDshHome(),
-      installDir: mod.getExecDir(),
-      profileDir: path.join(mod.getDshHome() || '', 'profiles', desktopProfile()),
-      currentVersion: mod.getAppVersion(),
-      newVersion: pending.version,
-      nodeExe: nodeExe(),
-    };
-    clientUpdater.applyUpdate(ctx, pending, clientUpdateOpts2);
-    setTimeout(() => mod.exitProcess(), 400);
+    try {
+      const clientUpdateOpts2 = {
+        userDataDir: mod.getUserDataDir(),
+        dshHome: mod.getDshHome(),
+        installDir: mod.getExecDir(),
+        profileDir: path.join(mod.getDshHome() || '', 'profiles', desktopProfile()),
+        currentVersion: mod.getAppVersion(),
+        newVersion: pending.version,
+        nodeExe: nodeExe(),
+      };
+      const updateAssistant = clientUpdater.applyUpdate(ctx, pending, clientUpdateOpts2);
+      await updateAssistant.ready;
+      await mod.prepareQuitForClientUpdate();
+      setTimeout(() => mod.exitProcess(), 400);
+    } catch (err) {
+      mod.log('client-update', '安装待处理更新失败: ' + (err as Error).message);
+      await mod.showBox({
+        type: 'error',
+        title: '更新失败',
+        message: '未能启动客户端更新助手，仍使用当前版本。',
+        detail: (err as Error).message,
+        buttons: ['确定'],
+      });
+    }
   });
 }

@@ -12,6 +12,7 @@ import { join } from 'node:path';
 const ROOT = join(fileURLToPath(import.meta.url), '..', '..');
 const mainSrc = readFileSync(join(ROOT, 'main.js'), 'utf8');
 const preloadSrc = readFileSync(join(ROOT, 'preload.js'), 'utf8');
+const clientUpdateSrc = readFileSync(join(ROOT, 'lib', 'desktop', 'client-update.ts'), 'utf8');
 
 test('main.js requires the renderer-recovery module', () => {
   assert.ok(/require\('\.\/renderer-recovery'\)/.test(mainSrc), "main.js must require('./renderer-recovery')");
@@ -65,6 +66,19 @@ test('main.js serves the local recovery page IPC endpoints', () => {
 test('every quit path marks a clean exit for the watchdog', () => {
   const marks = mainSrc.match(/markCleanExit\(\)/g) || [];
   assert.ok(marks.length >= 3, `expected markCleanExit() on before-quit + restart + app.exit paths, found ${marks.length}`);
+});
+
+test('client update waits for its detached helper to become ready before exiting', () => {
+  const starts = [...clientUpdateSrc.matchAll(/const updateAssistant = clientUpdater\.applyUpdate\(/g)].map((m) => m.index);
+  assert.equal(starts.length, 2, 'both immediate and pending client-update paths must start a helper');
+  for (const start of starts) {
+    const ready = clientUpdateSrc.indexOf('await updateAssistant.ready;', start);
+    const prepare = clientUpdateSrc.indexOf('await mod.prepareQuitForClientUpdate();', start);
+    const exit = clientUpdateSrc.indexOf('setTimeout(() => mod.exitProcess(), 400);', start);
+    assert.ok(ready > start, 'must wait for the helper readiness marker');
+    assert.ok(prepare > ready, 'quit preparation and clean-exit marking must wait until the helper is ready');
+    assert.ok(exit > ready, 'app must not exit before the helper is ready');
+  }
 });
 
 test('preload sends renderer heartbeats and exposes the recovery bridge', () => {

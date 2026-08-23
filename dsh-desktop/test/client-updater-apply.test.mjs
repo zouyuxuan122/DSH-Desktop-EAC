@@ -8,6 +8,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
+import { EventEmitter } from 'node:events';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -16,6 +17,7 @@ import {
   buildInstalledApplyScript,
   buildInstalledPowerShellArgs,
   buildSpawnCommandLine,
+  waitForInstalledHelperReady,
 } from '../client-updater.js';
 
 const SYSTEM_ROOT = process.env.SystemRoot || 'C:\\Windows';
@@ -84,6 +86,8 @@ function runInstalledHelper({
   currentVersion = '4.4.0',
   newVersion = '4.4.1',
   waitTimeoutSeconds = 20,
+  readyPath,
+  readyToken = 'test-ready-token',
   env = process.env,
 }) {
   return spawn(POWERSHELL, buildInstalledPowerShellArgs(script, {
@@ -97,6 +101,8 @@ function runInstalledHelper({
     currentVersion,
     newVersion,
     appPid,
+    readyPath: readyPath || log + '.ready',
+    readyToken,
     logPath: log,
     waitTimeoutSeconds,
   }), {
@@ -168,9 +174,41 @@ test('installed helper has bounded waits and synchronously invokes the hidden ac
   assert.match(helper, /\$LASTEXITCODE/);
   assert.match(helper, /waiting for app exit/);
   assert.match(helper, /update action exit code/);
+  assert.ok(helper.indexOf('Setup not found') < helper.indexOf('Set-Content -LiteralPath $ReadyPath'),
+    'readiness must be written only after Setup is preflighted');
   assert.match(action, /call "%SETUP%" \/S/);
   assert.match(action, /setup exit code %errorlevel%/);
   assert.match(action, /update applied/);
+});
+
+test('installed helper readiness requires the current token, not a stale marker', async () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'dsh-ready-token-'));
+  const readyPath = path.join(dir, 'apply-update.ready');
+  const child = new EventEmitter();
+  child.kill = () => {};
+  try {
+    fs.writeFileSync(readyPath, 'stale-token');
+    const ready = waitForInstalledHelperReady(child, readyPath, 'fresh-token', 1000);
+    setTimeout(() => fs.writeFileSync(readyPath, 'fresh-token'), 30);
+    await ready;
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('installed helper readiness rejects when it exits before writing the current token', async () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'dsh-ready-exit-'));
+  const readyPath = path.join(dir, 'apply-update.ready');
+  const child = new EventEmitter();
+  child.kill = () => {};
+  try {
+    fs.writeFileSync(readyPath, 'stale-token');
+    const ready = waitForInstalledHelperReady(child, readyPath, 'fresh-token', 1000);
+    child.emit('exit', 1, null);
+    await assert.rejects(ready, /就绪前退出/);
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
 });
 
 test('installed failure paths keep artifacts and relaunch the old executable', () => {
@@ -228,6 +266,8 @@ test('installed PowerShell arguments preserve paths and request a hidden non-int
     currentVersion: '4.4.0',
     newVersion: '4.4.1',
     appPid: 4321,
+    readyPath: 'C:\\用户 A\\Deepseek Harness EAC\\updates\\apply-update.ready',
+    readyToken: 'test-ready-token',
     logPath: log,
   });
 
@@ -247,6 +287,8 @@ test('installed PowerShell arguments preserve paths and request a hidden non-int
   assert.equal(args[args.indexOf('-CurrentVersion') + 1], '4.4.0');
   assert.equal(args[args.indexOf('-NewVersion') + 1], '4.4.1');
   assert.equal(args[args.indexOf('-AppPid') + 1], '4321');
+  assert.equal(args[args.indexOf('-ReadyPath') + 1], 'C:\\用户 A\\Deepseek Harness EAC\\updates\\apply-update.ready');
+  assert.equal(args[args.indexOf('-ReadyToken') + 1], 'test-ready-token');
   assert.equal(args[args.indexOf('-LogPath') + 1], log);
   assert.equal(args[args.indexOf('-WaitTimeoutSeconds') + 1], '20');
 });
