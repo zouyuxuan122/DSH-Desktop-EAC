@@ -1087,12 +1087,10 @@ function waitForInstalledHelperReady(child, readyPath, readyToken, timeoutMs = 5
     const poll = setInterval(() => {
       if (isReady()) finish();
     }, 25);
-    if (typeof poll.unref === 'function') poll.unref();
     const timer = setTimeout(() => {
       try { child.kill(); } catch {}
       finish(new Error('更新助手启动超时，未写入就绪标记'));
     }, timeoutMs);
-    if (typeof timer.unref === 'function') timer.unref();
     child.once('error', (err) => finish(new Error('更新助手启动失败: ' + err.message)));
     child.once('exit', (code, signal) => {
       if (!isReady()) finish(new Error(`更新助手在就绪前退出（code=${code}, signal=${signal || 'none'}）`));
