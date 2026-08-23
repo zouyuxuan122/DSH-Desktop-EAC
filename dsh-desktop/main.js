@@ -56,6 +56,7 @@ const { buildErrorDetail } = require('./error-detail');
 const { SessionWatcher, scanZstdFrames } = require('./session-watcher');
 const { isEncodingMismatch, healSessionEncodingConflicts } = require('./session-encoding-heal');
 const { patchSessionManage } = require('./scripts/patch-session-manage');
+const { patchAgentPresetMenu, patchMenuSubmenuScroll } = require('./scripts/patch-deps.js');
 const { togglePluginInPatch, removePluginFromPatch, hasEntryId } = require('./scripts/plugin-manager-patch');
 const { collectPluginRows } = require('./plugin-manager-state');
 const onboardingLogic = require('./scripts/onboarding');
@@ -3924,6 +3925,23 @@ function applySessionManageFix() {
   }
 }
 
+// 模式选择二级菜单 + Menu 二级菜单滚动（dsh-client-ui-agent-preset /
+// dsh-client-ui-primitives）：agent 更新会换掉 overlay 整树，与对话删除补丁
+// 同样随每次启动重放（幂等）。锚点不匹配时静默跳过，绝不损坏文件。
+function applyAgentPresetFix() {
+  for (const root of runtimePatchRoots()) {
+    if (!root || !fs.existsSync(root)) continue;
+    try {
+      const presetFile = path.join(root, '@deepseek-ai', 'dsh-client-ui-agent-preset', 'lib', 'client.js');
+      if (patchAgentPresetMenu(presetFile)) log('boot', '模式菜单补丁: 已应用到 ' + root);
+      const primitivesFile = path.join(root, '@deepseek-ai', 'dsh-client-ui-primitives', 'lib', 'index.js');
+      if (patchMenuSubmenuScroll(primitivesFile)) log('boot', '二级菜单滚动补丁: 已应用到 ' + root);
+    } catch (err) {
+      log('boot', '模式菜单补丁失败(' + root + '): ' + err.message);
+    }
+  }
+}
+
 // ---------------------------------------------------------------------------
 // 插件启停管理（V4，移植自上游）：设置页「插件 → 管理」标签的数据与写盘。
 // dsh:plugin-list / dsh:plugin-set-enabled 两个 IPC 驱动；写盘用纯文本手术
@@ -4227,6 +4245,8 @@ function syncCompanionPlugins() {
     // V4 运行时补丁（幂等，随启动 / 服务重启 / agent 更新后重放）：
     //  · 对话删除/归档 —— dsh-session-manager 插件的全链路前置依赖；
     applySessionManageFix();
+    //  · 模式选择二级菜单 / Menu 二级菜单滚动 —— agent-preset 补丁同链路；
+    applyAgentPresetFix();
     const profileDirP = desktopProfileDir();
     // 内置社区 agent preset（anchored-standard：首请求锚定 Minimal 工具对，
     // 首次工具调用/回复后开放完整 Standard 目录）：安装到用户 preset 根。
