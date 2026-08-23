@@ -19,14 +19,14 @@ const dd = path.join(root, 'dsh-desktop');
 const staged = path.join(root, 'tauri-shell', 'staged-resources');
 const skipNpm = process.argv.includes('--skip-npm');
 
-// electron-builder.yml 的 files 清单（人工同步：新增根模块要加进来）。
+// sidecar 实际 require 的根模块清单（人工同步：新增根模块要加进来）。
 const ROOT_FILES = [
-  'main.js', 'updater.js', 'client-updater.js', 'logger.js', 'plugin-updater.js',
+  'updater.js', 'client-updater.js', 'logger.js', 'plugin-updater.js',
   'balance.js', 'session-watcher.js', 'session-encoding-heal.js', 'profile-module-heal.js',
   'patch-row-heal.js', 'builtin-collision.js', 'plugin-manager-state.js', 'plugin-guard.js',
   'rescue-agent.js', 'preset-sync.js', 'compact-preset-migrate.js', 'error-detail.js',
   'bundle-integrity.js', 'stable-port.js', 'stream-write-guard.js', 'koffi-preflight.js',
-  'renderer-recovery.js', 'watchdog.js', 'shortcut-maintenance.js', 'preload.js',
+  'renderer-recovery.js', 'watchdog.js', 'shortcut-maintenance.js',
   'wsl-backend.js',
 ];
 const LIB_DESKTOP = [
