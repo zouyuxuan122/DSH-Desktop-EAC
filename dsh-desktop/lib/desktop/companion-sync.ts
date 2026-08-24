@@ -431,7 +431,6 @@ export function healProfileModules(): void {
 // 使 dsh web 以 code=1 退出。启动时统一清理这些精确的历史内置条目。
 // （契约测试锚定字面量 `const RETIRED_BUILTIN_PLUGINS = [`，勿加内联注解。）
 export const RETIRED_BUILTIN_PLUGINS = [
-  { id: 'tdai-memory', name: 'dsh-tdai-memory' },
   { id: 'auto-compact', name: 'dsh-auto-compact' },
   { id: 'plugin-marketplace', name: '@deepseek-ai/dsh-plugin-marketplace' },
   { id: 'dsh-market-plugin', name: '@sanqi-normal/dsh-webui-market-plugin' },
@@ -497,7 +496,7 @@ export function syncCompanionPlugins(): void {
     const home = ctx.getDshHome() || path.join(os.homedir(), '.dsh');
     // 桌面专属 profile 必须先存在（未知 profile 不会被 dsh 自动初始化）。
     ensureDesktopProfileInit();
-    // 清理已退役内置插件（tdai-memory 等）在 profile 的残留，避免
+    // 清理已退役内置插件在 profile 的残留，避免
     // 「行在包被清」拖垮插件树或退役插件继续加载。
     retireRemovedBuiltinPlugins(desktopProfileDir());
     // V4 运行时补丁（幂等，随启动 / 服务重启 / agent 更新后重放）：

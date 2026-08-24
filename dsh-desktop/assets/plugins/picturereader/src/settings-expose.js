@@ -18,7 +18,7 @@ import { dirname, join, sep } from "node:path";
  * Ensure `nsName` is present in dsh-host-apiproxy's WEB_SETTINGS_NAMESPACES.
  * No-op when already exposed or when the file cannot be located/patched.
  * @param {import("cordis").Context} ctx
- * @param {string} nsName - settings namespace short name (e.g. "tdai-memory").
+ * @param {string} nsName - settings namespace short name (e.g. "picturereader").
  * @param {{info?: Function, warn?: Function}} logger - dsh logger.
  */
 export function ensureSettingsNamespaceExposed(ctx, nsName, logger) {
