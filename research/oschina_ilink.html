@@ -1,0 +1,74 @@
+<!-- <!doctype html> -->
+<!DOCTYPE html>
+<html lang="zh-CN">
+
+<head>
+  <meta charset="UTF-8" />
+  <link rel="icon" type="image/svg+xml" href="//static.oschina.net/oschina/space/v2/js/ico/favicon-B7D_TNtS.ico" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <script src="https://static.oschina.net/oschina/web/cdn/v2/polyfill.min@7.4.3.js"></script>
+  <script src="https://static.oschina.net/oschina/web/cdn/v2/BiocFacade.js"></script>
+  <link rel="dns-prefetch" href="//www.oschina.net" />
+  <link rel="dns-prefetch" href="//my.oschina.net" />
+  <link rel="dns-prefetch" href="//apiv1.oschina.net" />
+  <link rel="dns-prefetch" href="//visit.oschina.net" />
+  <link rel="dns-prefetch" href="//static.oschina.net" />
+  <link rel="dns-prefetch" href="//hm.baidu.com" />
+  <title>OSCHINA - 开源 × AI · 开发者生态社区</title>
+  
+  
+</head>
+
+<body>
+  <div id="app"></div>
+  <script>
+    (function () {
+      var bp = document.createElement('script');
+      var curProtocol = window.location.protocol.split(':')[0];
+      if (curProtocol === 'https') {
+        bp.src = 'https://zz.bdstatic.com/linksubmit/push.js';
+      }
+      else {
+        bp.src = 'http://push.zhanzhang.baidu.com/push.js';
+      }
+      var s = document.getElementsByTagName("script")[0];
+      s.parentNode.insertBefore(bp, s);
+    })();
+  </script>
+  <script>
+    var _hmt = _hmt || [];
+    _hmt.push(['_requirePlugin', 'UrlChangeTracker', {
+      shouldTrackUrlChange: function (newPath, oldPath) {
+        return newPath && oldPath;
+      }
+    }
+    ]);
+    (function () {
+      var hm = document.createElement("script");
+      hm.src = "https://hm.baidu.com/hm.js?a411c4d1664dd70048ee98afe7b28f0b";
+      var s = document.getElementsByTagName("script")[0];
+      s.parentNode.insertBefore(hm, s);
+    })();
+    try {
+      if (window.PerformanceObserver) {
+        var observer = new PerformanceObserver(function (list) {
+          list.getEntries().forEach(function (entry) {
+            console.log('FCP：', entry.startTime);
+          });
+        });
+        observer.observe({ type: 'paint', buffered: true });
+      }
+    } catch (e) { /* Chrome 78 等旧版可能不支持 buffered */ }
+  </script>
+  <style>
+    body,
+    html {
+      width: 100%;
+      min-height: 100vh;
+    }
+  </style>
+  <script crossorigin id="vite-legacy-polyfill" src="//static.oschina.net/oschina/space/v2/js/polyfills-legacy-BbNwJM2w.js"></script>
+  <script crossorigin id="vite-legacy-entry" data-src="//static.oschina.net/oschina/space/v2/js/index-legacy-DfdLngcy.js">System.import(document.getElementById('vite-legacy-entry').getAttribute('data-src'))</script>
+</body>
+
+</html>

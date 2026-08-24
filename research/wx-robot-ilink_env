@@ -1,0 +1,7 @@
+# AI 模型配置（兼容 OpenAI 接口的任意模型）
+OPENAI_API_KEY=sk-xxx
+OPENAI_BASE_URL=https://api.openai.com/v1
+OPENAI_MODEL=gpt-4o
+
+# 系统提示词（可选）
+SYSTEM_PROMPT=你是一个友好的AI助手，简洁明了地回答问题。
