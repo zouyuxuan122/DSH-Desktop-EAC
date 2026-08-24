@@ -68,21 +68,19 @@ On top of the official foundation, EAC embraces community creations — skins, p
 
 ### Windows
 
-> Since v5.0 the desktop shell is Tauri (Rust) — smaller, faster to start. Download directly from Releases.
+> The current full edition is v4.4.1 (Electron shell); the Lite edition below uses a Tauri (Rust) shell — smaller and faster to start. Download installers directly from Releases.
 
 | File | Description | Size |
 | --- | --- | --- |
-| [Setup exe](https://github.com/zouyuxuan122/Deepseek-Harness-EAC/releases/latest/download/Deepseek%20Harness%20EAC_5.0.0_x64-setup.exe) | Installs to the system and creates shortcuts; **automatically takes over an existing Electron install** | ~155 MB |
-| [Portable zip](https://github.com/zouyuxuan122/Deepseek-Harness-EAC/releases/latest/download/Deepseek-Harness-EAC-5.0.0-portable.zip) | No installation required; extract and run `dsh-eac-shell.exe` | ~500 MB |
+| [Setup exe](https://github.com/zouyuxuan122/Deepseek-Harness-EAC/releases/download/v4.4.1/Deepseek-Harness-EAC-Setup-v4.4.1-x64.exe) | Installs to the system and creates shortcuts | ~246 MB |
+| [Portable exe](https://github.com/zouyuxuan122/Deepseek-Harness-EAC/releases/download/v4.4.1/Deepseek-Harness-EAC-Portable-v4.4.1-x64.exe) | No installation required; a single file you can place anywhere | ~212 MB |
+| [Lite setup](https://github.com/zouyuxuan122/Deepseek-Harness-EAC/releases/download/v4.5-lite/Deepseek.Harness.EAC.v4Lite_4.5.0_x64-setup.exe) | **Lite edition** (lighter Tauri shell, independent of the full builds above and safe to run side by side): main executable `Deepseek Harness EAC v4Lite.exe`, data directory `~/.dsh-v4lite`, SHA256 checksum file included with the release | ~73 MB |
 
 See the [Releases page](https://github.com/zouyuxuan122/Deepseek-Harness-EAC/releases) for more versions.
 
-> 💡 **Upgrading from v4.x (Electron)**: just run the new Setup — it silently
-> uninstalls the old shell and takes over (same directory, same shortcuts).
+> 💡 **Upgrading**: just download and run the newest installer above over your existing install.
 > Plugins, skins, sessions and settings are preserved: data lives in
 > `%APPDATA%\Deepseek Harness EAC\` and `~/.dsh`, untouched by the upgrade.
-> Legacy single-exe portable users should switch to the portable zip; in-app
-> self-update now swaps the whole app tree.
 
 ### Linux (x64)
 

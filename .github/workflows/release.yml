@@ -1,19 +1,10 @@
-# Release：推送 v* 标签时触发，从标签（即最新提交所打的标签）提取版本号，
-# 写入 dsh-desktop/package.json 后完整构建，并把产物发布到 GitHub Release。
-# 缓存策略与 ci.yml 相同：npm 缓存 + Electron 二进制 + electron-builder 工具链。
-# 镜像：GitHub 托管 runner 直连 npm/GitHub，无需 README 中的 npmmirror 镜像。
-name: Release
+# ⚠️ 本 workflow 已禁用（Electron 壳冻结，见 HANDOVER R6/R7 红线）：
+# 重构版发布只走 release-tauri.yml（Tauri 壳 + NSIS + 便携包）。推送 v* 标签
+# 不会再触发 Electron 构建。保留此文件仅记录 Electron 链路的存在，勿手动启用。
+name: Release (Electron - DISABLED)
 
 on:
-  push:
-    tags:
-      - 'v*'
-  workflow_dispatch:
-    inputs:
-      version:
-        description: '版本号，例如 4.4.1 或 4.4.1-rc.1'
-        required: true
-        type: string
+  workflow_dispatch: {}
 
 permissions:
   contents: write
@@ -25,6 +16,7 @@ concurrency:
 jobs:
   release:
     name: 构建并发布（Windows x64）
+    if: false
     runs-on: windows-latest
     timeout-minutes: 60
     defaults:

@@ -37,7 +37,7 @@ const LIB_DESKTOP = [
 ];
 const SCRIPTS = [
   'koffi-preflight.cjs', 'patch-session-manage.js', 'plugin-manager-patch.js',
-  'onboarding.js', 'make-release-hashes.js',
+  'onboarding.js', 'make-release-hashes.js', 'patch-deps.js',
 ];
 
 console.log('[stage] 清理旧装配目录');
@@ -88,6 +88,12 @@ const nmDest = path.join(staged, 'dsh-desktop', 'node_modules');
 if (!skipNpm || !existsSync(nmDest)) {
   execSync('npm ci --omit=dev --no-audit --no-fund', { cwd: path.join(staged, 'dsh-desktop'), stdio: 'inherit' });
 }
+
+// dsh-desktop 锚点补丁（patch-deps：可选升级字段 / picker 退出码 / 设置左栏滚动）——
+// npm ci 从 registry 全新安装会还原成未打补丁的内核文件，必须在 staged 树上重放。
+// 脚本幂等：npm ci 的 postinstall（patch-deps.js 已随 SCRIPTS 入 staged）若已应用则直接跳过。
+console.log('[stage] 重放 dsh-desktop 锚点补丁（patch-deps）');
+execSync('node scripts/patch-deps.js', { cwd: path.join(staged, 'dsh-desktop'), stdio: 'inherit' });
 
 // 上游修复的 vendored 覆盖（bash 输出折叠，PR #181）——npm ci 会还原成
 // registry 版本，把仓库内的修复副本盖回去。

@@ -68,22 +68,20 @@
 
 ### Windows
 
-> v5.0 起桌面壳切换为 Tauri（Rust），体积更小、启动更快；安装包直接从 Release 下载。
+> 正式版当前为 v4.4.1（Electron 壳）；下方 Lite 版为 Tauri（Rust）壳，体积更小、启动更快。安装包直接从 Release 下载。
 
 | 文件 | 说明 | 大小 |
 | --- | --- | --- |
-| [安装版 Setup](https://github.com/zouyuxuan122/Deepseek-Harness-EAC/releases/latest/download/Deepseek%20Harness%20EAC_5.0.0_x64-setup.exe) | 安装到系统，创建快捷方式；**自动检测并接管旧版 Electron 壳** | ~155 MB |
-| [便携版 zip](https://github.com/zouyuxuan122/Deepseek-Harness-EAC/releases/latest/download/Deepseek-Harness-EAC-5.0.0-portable.zip) | 免安装解压即用，可放任意目录 | ~500 MB |
+| [安装版 Setup](https://github.com/zouyuxuan122/Deepseek-Harness-EAC/releases/download/v4.4.1/Deepseek-Harness-EAC-Setup-v4.4.1-x64.exe) | 安装到系统，创建快捷方式 | ~246 MB |
+| [便携版 exe](https://github.com/zouyuxuan122/Deepseek-Harness-EAC/releases/download/v4.4.1/Deepseek-Harness-EAC-Portable-v4.4.1-x64.exe) | 免安装单文件，可放任意目录运行 | ~212 MB |
+| [Lite 版 Setup](https://github.com/zouyuxuan122/Deepseek-Harness-EAC/releases/download/v4.5-lite/Deepseek.Harness.EAC.v4Lite_4.5.0_x64-setup.exe) | **Lite 精简版**（Tauri 壳，与上方正式版相互独立、可并存）：主程序为 `Deepseek Harness EAC v4Lite.exe`，数据目录 `~/.dsh-v4lite`，SHA256 校验文件随 Release 提供 | ~73 MB |
 
 更多版本见 [Releases 页面](https://github.com/zouyuxuan122/Deepseek-Harness-EAC/releases)。
 
-> 💡 **v5.0 升级说明（老用户必读）**：
-> - 直接运行新版 Setup 即可，安装器会**自动静默卸载旧 Electron 版并接管**
->   （同目录、同快捷方式名）；
+> 💡 **升级说明（老用户必读）**：
+> - 直接下载上方最新安装包覆盖安装即可；
 > - 插件、皮肤、会话与配置全部保留——数据在 `%APPDATA%\Deepseek Harness EAC\`
->   与 `~/.dsh`，升级过程不触碰；
-> - 旧版「便携单 exe」用户请改用便携 zip（解压后双击 `dsh-eac-shell.exe`），
->   应用内自更新此后按「整树交换」进行。
+>   与 `~/.dsh`，升级过程不触碰。
 
 ### Linux（x64）
 
@@ -118,8 +116,7 @@ Linux 打包由社区开发者 [@Luoye-hb](https://github.com/Luoye-hb) 贡献�
   便携版下载整包后自动「目录树交换」并重启，安装版引导新 Setup 静默覆盖。
   失败自动保留当前版本。
 - **官方 agent（dsh）**：自动检测 `@deepseek-ai/dsh` 新版本，同意后安装到数据目录 overlay，原子切换，新版启动失败可一键回退内置版本。
-- 也可直接下载上方最新安装包覆盖安装，数据不会丢失；v5.0 安装器还会自动
-  接管旧 Electron 版（检测到即静默卸载后再安装）。
+- 也可直接下载上方最新安装包覆盖安装，数据不会丢失。
 
 ---
 
