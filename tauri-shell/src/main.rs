@@ -299,7 +299,8 @@ fn open_exit_dialog(app: &tauri::AppHandle) {
     let app2 = app.clone();
     let _ = app.run_on_main_thread(move || {
         let Ok(url) = tauri::Url::parse(&href) else { return };
-        let init = BRIDGE_JS.to_string();
+        // 退出弹窗是轻量确认框，不需要自绘标题栏（菜单/最小化/最大化/关闭）。
+        let init = format!("window.__DSH_NO_CHROME__=1;{}", BRIDGE_JS);
         let _ = tauri::webview::WebviewWindowBuilder::new(&app2, EXIT_DIALOG_LABEL, tauri::WebviewUrl::External(url))
             .title("退出 Deepseek Harness")
             .inner_size(480.0, 380.0)
