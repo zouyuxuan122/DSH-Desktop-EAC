@@ -19,6 +19,7 @@ on:
       - '!docs/**'
       - '!research/**'
       - '**/SKILL.md'
+      - '.agents/skills/deepseek-harness-eac-dev/**'
   pull_request:
     paths:
       - '**'
@@ -26,6 +27,7 @@ on:
       - '!docs/**'
       - '!research/**'
       - '**/SKILL.md'
+      - '.agents/skills/deepseek-harness-eac-dev/**'
   workflow_dispatch:
 
 concurrency:
@@ -50,6 +52,23 @@ jobs:
           node-version: 22
           cache: npm
           cache-dependency-path: dsh-desktop/package-lock.json
+
+      - name: 校验开发者 Skill（PowerShell 7）
+        shell: pwsh
+        working-directory: ${{ github.workspace }}
+        run: |
+          .\.agents\skills\deepseek-harness-eac-dev\scripts\validate-skill.ps1 `
+            -SkillPath .\.agents\skills\deepseek-harness-eac-dev `
+            -RepoPath .
+
+      - name: 校验开发者 Skill（Windows PowerShell 5.1）
+        shell: powershell
+        working-directory: ${{ github.workspace }}
+        run: |
+          .\.agents\skills\deepseek-harness-eac-dev\scripts\validate-skill.ps1 `
+            -SkillPath .\.agents\skills\deepseek-harness-eac-dev `
+            -RepoPath . `
+            -SkipRuntimeMatrix
 
       - name: 缓存 Electron 二进制
         uses: actions/cache@v4

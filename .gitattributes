@@ -1,0 +1,29 @@
+* text=auto
+
+/.gitattributes text eol=lf
+/.github/CODEOWNERS text eol=lf
+
+*.md text eol=lf
+*.yml text eol=lf
+*.yaml text eol=lf
+*.json text eol=lf
+*.psd1 text eol=lf
+*.js text eol=lf
+*.cjs text eol=lf
+*.mjs text eol=lf
+*.ts text eol=lf
+*.rs text eol=lf
+*.toml text eol=lf
+*.ps1 text eol=crlf
+*.nsh text eol=crlf
+
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.webp binary
+*.webm binary
+*.ico binary
+*.zip binary
+*.exe binary
+*.dll binary
