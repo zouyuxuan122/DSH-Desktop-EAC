@@ -73,6 +73,7 @@ description: 面向 Deepseek Harness EAC 源码仓库的全栈开发与维护技
 - 配置和升级迁移必须幂等、有边界、失败时保留旧数据。
 - 未经用户明确授权，不 commit、push、创建 PR、打标签或发布。
 - 团队开发默认通过任务分支和 PR 进入 `main`，不直接推送共享主分支。
+- PR 标题和正文必须使用中文；Conventional Commit 的 `type(scope)`、代码标识符、路径和命令可以保留英文。
 - 不重写共享历史，不强推 `main`，不移动或删除已发布标签。
 
 ## TypeScript 方向

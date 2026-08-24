@@ -174,7 +174,13 @@ git push --force-with-lease
 
 ## Pull Request
 
-PR 标题采用与提交相同的 Conventional Commit 格式。
+PR 标题采用 Conventional Commit 格式，其中说明部分必须使用中文，例如：
+
+```text
+chore(skill): 增加项目开发治理规范
+```
+
+PR 标题和正文必须使用中文。Conventional Commit 的 `type(scope)`、代码标识符、文件路径、命令和必要的原文引用可以保留英文。
 
 PR 描述至少包含：
 
