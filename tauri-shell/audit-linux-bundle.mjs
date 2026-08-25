@@ -16,6 +16,10 @@ function walkFiles(root) {
   return out;
 }
 
+function relativePath(root, file) {
+  return path.relative(root, file).split(path.sep).join('/');
+}
+
 function elfMachine(file) {
   const fd = openSync(file, 'r');
   try {
@@ -58,10 +62,10 @@ export function auditLinuxBundle(root, options = {}) {
   ];
   const errors = [];
   for (const file of [runtime, ...requiredNative]) {
-    if (!existsSync(file)) errors.push(`required Linux payload is missing: ${path.relative(absoluteRoot, file)}`);
+    if (!existsSync(file)) errors.push(`required Linux payload is missing: ${relativePath(absoluteRoot, file)}`);
   }
-  if (existsSync(runtime) && (statSync(runtime).mode & 0o111) === 0) {
-    errors.push(`Linux runtime is not executable: ${path.relative(absoluteRoot, runtime)}`);
+  if (process.platform !== 'win32' && existsSync(runtime) && (statSync(runtime).mode & 0o111) === 0) {
+    errors.push(`Linux runtime is not executable: ${relativePath(absoluteRoot, runtime)}`);
   }
 
   const files = walkFiles(scanRoot);
@@ -70,7 +74,7 @@ export function auditLinuxBundle(root, options = {}) {
     .filter((value, index, all) => value.length > 3 && all.indexOf(value) === index)
     .map((value) => Buffer.from(value));
   for (const file of files) {
-    const rel = path.relative(scanRoot, file);
+    const rel = relativePath(scanRoot, file);
     if (/\.(?:exe|dll)$/i.test(file)) errors.push(`Windows payload in Linux bundle: ${rel}`);
     if (/\.node$/i.test(file) && rel.split(path.sep).some((part) => /(?:^musl[_-]|linuxmusl)/i.test(part))) {
       errors.push(`musl payload in glibc bundle: ${rel}`);
@@ -99,13 +103,13 @@ export function auditLinuxGlibc(root, maximum = '2.35') {
     try {
       output = execFileSync('readelf', ['--version-info', file], { encoding: 'utf8' });
     } catch (err) {
-      throw new Error(`readelf failed for ${path.relative(absoluteRoot, file)}: ${err.message}`);
+      throw new Error(`readelf failed for ${relativePath(absoluteRoot, file)}: ${err.message}`);
     }
     for (const match of output.matchAll(/GLIBC_(\d+)\.(\d+)/g)) {
       const major = Number(match[1]);
       const minor = Number(match[2]);
       if (major > maxMajor || (major === maxMajor && minor > maxMinor)) {
-        violations.push(`${path.relative(absoluteRoot, file)} requires GLIBC_${major}.${minor}`);
+        violations.push(`${relativePath(absoluteRoot, file)} requires GLIBC_${major}.${minor}`);
       }
     }
   }

@@ -69,7 +69,7 @@
         @{
             Name = 'project-scripts'
             Domain = 'updates-packaging'
-            Pattern = '^dsh-desktop/scripts/.*\.(js|cjs|mjs|ps1)$'
+            Pattern = '^dsh-desktop/scripts/.*\.(js|cjs|mjs|ts|ps1)$'
             Reference = 'references/updates-and-packaging.md'
             Level = 'full'
             Tests = @('test/bundled-files.test.ts')

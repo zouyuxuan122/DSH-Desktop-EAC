@@ -115,6 +115,19 @@ Assert-Fixture -Name 'dependency-patch-chain' -Condition (
     @($dependencyPatch.data.unmatchedCodeFiles).Count -eq 0
 ) -Failure ($dependencyPatch.raw)
 
+$projectTypeScript = Invoke-JsonFixture -Script 'classify-change.ps1' -Arguments @(
+    '-RepoPath', $repoRoot,
+    '-FilesJsonBase64',
+    (ConvertTo-FilesJsonBase64 '["dsh-desktop/scripts/fetch-npm.ts"]')
+)
+Assert-Fixture -Name 'project-typescript-script' -Condition (
+    $projectTypeScript.exitCode -eq 0 -and
+    $projectTypeScript.data.status -eq 'ready' -and
+    $projectTypeScript.data.minimumValidation -eq 'full' -and
+    'project-scripts' -in @($projectTypeScript.data.matchedRules) -and
+    @($projectTypeScript.data.unmatchedCodeFiles).Count -eq 0
+) -Failure ($projectTypeScript.raw)
+
 $tauriPackaging = Invoke-JsonFixture -Script 'classify-change.ps1' -Arguments @(
     '-RepoPath', $repoRoot,
     '-FilesJsonBase64',

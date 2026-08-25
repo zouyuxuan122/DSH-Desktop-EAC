@@ -2,8 +2,9 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 
-const root = new URL('../..', import.meta.url).pathname;
+const root = fileURLToPath(new URL('../..', import.meta.url));
 const sidecar = readFileSync(join(root, 'tauri-shell', 'sidecar', 'server.ts'), 'utf8');
 const shell = readFileSync(join(root, 'tauri-shell', 'src', 'main.rs'), 'utf8');
 

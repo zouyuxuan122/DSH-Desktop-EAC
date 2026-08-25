@@ -5,11 +5,15 @@ import { createInterface } from 'node:readline';
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 
-test('sidecar exposes Linux XDG data and desktop capabilities over shell.info', { timeout: 15000 }, async () => {
+test('sidecar exposes Linux XDG data and desktop capabilities over shell.info', {
+  timeout: 15000,
+  skip: process.platform === 'win32' ? 'requires a Linux sidecar process' : false,
+}, async () => {
   const root = mkdtempSync(join(tmpdir(), 'dsh-sidecar-platform-'));
   const child = spawn(process.execPath, ['../tauri-shell/sidecar/server.js'], {
-    cwd: new URL('..', import.meta.url).pathname,
+    cwd: fileURLToPath(new URL('..', import.meta.url)),
     env: {
       ...process.env,
       DSH_HOME: join(root, 'dsh-home'),
