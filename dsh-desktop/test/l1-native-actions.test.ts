@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 
 const root = new URL('../..', import.meta.url).pathname;
@@ -22,4 +22,15 @@ test('Rust L1 owns file-open, external URL and clipboard methods', () => {
   assert.match(shell, /async fn write_clipboard_text\(/);
   assert.match(shell, /"shell\.system-notification"\s*=>/);
   assert.match(shell, /fn show_system_notification\(/);
+});
+
+test('Tauri keeps WebView2Loader as a Windows-only bundle resource', () => {
+  const baseConfigPath = join(root, 'tauri-shell', 'tauri.conf.json');
+  const windowsConfigPath = join(root, 'tauri-shell', 'tauri.windows.conf.json');
+
+  assert.equal(existsSync(windowsConfigPath), true);
+  const baseConfig = readFileSync(baseConfigPath, 'utf8');
+  const windowsConfig = readFileSync(windowsConfigPath, 'utf8');
+  assert.doesNotMatch(baseConfig, /WebView2Loader\.dll/);
+  assert.match(windowsConfig, /staged-resources\/WebView2Loader\.dll/);
 });
