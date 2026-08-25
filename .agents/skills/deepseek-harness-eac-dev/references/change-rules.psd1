@@ -7,7 +7,7 @@
             Pattern = '^tauri-shell/src/.*\.rs$|^tauri-shell/Cargo\.(toml|lock)$'
             Reference = 'references/tauri-shell.md'
             Level = 'runtime'
-            Tests = @('test/bridge-preload-parity.test.mjs')
+            Tests = @('test/bridge-preload-parity.test.ts')
             Smoke = @('cd tauri-shell; cargo run -- --bridge-test', 'node gui-smoke.js')
         },
         @{
@@ -16,7 +16,7 @@
             Pattern = '^tauri-shell/sidecar/|bridge\.(ts|js)$|preload\.js$'
             Reference = 'references/sidecar-and-bridge.md'
             Level = 'runtime'
-            Tests = @('test/bridge-preload-parity.test.mjs')
+            Tests = @('test/bridge-preload-parity.test.ts')
             Smoke = @('cd tauri-shell; cargo run -- --bridge-test')
         },
         @{
@@ -26,14 +26,14 @@
             Reference = 'references/updates-and-packaging.md'
             Level = 'package'
             Tests = @(
-                'test/client-update-platform.test.mjs',
-                'test/client-updater-apply.test.mjs',
-                'test/client-updater-asset.test.mjs',
-                'test/client-updater-hash.test.mjs',
-                'test/client-updater-node-arg.test.mjs',
-                'test/client-updater-nospace.test.mjs',
-                'test/client-updater-proxy.test.mjs',
-                'test/client-updater-resume.test.mjs'
+                'test/client-update-platform.test.ts',
+                'test/client-updater-apply.test.ts',
+                'test/client-updater-asset.test.ts',
+                'test/client-updater-hash.test.ts',
+                'test/client-updater-node-arg.test.ts',
+                'test/client-updater-nospace.test.ts',
+                'test/client-updater-proxy.test.ts',
+                'test/client-updater-resume.test.ts'
             )
             Smoke = @('node update-smoke.js')
         },
@@ -44,9 +44,9 @@
             Reference = 'references/updates-and-packaging.md'
             Level = 'full'
             Tests = @(
-                'test/updater-backup.test.mjs',
-                'test/updater-version.test.mjs',
-                'test/update-mirror-chain.test.mjs'
+                'test/updater-backup.test.ts',
+                'test/updater-version.test.ts',
+                'test/update-mirror-chain.test.ts'
             )
             Smoke = @()
         },
@@ -57,9 +57,9 @@
             Reference = 'references/dependency-patches.md'
             Level = 'package'
             Tests = @(
-                'test/bundle-integrity.test.mjs',
-                'test/bundled-files.test.mjs',
-                'test/verify-dist-fresh.test.mjs'
+                'test/bundle-integrity.test.ts',
+                'test/bundled-files.test.ts',
+                'test/verify-dist-fresh.test.ts'
             )
             Smoke = @(
                 'node tauri-shell/stage-resources.mjs',
@@ -72,7 +72,7 @@
             Pattern = '^dsh-desktop/scripts/.*\.(js|cjs|mjs|ps1)$'
             Reference = 'references/updates-and-packaging.md'
             Level = 'full'
-            Tests = @('test/bundled-files.test.mjs')
+            Tests = @('test/bundled-files.test.ts')
             Smoke = @()
         },
         @{
@@ -82,10 +82,10 @@
             Reference = 'references/dsh-plugins.md'
             Level = 'full'
             Tests = @(
-                'test/skin-chrome-zindex.test.mjs',
-                'test/skin-switch-css.test.mjs',
-                'test/skin-switch-profile.test.mjs',
-                'test/widget-theme.test.mjs'
+                'test/skin-chrome-zindex.test.ts',
+                'test/skin-switch-css.test.ts',
+                'test/skin-switch-profile.test.ts',
+                'test/widget-theme.test.ts'
             )
             Smoke = @('node gui-smoke.js')
         },
@@ -113,7 +113,7 @@
             Pattern = 'plugin-updater\.(js|ts)$'
             Reference = 'references/dsh-plugins.md'
             Level = 'full'
-            Tests = @('test/plugin-updater.test.mjs')
+            Tests = @('test/plugin-updater.test.ts')
             Smoke = @()
         },
         @{
@@ -123,12 +123,12 @@
             Reference = 'references/dsh-plugins.md'
             Level = 'full'
             Tests = @(
-                'test/companion-copy-integrity.test.mjs',
-                'test/companion-plugins-registry.test.mjs',
-                'test/better-sidebar-bundle.test.mjs',
-                'test/patch-row-heal.test.mjs',
-                'test/retired-market-migration.test.mjs',
-                'test/dsh-compact-integration.test.mjs'
+                'test/companion-copy-integrity.test.ts',
+                'test/companion-plugins-registry.test.ts',
+                'test/better-sidebar-bundle.test.ts',
+                'test/patch-row-heal.test.ts',
+                'test/retired-market-migration.test.ts',
+                'test/dsh-compact-integration.test.ts'
             )
             Smoke = @()
         },
@@ -139,10 +139,10 @@
             Reference = 'references/dsh-plugins.md'
             Level = 'full'
             Tests = @(
-                'test/plugin-manager-state.test.mjs',
-                'test/plugin-manager-toggle.test.mjs',
-                'test/onboarding-selection.test.mjs',
-                'test/image-paste-core.test.mjs'
+                'test/plugin-manager-state.test.ts',
+                'test/plugin-manager-toggle.test.ts',
+                'test/onboarding-selection.test.ts',
+                'test/image-paste-core.test.ts'
             )
             Smoke = @()
         },
@@ -153,10 +153,10 @@
             Reference = 'references/dsh-plugins.md'
             Level = 'full'
             Tests = @(
-                'test/companion-plugins-registry.test.mjs',
-                'test/companion-copy-integrity.test.mjs',
-                'test/plugin-slot-registration.test.mjs',
-                'test/onboarding-selection.test.mjs'
+                'test/companion-plugins-registry.test.ts',
+                'test/companion-copy-integrity.test.ts',
+                'test/plugin-slot-registration.test.ts',
+                'test/onboarding-selection.test.ts'
             )
             Smoke = @('node tauri-shell/stage-resources.mjs')
         },
@@ -167,12 +167,12 @@
             Reference = 'references/dsh-plugins.md'
             Level = 'full'
             Tests = @(
-                'test/dsh-compact-engine.test.mjs',
-                'test/dsh-compact-host.test.mjs',
-                'test/dsh-compact-integration.test.mjs',
-                'test/dsh-compact-migration.test.mjs',
-                'test/dsh-compact-output-overflow.test.mjs',
-                'test/dsh-compact-policy.test.mjs'
+                'test/dsh-compact-engine.test.ts',
+                'test/dsh-compact-host.test.ts',
+                'test/dsh-compact-integration.test.ts',
+                'test/dsh-compact-migration.test.ts',
+                'test/dsh-compact-output-overflow.test.ts',
+                'test/dsh-compact-policy.test.ts'
             )
             Smoke = @()
         },
@@ -183,10 +183,10 @@
             Reference = 'references/presets-and-profile.md'
             Level = 'full'
             Tests = @(
-                'test/preset-sync.test.mjs',
-                'test/patch-row-heal.test.mjs',
-                'test/resolve-profile.test.mjs',
-                'test/profile-module-heal.test.mjs'
+                'test/preset-sync.test.ts',
+                'test/patch-row-heal.test.ts',
+                'test/resolve-profile.test.ts',
+                'test/profile-module-heal.test.ts'
             )
             Smoke = @('node boot-smoke.js')
         },
@@ -196,7 +196,7 @@
             Pattern = 'shortcuts\.(ts|js)$|shortcut-maintenance'
             Reference = 'references/presets-and-profile.md'
             Level = 'full'
-            Tests = @('test/shortcut-maintenance.test.mjs')
+            Tests = @('test/shortcut-maintenance.test.ts')
             Smoke = @()
         },
         @{
@@ -206,9 +206,9 @@
             Reference = 'references/product-services.md'
             Level = 'full'
             Tests = @(
-                'test/balance-prices-core.test.mjs',
-                'test/pricing-window.test.mjs',
-                'test/widget-theme.test.mjs'
+                'test/balance-prices-core.test.ts',
+                'test/pricing-window.test.ts',
+                'test/widget-theme.test.ts'
             )
             Smoke = @()
         },
@@ -228,9 +228,9 @@
             Reference = 'references/product-services.md'
             Level = 'full'
             Tests = @(
-                'test/bundle-integrity.test.mjs',
-                'test/bundled-files.test.mjs',
-                'test/image-paste-core.test.mjs'
+                'test/bundle-integrity.test.ts',
+                'test/bundled-files.test.ts',
+                'test/image-paste-core.test.ts'
             )
             Smoke = @()
         },
@@ -241,12 +241,12 @@
             Reference = 'references/product-services.md'
             Level = 'full'
             Tests = @(
-                'test/stable-port.test.mjs',
-                'test/stream-write-after-end.test.mjs',
-                'test/koffi-preflight.test.mjs',
-                'test/error-detail.test.mjs',
-                'test/builtin-collision.test.mjs',
-                'test/bundle-integrity.test.mjs'
+                'test/stable-port.test.ts',
+                'test/stream-write-after-end.test.ts',
+                'test/koffi-preflight.test.ts',
+                'test/error-detail.test.ts',
+                'test/builtin-collision.test.ts',
+                'test/bundle-integrity.test.ts'
             )
             Smoke = @()
         },
@@ -266,17 +266,17 @@
             Reference = 'references/reliability-and-security.md'
             Level = 'full'
             Tests = @(
-                'test/boot-attribution.test.mjs',
-                'test/diagnostics-zip.test.mjs',
-                'test/logger-redact.test.mjs',
-                'test/logger-rotate.test.mjs',
-                'test/plugin-guard.test.mjs',
-                'test/recovery-integration.test.mjs',
-                'test/renderer-recovery.test.mjs',
-                'test/rescue-agent.test.mjs',
-                'test/rescue-auto-repair.test.mjs',
-                'test/rescue-integration.test.mjs',
-                'test/watchdog-behavior.test.mjs'
+                'test/boot-attribution.test.ts',
+                'test/diagnostics-zip.test.ts',
+                'test/logger-redact.test.ts',
+                'test/logger-rotate.test.ts',
+                'test/plugin-guard.test.ts',
+                'test/recovery-integration.test.ts',
+                'test/renderer-recovery.test.ts',
+                'test/rescue-agent.test.ts',
+                'test/rescue-auto-repair.test.ts',
+                'test/rescue-integration.test.ts',
+                'test/watchdog-behavior.test.ts'
             )
             Smoke = @()
         },
@@ -287,12 +287,12 @@
             Reference = 'references/updates-and-packaging.md'
             Level = 'package'
             Tests = @(
-                'test/bundle-integrity.test.mjs',
-                'test/bundled-files.test.mjs',
-                'test/installer-nsh-lengths.test.mjs',
-                'test/installer-nsh-pipe.test.mjs',
-                'test/installer-takeover.test.mjs',
-                'test/verify-dist-fresh.test.mjs'
+                'test/bundle-integrity.test.ts',
+                'test/bundled-files.test.ts',
+                'test/installer-nsh-lengths.test.ts',
+                'test/installer-nsh-pipe.test.ts',
+                'test/installer-takeover.test.ts',
+                'test/verify-dist-fresh.test.ts'
             )
             Smoke = @('node update-smoke.js', 'node upgrade-test-441.js')
         },
@@ -303,10 +303,10 @@
             Reference = 'references/sidecar-and-bridge.md'
             Level = 'runtime'
             Tests = @(
-                'test/bridge-preload-parity.test.mjs',
-                'test/bundled-files.test.mjs',
-                'test/context-menu.test.mjs',
-                'test/desktop-extras.test.mjs'
+                'test/bridge-preload-parity.test.ts',
+                'test/bundled-files.test.ts',
+                'test/context-menu.test.ts',
+                'test/desktop-extras.test.ts'
             )
             Smoke = @()
         },
