@@ -1,5 +1,5 @@
 // VNext Phase 2 回归：RPC 帧协议/双向 RpcPeer、job-fence 围栏（Node spawn +
-// Rust assignToJob 混合围栏，降级 taskkill）、Rust 原生模块导出面。钉住架构
+// Rust assignToJob 混合围栏、Windows taskkill/POSIX 进程组降级）、Rust 原生模块导出面。钉住架构
 // 文档 §5（隔离边界）与 spec F1.1/F2.3（Job Object 围栏 + 长度前缀帧 RPC）。
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
@@ -7,6 +7,7 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import * as os from 'node:os';
 import { PassThrough } from 'node:stream';
+import { spawn } from 'node:child_process';
 import { createRequire } from 'node:module';
 import { fileURLToPath } from 'node:url';
 
@@ -111,7 +112,7 @@ test('job-fence：native 模块可加载且导出面完整（本机为 Windows �
     }
   } else {
     assert.equal(native, null, '非 Windows 应降级');
-    assert.equal(jobFence.fenceMode(), 'taskkill-fallback');
+    assert.equal(jobFence.fenceMode(), 'process-group');
   }
 });
 
@@ -153,6 +154,50 @@ test('job-fence：kill() 强杀长驻进程（树回收）', async () => {
   assert.equal(h.alive(), false, 'kill 后不得存活');
   // 幂等
   await h.kill();
+});
+
+test('job-fence：POSIX process-group 回收孙进程', { skip: process.platform === 'win32' }, async () => {
+  const fence = jobFence.createFence();
+  assert.equal(fence.mode, 'process-group');
+  const script = [
+    'const {spawn}=require("node:child_process")',
+    'const c=spawn(process.execPath,["-e","setInterval(()=>{},1000)"],{stdio:"ignore"})',
+    'process.stdout.write(String(c.pid)+"\\n")',
+    'setInterval(()=>{},1000)',
+  ].join(';');
+  const h = fence.launch(process.execPath, ['-e', script]);
+  const grandchildPid = await new Promise((resolve, reject) => {
+    let buf = '';
+    h.stdout.on('data', (chunk) => {
+      buf += chunk.toString();
+      const pid = Number(buf.trim());
+      if (Number.isInteger(pid) && pid > 0) resolve(pid);
+    });
+    setTimeout(() => reject(new Error('未收到孙进程 pid')), 3000);
+  });
+  try {
+    await h.kill();
+    await new Promise((resolve) => setTimeout(resolve, 150));
+    assert.throws(() => process.kill(grandchildPid, 0), /ESRCH/);
+  } finally {
+    try { process.kill(grandchildPid, 'SIGKILL'); } catch {}
+  }
+});
+
+test('host-bootstrap：owner pipe 关闭时主动退出进程组', { skip: process.platform === 'win32' }, async () => {
+  const child = spawn(process.execPath, [join(root, 'host-bootstrap.js')], {
+    detached: true,
+    stdio: ['pipe', 'ignore', 'pipe'],
+  });
+  let stderr = '';
+  child.stderr.on('data', (chunk) => { stderr += chunk.toString(); });
+  child.stdin.end();
+  const result = await new Promise<{ code: number | null; signal: NodeJS.Signals | null }>((resolve, reject) => {
+    child.once('exit', (code, signal) => resolve({ code, signal }));
+    setTimeout(() => reject(new Error('owner pipe close did not terminate host')), 3000);
+  });
+  assert.ok(result.code === 0 || result.signal === 'SIGTERM');
+  assert.match(stderr, /supervisor owner pipe closed/);
 });
 
 test('job-fence：native sha256Stream 与 node crypto 一致', async () => {

@@ -114,6 +114,15 @@ test('sanitizeSelection：非数组输入退化为仅核心', () => {
   assert.deepEqual([...want].sort(), [...CORE_PLUGIN_IDS].sort());
 });
 
+test('sanitizeSelection：平台 unavailable 插件即使被提交也不会启用', () => {
+  const unavailable = new Set(['computer-user', 'dsh-dafeiyu']);
+  const registry = [...REGISTRY, { id: 'computer-user', name: 'computer-user' }];
+  const want = sanitizeSelection(['computer-user', 'dsh-dafeiyu', 'offpeak'], registry, CORE_PLUGIN_IDS, unavailable);
+  assert.equal(want.has('computer-user'), false);
+  assert.equal(want.has('dsh-dafeiyu'), false);
+  assert.equal(want.has('offpeak'), true);
+});
+
 // ---------------------------------------------------------------------------
 // 操作清单（首次 normalize / 二次差集）
 // ---------------------------------------------------------------------------
@@ -179,6 +188,22 @@ test('buildCatalog：核心/推荐/体积/描述标记正确', () => {
   assert.equal(byId.get('dsh-dafeiyu').registryDisabled, true);
   assert.equal(byId.get('dsh-pet').size, 15728640);
   assert.equal(byId.get('better-sidebar').description, 'desc-of-dsh-better-sidebar');
+});
+
+test('buildCatalog：平台能力状态会阻止 unavailable 插件成为推荐项', () => {
+  const registry = [...REGISTRY, { id: 'computer-user', name: 'computer-user' }, { id: 'picturereader', name: 'picturereader' }];
+  const catalog = buildCatalog(registry, {
+    coreIds: CORE_PLUGIN_IDS,
+    recommendedIds: new Set(['computer-user', 'picturereader']),
+    capabilities: {
+      'computer-user': { status: 'unavailable', reason: 'Wayland/X11 无透明 SendInput 等价实现' },
+      picturereader: { status: 'external-dependency', reason: 'OCR 需要外部后端' },
+    },
+  });
+  const byId = new Map(catalog.map((item) => [item.id, item]));
+  assert.equal(byId.get('computer-user').recommended, false);
+  assert.equal(byId.get('computer-user').capability.status, 'unavailable');
+  assert.equal(byId.get('picturereader').capability.status, 'external-dependency');
 });
 
 // ---------------------------------------------------------------------------

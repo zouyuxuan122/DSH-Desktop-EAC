@@ -7,17 +7,23 @@
 //   staged-resources/dsh-desktop/<Electron 时代的精确文件清单 + 生产 node_modules
 //                              + assets + vendor/node + vendor/npm>
 //
-// 用法：node stage-resources.mjs [--skip-npm]（--skip-npm 复用上次 npm ci 产物）
+// 用法：node stage-resources.mjs [--target=win32|linux] [--skip-npm]
 
-import { cpSync, existsSync, mkdirSync, rmSync, readFileSync, statSync, readdirSync } from 'node:fs';
+import { chmodSync, cpSync, existsSync, mkdirSync, rmSync, readFileSync, statSync, readdirSync } from 'node:fs';
 import { execSync } from 'node:child_process';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { canReuseStagedNodeModules, writeStagedPlatformStamp } from './stage-platform-cache.mjs';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const dd = path.join(root, 'dsh-desktop');
 const staged = path.join(root, 'tauri-shell', 'staged-resources');
 const skipNpm = process.argv.includes('--skip-npm');
+const targetArg = process.argv.find((arg) => arg.startsWith('--target='));
+const targetPlatform = targetArg ? targetArg.slice('--target='.length) : process.platform;
+if (targetPlatform !== 'win32' && targetPlatform !== 'linux') {
+  throw new Error(`[stage] 不支持目标平台: ${targetPlatform}`);
+}
 
 // 人工同步：新增根模块要加进来（Electron 时代的 main.js / preload.js 已废弃，不再打包）。
 const ROOT_FILES = [
@@ -30,7 +36,7 @@ const ROOT_FILES = [
   'host-bootstrap.js',
 ];
 const LIB_DESKTOP = [
-  'file-roots.js', 'proc.js', 'runtime-paths.js', 'profile.js', 'guard-box.js',
+  'file-roots.js', 'proc.js', 'platform.js', 'runtime-paths.js', 'profile.js', 'guard-box.js',
   'runtime-patches.js', 'companion-sync.js', 'plugin-ops.js', 'market.js',
   'shortcuts.js', 'junction-patrol.js', 'client-update.js', 'static-preview.js',
   'boot-server.js',
@@ -62,6 +68,60 @@ function copyRequired(src, dest, label) {
   requireFile(src, label);
   mkdirSync(path.dirname(dest), { recursive: true });
   cpSync(src, dest);
+}
+
+function isLinuxX64Elf(file) {
+  const data = readFileSync(file);
+  return data.length >= 20
+    && data[0] === 0x7f && data.subarray(1, 4).toString('ascii') === 'ELF'
+    && data.readUInt16LE(18) === 62;
+}
+
+function pruneLinuxPayloads(dir) {
+  for (const entry of readdirSync(dir, { withFileTypes: true })) {
+    const file = path.join(dir, entry.name);
+    if (entry.isDirectory()) {
+      pruneLinuxPayloads(file);
+      if (readdirSync(file).length === 0) rmSync(file, { recursive: true, force: true });
+      continue;
+    }
+    if (!entry.isFile()) continue;
+    if (/\.(?:exe|dll)$/i.test(entry.name) || (/\.node$/i.test(entry.name) && !isLinuxX64Elf(file))) {
+      rmSync(file, { force: true });
+    }
+  }
+}
+
+function pruneNonLinuxPrebuilds(dir) {
+  for (const entry of readdirSync(dir, { withFileTypes: true })) {
+    if (!entry.isDirectory()) continue;
+    const child = path.join(dir, entry.name);
+    if (entry.name === 'prebuilds') {
+      for (const platformDir of readdirSync(child, { withFileTypes: true })) {
+        if (platformDir.isDirectory() && platformDir.name !== 'linux-x64') {
+          rmSync(path.join(child, platformDir.name), { recursive: true, force: true });
+        }
+      }
+    } else {
+      pruneNonLinuxPrebuilds(child);
+    }
+  }
+}
+
+function pruneMuslPackages(nodeModules) {
+  for (const entry of readdirSync(nodeModules, { withFileTypes: true })) {
+    if (!entry.isDirectory()) continue;
+    const packageDir = path.join(nodeModules, entry.name);
+    if (/linuxmusl/i.test(entry.name)) {
+      rmSync(packageDir, { recursive: true, force: true });
+    } else if (entry.name.startsWith('@')) {
+      for (const scopedEntry of readdirSync(packageDir, { withFileTypes: true })) {
+        if (scopedEntry.isDirectory() && /linuxmusl/i.test(scopedEntry.name)) {
+          rmSync(path.join(packageDir, scopedEntry.name), { recursive: true, force: true });
+        }
+      }
+    }
+  }
 }
 
 function pluginEntrypoints(pkg) {
@@ -100,11 +160,15 @@ function validatePluginTree(dir, label) {
   }
 }
 
-console.log('[stage] 清理旧装配目录' + (skipNpm ? '（--skip-npm：保留上次的生产 node_modules）' : ''));
+console.log(`[stage] 目标平台 ${targetPlatform}；清理旧装配目录` + (skipNpm ? '（--skip-npm：保留上次的生产 node_modules）' : ''));
 // 注意：node_modules 必须在整树清空前判定并豁免，否则 --skip-npm 永远不生效
 // （先 rm 全目录再 existsSync 检查，检查对象必不存在）。
 const stagedNm = path.join(staged, 'dsh-desktop', 'node_modules');
-const keepStagedNm = skipNpm && existsSync(stagedNm);
+const platformStamp = path.join(staged, '.node-modules-platform');
+const keepStagedNm = canReuseStagedNodeModules(skipNpm, targetPlatform, stagedNm, platformStamp);
+if (skipNpm && existsSync(stagedNm) && !keepStagedNm) {
+  console.log('[stage] 上次 node_modules 的目标平台未知或不匹配，将重新安装');
+}
 rmSync(path.join(staged, 'sidecar'), { recursive: true, force: true });
 if (keepStagedNm) {
   for (const entry of readdirSync(path.join(staged, 'dsh-desktop'))) {
@@ -163,7 +227,15 @@ validatePluginTree(path.join(staged, 'dsh-desktop', 'assets', 'plugins'), 'stagi
 
 console.log('[stage] vendor node/npm 运行时');
 mkdirSync(path.join(staged, 'dsh-desktop', 'vendor'), { recursive: true });
-cpSync(path.join(dd, 'vendor', 'node'), path.join(staged, 'dsh-desktop', 'vendor', 'node'), { recursive: true });
+const runtimeName = targetPlatform === 'win32' ? 'node.exe' : 'node';
+copyRequired(
+  path.join(dd, 'vendor', 'node', runtimeName),
+  path.join(staged, 'dsh-desktop', 'vendor', 'node', runtimeName),
+  `${targetPlatform} Node runtime`,
+);
+if (targetPlatform === 'linux') {
+  chmodSync(path.join(staged, 'dsh-desktop', 'vendor', 'node', runtimeName), 0o755);
+}
 if (existsSync(path.join(dd, 'vendor', 'npm'))) {
   cpSync(path.join(dd, 'vendor', 'npm'), path.join(staged, 'dsh-desktop', 'vendor', 'npm'), { recursive: true });
 }
@@ -173,6 +245,22 @@ const nmDest = path.join(staged, 'dsh-desktop', 'node_modules');
 if (!keepStagedNm) {
   execSync('npm ci --omit=dev --no-audit --no-fund', { cwd: path.join(staged, 'dsh-desktop'), stdio: 'inherit' });
 }
+
+if (targetPlatform === 'linux') {
+  console.log('[stage] 移除 Linux 不可达的 Windows/macOS native payload');
+  rmSync(path.join(staged, 'dsh-desktop', 'assets', 'plugins', 'computer-user'), { recursive: true, force: true });
+  rmSync(path.join(staged, 'dsh-desktop', 'assets', 'plugins', 'dsh-dafeiyu'), { recursive: true, force: true });
+  rmSync(path.join(staged, 'dsh-desktop', 'assets', 'agent-presets'), { recursive: true, force: true });
+  pruneLinuxPayloads(path.join(staged, 'dsh-desktop', 'assets'));
+  pruneNonLinuxPrebuilds(nmDest);
+  pruneLinuxPayloads(nmDest);
+  pruneMuslPackages(nmDest);
+  rmSync(
+    path.join(nmDest, '@koromix', 'koffi-linux-x64', 'musl_x64'),
+    { recursive: true, force: true },
+  );
+}
+writeStagedPlatformStamp(platformStamp, targetPlatform);
 
 // dsh-desktop 锚点补丁（patch-deps：可选升级字段 / picker 退出码 / 设置左栏滚动）——
 // npm ci 从 registry 全新安装会还原成未打补丁的内核文件，必须在 staged 树上重放。
@@ -189,6 +277,25 @@ if (existsSync(vendoredBashFix)) {
   cpSync(vendoredBashFix, path.join(nmDest, '@deepseek-ai', 'dsh-tool-bash', 'lib', 'index.js'));
   console.log('[stage] 已回填 dsh-tool-bash 的 vendored 修复');
 }
+
+// Tauri 的增量资源复制不会删除上一次 bundle 中已经消失的文件。只清理可由
+// staged-resources 完整重建的副本，避免切换目标平台后残留异平台 payload。
+for (const profile of ['debug', 'release']) {
+  rmSync(path.join(root, 'tauri-shell', 'target', profile, 'sidecar'), { recursive: true, force: true });
+  rmSync(path.join(root, 'tauri-shell', 'target', profile, 'dsh-desktop'), { recursive: true, force: true });
+}
+const appImageBundleDir = path.join(root, 'tauri-shell', 'target', 'release', 'bundle', 'appimage');
+if (existsSync(appImageBundleDir)) {
+  for (const entry of readdirSync(appImageBundleDir, { withFileTypes: true })) {
+    if (entry.isDirectory() && entry.name.endsWith('.AppDir')) {
+      rmSync(path.join(appImageBundleDir, entry.name), { recursive: true, force: true });
+    }
+  }
+}
+rmSync(
+  path.join(root, 'tauri-shell', 'target', 'release', 'bundle', 'appimage_deb'),
+  { recursive: true, force: true },
+);
 
 console.log('[stage] 完成：' + staged);
 

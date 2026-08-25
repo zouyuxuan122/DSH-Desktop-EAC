@@ -59,6 +59,7 @@
     "@types/node": "24.13.3",
     "electron": "^43.4.0",
     "electron-builder": "^26.15.3",
-    "typescript": "^7.0.2"
+    "typescript": "^7.0.2",
+    "unzipper": "^0.12.3"
   }
 }

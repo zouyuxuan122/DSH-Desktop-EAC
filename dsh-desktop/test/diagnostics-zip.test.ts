@@ -21,6 +21,7 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const require = createRequire(import.meta.url);
 const logger = require(path.resolve(__dirname, '..', 'logger.js'));
+const unzipper = require('unzipper');
 
 function mkdtmp(suffix) {
   const d = fs.mkdtempSync(path.join(os.tmpdir(), 'dsh-diag-' + suffix + '-'));
@@ -98,8 +99,12 @@ function setupFakeHome() {
 }
 
 // Extract zip via PowerShell + .NET ZipFile (Windows built-in, no extra module)
-function extractZip(zipPath, outDir) {
+async function extractZip(zipPath, outDir) {
   fs.mkdirSync(outDir, { recursive: true });
+  if (process.platform !== 'win32') {
+    await fs.createReadStream(zipPath).pipe(unzipper.Extract({ path: outDir })).promise();
+    return;
+  }
   const ps = [
     `$ErrorActionPreference = 'Stop'`,
     `Add-Type -AssemblyName System.IO.Compression.FileSystem`,
@@ -140,7 +145,7 @@ test('AC-8.2 导出 zip entries 齐全且排除大备份归档', { timeout: 9000
 
   // Extract
   const extractDir = path.join(env.fake, 'extracted');
-  extractZip(zipPath, extractDir);
+  await extractZip(zipPath, extractDir);
 
   const files = fs.readdirSync(extractDir, { recursive: true }).map(String);
   const has = (p) => files.includes(p) || files.some(f => f === p || f.replace(/\\/g, '/').endsWith(p.replace(/\\/g, '/')));

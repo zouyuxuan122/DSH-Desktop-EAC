@@ -357,13 +357,14 @@ test('validateSuggestion：resync 动作合法', () => {
 });
 
 test('validateEditTarget：白名单文件解析且拒绝越权', () => {
-  const ctx = { home: 'H:\\dsh-home', profileDir: 'H:\\dsh-home\\profiles\\web-desktop' };
+  const home = join(tmpdir(), 'dsh-home');
+  const ctx = { home, profileDir: join(home, 'profiles', 'web-desktop') };
   const p1 = validateEditTarget('settings.yaml', ctx);
   assert.equal(p1.ok, true);
-  assert.equal(p1.abs, 'H:\\dsh-home\\settings.yaml');
+  assert.equal(p1.abs, join(ctx.home, 'settings.yaml'));
   const p2 = validateEditTarget('cordis.patch.yml', ctx);
   assert.equal(p2.ok, true);
-  assert.equal(p2.abs, 'H:\\dsh-home\\profiles\\web-desktop\\cordis.patch.yml');
+  assert.equal(p2.abs, join(ctx.profileDir, 'cordis.patch.yml'));
   const p3 = validateEditTarget('pnpm-workspace.yaml', ctx);
   assert.equal(p3.ok, true);
   assert.equal(validateEditTarget('package.json', ctx).ok, true);

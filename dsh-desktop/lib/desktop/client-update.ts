@@ -16,7 +16,7 @@ const updater = require('../../updater') as {
 };
 // client-updater.js 尚未类型化（Wave 3 收编），先以窄签名消费。
 const clientUpdater = require('../../client-updater') as {
-  checkLatest(c: ReturnType<typeof updCtx>, currentVersion: string): Promise<{ isNewer: boolean; version: string; source: string; body?: string }>;
+  checkLatest(c: ReturnType<typeof updCtx>, currentVersion: string, opts?: { platform?: NodeJS.Platform }): Promise<{ isNewer: boolean; version: string; source: string; body?: string; htmlUrl?: string | null }>;
   releaseFallbacks(c: ReturnType<typeof updCtx>, release: unknown): Promise<unknown[]>;
   downloadRelease(c: ReturnType<typeof updCtx>, release: unknown, opts: Record<string, unknown>): Promise<{ filePath: string; size: number }>;
   applyUpdate(c: ReturnType<typeof updCtx>, pending: unknown, opts: Record<string, unknown>): void;
@@ -30,6 +30,8 @@ export interface ClientUpdateCtx {
   getAppVersion(): string;
   getUserDataDir(): string;
   getDshHome(): string | null;
+  getPlatform(): NodeJS.Platform;
+  openExternal(url: string): Promise<boolean>;
   showUpdateWindow(version: string, kind: string): { isDestroyed(): boolean; destroy(): void } | null;
   makeUpdateProgressPusher(win: unknown): { client(r: number, t: number, meta?: unknown): void; agent(s: string): void; force(m: unknown): void };
   prepareQuitForClientUpdate(): Promise<void>;
@@ -56,9 +58,10 @@ export async function runClientUpdateFlow(manual: boolean): Promise<void> {
   }
   const ctx = updCtx();
   const settings = updater.loadSettings(ctx) as SettingsLike;
-  let release: { isNewer: boolean; version: string; source: string; body?: string };
+  const platform = mod.getPlatform();
+  let release: { isNewer: boolean; version: string; source: string; body?: string; htmlUrl?: string | null };
   try {
-    release = await clientUpdater.checkLatest(ctx, mod.getAppVersion());
+    release = await clientUpdater.checkLatest(ctx, mod.getAppVersion(), { platform });
   } catch (err) {
     mod.log('client-update', '检查失败: ' + (err as Error).message);
     if (manual) {
@@ -89,14 +92,17 @@ export async function runClientUpdateFlow(manual: boolean): Promise<void> {
   if (!manual && settings.pendingClientVersion === release.version) return;
   // E2E 自动化钩子（与 DSH_DESKTOP_TEST_FORCE_UNSAFE 同惯例）：自动接受
   // 「立即更新」，让 scripts/e2e-v4.js 能无人值守跑完整更新链路。默认关闭。
-  const autoAcceptUpdate = process.env.DSH_DESKTOP_TEST_AUTO_UPDATE === '1';
+  const externalHandoff = platform !== 'win32';
+  const autoAcceptUpdate = !externalHandoff && process.env.DSH_DESKTOP_TEST_AUTO_UPDATE === '1';
   const notes = release.body ? '\n\n更新说明：\n' + release.body.slice(0, 800) : '';
   const { response } = autoAcceptUpdate ? { response: 0 } : await mod.showBox({
     type: 'info',
     title: '发现新版本客户端',
     message: `Deepseek Harness EAC 封装发布了新版本：v${release.version}`,
-    detail: `当前版本：v${mod.getAppVersion()}\n发布来源：${release.source}${notes}\n\n是否立即更新？下载后自动替换并重启应用。`,
-    buttons: ['立即更新', '跳过此版本', '稍后'],
+    detail: externalHandoff
+      ? `当前版本：v${mod.getAppVersion()}\n发布来源：${release.source}${notes}\n\nLinux 版本由系统包管理器或用户替换安装包，应用不会自行下载或替换程序目录。`
+      : `当前版本：v${mod.getAppVersion()}\n发布来源：${release.source}${notes}\n\n是否立即更新？下载后自动替换并重启应用。`,
+    buttons: externalHandoff ? ['打开下载页面', '跳过此版本', '稍后'] : ['立即更新', '跳过此版本', '稍后'],
     defaultId: 0,
     cancelId: 2,
   });
@@ -111,6 +117,19 @@ export async function runClientUpdateFlow(manual: boolean): Promise<void> {
     settings.pendingClientVersion = release.version;
     updater.saveSettings(ctx, settings);
     mod.log('client-update', '用户稍后处理版本 ' + release.version);
+    return;
+  }
+
+  if (externalHandoff) {
+    if (!release.htmlUrl || !await mod.openExternal(release.htmlUrl)) {
+      await mod.showBox({
+        type: 'warning',
+        title: '无法打开下载页面',
+        message: '请从项目 Release 页面下载适用于 Linux 的安装包。',
+        detail: release.htmlUrl || '发布源没有提供可打开的 Release 页面地址。',
+        buttons: ['确定'],
+      });
+    }
     return;
   }
 
@@ -194,6 +213,7 @@ export async function runClientUpdateFlow(manual: boolean): Promise<void> {
 }
 
 export function offerPendingClientUpdate(): void {
+  if (mod.getPlatform() !== 'win32') return;
   const ctx = updCtx();
   const settings = updater.loadSettings(ctx) as SettingsLike;
   const pending = settings.pendingClientUpdate;

@@ -19,10 +19,12 @@
 //! host-bootstrap 在收到 Supervisor 的 `init` 请求前不加载任何插件代码，
 //! 因此「插件代码在围栏外执行」在效果上不可能发生。
 //!
-//! 非 Windows：全部 Job 调用返回错误（TS 侧 job-fence 优雅降级为 taskkill
-//! 树回收）；本模块设计上仅在 Windows 交付路径启用。
+//! 非 Windows：全部 Job 调用返回错误（TS 侧 job-fence 使用独立 POSIX
+//! process group 回收）；本模块设计上仅在 Windows 交付路径启用。
 
+#[cfg(target_os = "windows")]
 use std::collections::HashMap;
+#[cfg(target_os = "windows")]
 use std::sync::Mutex;
 
 use napi::{Error, Result, Status};
@@ -166,24 +168,30 @@ mod win {
 // ---------------------------------------------------------------------------
 
 /// Job 条目：HANDLE 以 usize 存储（裸指针非 Send，无法放 static Mutex）。
+#[cfg(target_os = "windows")]
 struct JobEntry {
     handle: usize,
 }
 
 /// 全局 Job 句柄表：JS 侧只拿不透明 u32 id，无法直接触摸裸 HANDLE。
+#[cfg(target_os = "windows")]
 static JOBS: Mutex<Option<HashMap<u32, JobEntry>>> = Mutex::new(None);
+#[cfg(target_os = "windows")]
 static NEXT_JOB_ID: Mutex<u32> = Mutex::new(1);
 
+#[cfg(target_os = "windows")]
 fn jobs_poisoned() -> Error {
     Error::new(Status::GenericFailure, "job 句柄表锁中毒")
 }
 
+#[cfg(target_os = "windows")]
 fn jobs_locked(msg: &str) -> Error {
     Error::new(Status::GenericFailure, format!("{msg}: job 句柄表未初始化"))
 }
 
 /// 摘除式取出 Job（不存在 → Err）。操作失败时须 put_back_job 回填，
 /// 杜绝半开句柄与表内漂移。
+#[cfg(target_os = "windows")]
 fn take_job(job_id: u32) -> Result<JobEntry> {
     let mut guard = JOBS.lock().map_err(|_| jobs_poisoned())?;
     let map = guard.as_mut().ok_or_else(|| jobs_locked("take_job"))?;
@@ -192,6 +200,7 @@ fn take_job(job_id: u32) -> Result<JobEntry> {
 }
 
 /// 共享借用（不摘除）。handle 以 usize 传入闭包（全平台可编译）。
+#[cfg(target_os = "windows")]
 fn with_job<T>(job_id: u32, f: impl FnOnce(usize) -> T) -> Result<T> {
     let mut guard = JOBS.lock().map_err(|_| jobs_poisoned())?;
     let map = guard.as_mut().ok_or_else(|| jobs_locked("with_job"))?;
@@ -201,6 +210,7 @@ fn with_job<T>(job_id: u32, f: impl FnOnce(usize) -> T) -> Result<T> {
     }
 }
 
+#[cfg(target_os = "windows")]
 fn put_job(entry: JobEntry) -> Result<u32> {
     let mut next = NEXT_JOB_ID.lock().map_err(|_| jobs_poisoned())?;
     let id = *next;
@@ -210,6 +220,7 @@ fn put_job(entry: JobEntry) -> Result<u32> {
     Ok(id)
 }
 
+#[cfg(target_os = "windows")]
 fn put_back_job(job_id: u32, entry: JobEntry) -> Result<()> {
     let mut guard = JOBS.lock().map_err(|_| jobs_poisoned())?;
     guard
@@ -241,7 +252,7 @@ macro_rules! not_windows {
     () => {
         Err(Error::new(
             Status::GenericFailure,
-            "job fence 仅支持 Windows（此构建降级模式，请用 TS 侧 taskkill 回收）".to_string(),
+            "job fence 仅支持 Windows（此构建使用 TS 侧 POSIX process group 回收）".to_string(),
         ))
     };
 }

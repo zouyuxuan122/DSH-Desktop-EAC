@@ -113,11 +113,12 @@ if (logger && logger._testExports?.deepRedact) {
     assert.equal(s, 'eyJ***');
   });
 
-  // 家目录动态替换（Windows %USERPROFILE%）
-  test('值正则：Windows 家目录替换为 %USERPROFILE%', () => {
+  // 家目录动态替换（Windows %USERPROFILE%，POSIX ~）
+  test('值正则：家目录替换为平台占位符', () => {
     const home = os.homedir(); // e.g. C:\Users\lbn
     const s = deepRedact({ payload: `打开路径 ${home}\\AppData\\Roaming 即可` }).payload;
-    assert.equal(s, `打开路径 %USERPROFILE%\\AppData\\Roaming 即可`, `实际：${s}  |  home=${home}`);
+    const placeholder = process.platform === 'win32' ? '%USERPROFILE%' : '~';
+    assert.equal(s, `打开路径 ${placeholder}\\AppData\\Roaming 即可`, `实际：${s}  |  home=${home}`);
   });
 
   // -------- 异常 getter 放行（plan Critic reservation）：不丢日志 + 单条 warn 记录

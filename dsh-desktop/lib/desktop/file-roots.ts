@@ -46,10 +46,37 @@ export function fileRoots(): string[] {
   return fileRootsCache.roots;
 }
 
-export function isUnderFileRoots(p: string): boolean {
-  const resolved = path.resolve(p);
-  return fileRoots().some((r) => {
-    const rp = path.resolve(r);
-    return resolved === rp || resolved.startsWith(rp + path.sep);
+function realPathWithMissingLeaf(p: string): string {
+  let cursor = path.resolve(p);
+  const missing: string[] = [];
+  for (;;) {
+    try {
+      return path.resolve(fs.realpathSync.native(cursor), ...missing);
+    } catch {
+      const parent = path.dirname(cursor);
+      if (parent === cursor) return path.resolve(p);
+      missing.unshift(path.basename(cursor));
+      cursor = parent;
+    }
+  }
+}
+
+export function isPathWithinRoots(
+  candidate: string,
+  roots: string[],
+  platform: NodeJS.Platform = process.platform,
+): boolean {
+  const normalize = (value: string): string => {
+    const resolved = realPathWithMissingLeaf(value);
+    return platform === 'win32' ? resolved.toLocaleLowerCase('en-US') : resolved;
+  };
+  const resolved = normalize(candidate);
+  return roots.some((root) => {
+    const normalizedRoot = normalize(root);
+    return resolved === normalizedRoot || resolved.startsWith(normalizedRoot + path.sep);
   });
+}
+
+export function isUnderFileRoots(p: string): boolean {
+  return isPathWithinRoots(p, fileRoots());
 }

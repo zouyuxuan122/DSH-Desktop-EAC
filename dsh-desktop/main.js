@@ -128,6 +128,7 @@ companionSyncMod.init({
   applyLegacySkinChoice: () => applyLegacySkinChoice(),
   showMainWindow: () => showMainWindow(),
   notify: shellNotify,
+  platform: process.platform,
 });
 pluginOpsMod.init({ log });
 marketMod.init({ log, getDshHome: () => dshHome, getUserDataDir: () => userDataDir });
@@ -168,6 +169,11 @@ junctionPatrolMod.init({
 clientUpdateMod.init({
   log,
   showBox: (opts) => showBox(opts),
+  getPlatform: () => process.platform,
+  openExternal: async (url) => {
+    try { await shell.openExternal(url); return true; }
+    catch { return false; }
+  },
   isQuitting: () => quitting,
   getAppVersion: () => APP_VERSION,
   getUserDataDir: () => userDataDir,

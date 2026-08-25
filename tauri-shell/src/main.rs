@@ -1,6 +1,6 @@
 // release 构建隐藏控制台：release 的 exe 为 windows 子系统，双击启动不再弹出
 // 标题为 exe 路径的命令行窗口（debug 保留控制台便于看 eprintln 诊断）。
-#![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
+#![cfg_attr(all(not(debug_assertions), target_os = "windows"), windows_subsystem = "windows")]
 
 // Deepseek Harness EAC — Tauri ShellHost（ADR 0002 L1；P2 GUI 主链路）
 //
@@ -64,8 +64,21 @@ fn resource_root() -> std::path::PathBuf {
             }
         }
     }
-    std::path::PathBuf::from(concat!(env!("CARGO_MANIFEST_DIR"), "/..")).canonicalize()
-        .unwrap_or_else(|_| std::path::PathBuf::from(concat!(env!("CARGO_MANIFEST_DIR"), "/..")))
+    // 开发态不把 CARGO_MANIFEST_DIR 编进 release 二进制，避免成品泄露构建机
+    // 绝对路径。从 cwd 或 target/{debug,release} 下的可执行文件向上探测仓库根。
+    let mut candidates = Vec::new();
+    if let Ok(cwd) = std::env::current_dir() {
+        candidates.extend(cwd.ancestors().map(|path| path.to_path_buf()));
+    }
+    if let Ok(exe) = std::env::current_exe() {
+        if let Some(parent) = exe.parent() {
+            candidates.extend(parent.ancestors().map(|path| path.to_path_buf()));
+        }
+    }
+    candidates
+        .into_iter()
+        .find(|path| path.join("dsh-desktop").is_dir() && path.join("tauri-shell").is_dir())
+        .unwrap_or_else(|| std::path::PathBuf::from("."))
 }
 
 fn sidecar_script() -> std::path::PathBuf {
@@ -111,11 +124,12 @@ fn resolve_node() -> String {
             return p;
         }
     }
-    let vendored = format!("{}/vendor/node/node.exe", dsh_desktop_dir());
+    let executable = if cfg!(target_os = "windows") { "node.exe" } else { "node" };
+    let vendored = format!("{}/vendor/node/{}", dsh_desktop_dir(), executable);
     if std::path::Path::new(&vendored).exists() {
         return vendored;
     }
-    "node.exe".to_string()
+    executable.to_string()
 }
 
 /// L1 ↔ L2 sidecar 异步客户端：行分隔 JSON-RPC over stdio。
@@ -431,12 +445,16 @@ async fn handle_shell_method(
                 }
                 "open-browser" => {
                     if let Some(url) = current_web_url() {
-                        open_external(&url);
+                        if let Err(error) = open_external(&url).await {
+                            eprintln!("[shell] open browser failed: {}", error);
+                        }
                     }
                     Ok(Some(reply(Value::Null)))
                 }
                 "feedback" => {
-                    open_external("https://github.com/zouyuxuan122/Deepseek-Harness-EAC/issues");
+                    if let Err(error) = open_external("https://github.com/zouyuxuan122/Deepseek-Harness-EAC/issues").await {
+                        eprintln!("[shell] open feedback failed: {}", error);
+                    }
                     Ok(Some(reply(Value::Null)))
                 }
                 _ => Err(()), // 其余菜单动作（更新/开关/导出/关于…）→ sidecar
@@ -444,11 +462,45 @@ async fn handle_shell_method(
         }
         "shell.open-external" => {
             let url = params.get("url").and_then(|v| v.as_str()).unwrap_or("");
-            let ok = is_safe_external_url(url);
-            if ok {
-                open_external(url);
+            let result = open_external(url).await;
+            Ok(Some(reply(match result {
+                Ok(()) => serde_json::json!({"ok":true}),
+                Err(error) => serde_json::json!({"ok":false,"error":error}),
+            })))
+        }
+        "clipboard.write-text" => {
+            let text = params.get("text").and_then(|v| v.as_str()).unwrap_or("");
+            if text.is_empty() || text.len() > 2048 {
+                return Ok(Some(reply(serde_json::json!({"ok":false,"error":"invalid clipboard text"}))));
             }
-            Ok(Some(reply(serde_json::json!({"ok":ok}))))
+            let result = write_clipboard_text(text).await;
+            Ok(Some(reply(match result {
+                Ok(()) => serde_json::json!({"ok":true}),
+                Err(error) => serde_json::json!({"ok":false,"error":error}),
+            })))
+        }
+        "files.open" => {
+            let state = BRIDGE.get_or_init(|| BridgeState {
+                sidecar: Arc::new(AMutex::new(None)),
+            });
+            let sidecar = state.sidecar.lock().await.clone();
+            let Some(sidecar) = sidecar else {
+                return Ok(Some(reply(serde_json::json!({"ok":false,"error":"sidecar not running"}))));
+            };
+            let authorized = match sidecar.call("files.authorize-open", params.clone()).await {
+                Ok(value) => value,
+                Err(error) => return Ok(Some(reply(serde_json::json!({"ok":false,"error":error})))),
+            };
+            if authorized.get("ok").and_then(|v| v.as_bool()) != Some(true) {
+                return Ok(Some(reply(authorized)));
+            }
+            let Some(target) = authorized.get("path").and_then(|v| v.as_str()) else {
+                return Ok(Some(reply(serde_json::json!({"ok":false,"error":"authorized path missing"}))));
+            };
+            Ok(Some(reply(match open_native_target(target).await {
+                Ok(()) => serde_json::json!({"ok":true}),
+                Err(error) => serde_json::json!({"ok":false,"error":error}),
+            })))
         }
         "log.renderer-heartbeat" => Ok(None), // P3 恢复状态机消费；P2 吞掉不转发
         "log.page-error" => {
@@ -481,18 +533,173 @@ async fn handle_shell_method(
 
 /// 仅放行 http(s)（对齐 Electron 侧 will-navigate/openExternal 的外链纪律）。
 fn is_safe_external_url(url: &str) -> bool {
-    url.starts_with("http://") || url.starts_with("https://")
+    !url.contains('"')
+        && tauri::Url::parse(url)
+            .map(|parsed| matches!(parsed.scheme(), "http" | "https"))
+            .unwrap_or(false)
 }
 
-fn open_external(url: &str) {
+async fn open_external(url: &str) -> Result<(), String> {
     if !is_safe_external_url(url) {
-        return;
+        return Err("unsafe external URL".into());
     }
-    use std::os::windows::process::CommandExt;
-    let _ = std::process::Command::new("cmd")
-        .args(["/c", "start", "", url])
-        .creation_flags(0x0800_0000) // CREATE_NO_WINDOW
-        .spawn();
+    open_native_target(url).await
+}
+
+async fn run_bounded_command(mut command: Command, label: &str) -> Result<(), String> {
+    command
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .kill_on_drop(true);
+    let mut child = command.spawn().map_err(|error| format!("{} spawn failed: {}", label, error))?;
+    match tokio::time::timeout(std::time::Duration::from_secs(10), child.wait()).await {
+        Ok(Ok(status)) if status.success() => Ok(()),
+        Ok(Ok(status)) => Err(format!("{} exited with {}", label, status)),
+        Ok(Err(error)) => Err(format!("{} wait failed: {}", label, error)),
+        Err(_) => {
+            let _ = child.kill().await;
+            Err(format!("{} timed out after 10s", label))
+        }
+    }
+}
+
+async fn open_native_target(target: &str) -> Result<(), String> {
+    #[cfg(target_os = "windows")]
+    {
+        use std::os::windows::process::CommandExt;
+        let mut command = Command::new("cmd");
+        // start 是 cmd 内建命令；目标由 URL 校验或 L2 文件授权产生，Windows
+        // 文件名本身也不允许双引号。整段置于引号内，避免 URL 查询串的 `&`
+        // 被 cmd 当作命令分隔符。
+        let command_line = format!("start \"\" \"{}\"", target);
+        command.args(["/d", "/s", "/c", &command_line]);
+        command.as_std_mut().creation_flags(0x0800_0000); // CREATE_NO_WINDOW
+        return run_bounded_command(command, "cmd start").await;
+    }
+    #[cfg(target_os = "linux")]
+    {
+        let mut command = Command::new("xdg-open");
+        command.arg(target);
+        return run_bounded_command(command, "xdg-open").await;
+    }
+    #[cfg(not(any(target_os = "windows", target_os = "linux")))]
+    {
+        let _ = target;
+        Err("native open is unsupported on this platform".into())
+    }
+}
+
+async fn show_system_notification(title: &str, body: &str) -> Result<(), String> {
+    #[cfg(target_os = "windows")]
+    {
+        use std::os::windows::process::CommandExt;
+        let script = r#"
+$ErrorActionPreference='Stop'
+[Windows.UI.Notifications.ToastNotificationManager, Windows.UI.Notifications, ContentType = WindowsRuntime] > $null
+[Windows.Data.Xml.Dom.XmlDocument, Windows.Data.Xml.Dom.XmlDocument, ContentType = WindowsRuntime] > $null
+$xml = New-Object Windows.Data.Xml.Dom.XmlDocument
+$safeTitle = [Security.SecurityElement]::Escape($env:DSH_NOTIFY_TITLE)
+$safeBody = [Security.SecurityElement]::Escape($env:DSH_NOTIFY_BODY)
+$xml.LoadXml("<toast><visual><binding template='ToastGeneric'><text>$safeTitle</text><text>$safeBody</text></binding></visual></toast>")
+$toast = [Windows.UI.Notifications.ToastNotification]::new($xml)
+[Windows.UI.Notifications.ToastNotificationManager]::CreateToastNotifier('Deepseek Harness EAC').Show($toast)
+"#;
+        let mut command = Command::new("powershell");
+        command
+            .args(["-NoProfile", "-Command", script])
+            .env("DSH_NOTIFY_TITLE", title)
+            .env("DSH_NOTIFY_BODY", body);
+        command.as_std_mut().creation_flags(0x0800_0000);
+        return run_bounded_command(command, "PowerShell toast").await;
+    }
+    #[cfg(target_os = "linux")]
+    {
+        let mut command = Command::new("notify-send");
+        command.args(["--app-name", "Deepseek Harness EAC", title, body]);
+        return run_bounded_command(command, "notify-send").await;
+    }
+    #[cfg(not(any(target_os = "windows", target_os = "linux")))]
+    {
+        let _ = (title, body);
+        Err("system notification is unsupported on this platform".into())
+    }
+}
+
+async fn run_clipboard_command(program: &str, args: &[&str], text: &str) -> Result<(), String> {
+    let mut command = Command::new(program);
+    command
+        .args(args)
+        .stdin(Stdio::piped())
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .kill_on_drop(true);
+    #[cfg(target_os = "windows")]
+    {
+        use std::os::windows::process::CommandExt;
+        command.as_std_mut().creation_flags(0x0800_0000);
+    }
+    let mut child = command.spawn().map_err(|error| format!("{} spawn failed: {}", program, error))?;
+    if let Some(mut stdin) = child.stdin.take() {
+        stdin
+            .write_all(text.as_bytes())
+            .await
+            .map_err(|error| format!("{} stdin failed: {}", program, error))?;
+    }
+    match tokio::time::timeout(std::time::Duration::from_secs(5), child.wait()).await {
+        Ok(Ok(status)) if status.success() => Ok(()),
+        Ok(Ok(status)) => Err(format!("{} exited with {}", program, status)),
+        Ok(Err(error)) => Err(format!("{} wait failed: {}", program, error)),
+        Err(_) => {
+            let _ = child.kill().await;
+            Err(format!("{} timed out after 5s", program))
+        }
+    }
+}
+
+async fn write_clipboard_text(text: &str) -> Result<(), String> {
+    #[cfg(target_os = "windows")]
+    {
+        let mut last_error = String::new();
+        for attempt in 0..3 {
+            match run_clipboard_command(
+                "powershell",
+                &["-NoProfile", "-Command", "$input | Set-Clipboard"],
+                text,
+            ).await {
+                Ok(()) => return Ok(()),
+                Err(error) => last_error = error,
+            }
+            if attempt < 2 {
+                tokio::time::sleep(std::time::Duration::from_millis(300)).await;
+            }
+        }
+        return Err(last_error);
+    }
+    #[cfg(target_os = "linux")]
+    {
+        let mut backends: Vec<(&str, &[&str])> = Vec::new();
+        if std::env::var_os("WAYLAND_DISPLAY").is_some() {
+            backends.push(("wl-copy", &[]));
+        }
+        backends.push(("xclip", &["-selection", "clipboard"]));
+        backends.push(("xsel", &["--clipboard", "--input"]));
+        let mut failures = Vec::new();
+        for (program, args) in backends {
+            match run_clipboard_command(program, args, text).await {
+                Ok(()) => return Ok(()),
+                Err(error) => failures.push(error),
+            }
+        }
+        return Err(format!(
+            "Linux clipboard requires wl-copy, xclip, or xsel ({})",
+            failures.join("; ")
+        ));
+    }
+    #[cfg(not(any(target_os = "windows", target_os = "linux")))]
+    {
+        let _ = text;
+        Err("clipboard is unsupported on this platform".into())
+    }
 }
 
 /// 窗口标签字符集（tauri 限制：字母数字与 - / : _）。
@@ -1133,6 +1340,24 @@ fn handle_sidecar_notify(app: &tauri::AppHandle, v: &Value) {
                 app2.exit(0);
             });
         }
+        "shell.open-external" => {
+            let url = params.get("url").and_then(|value| value.as_str()).unwrap_or("");
+            let url = url.to_string();
+            tauri::async_runtime::spawn(async move {
+                if let Err(error) = open_external(&url).await {
+                    eprintln!("[shell] sidecar open external failed: {}", error);
+                }
+            });
+        }
+        "shell.system-notification" => {
+            let title = params.get("title").and_then(|value| value.as_str()).unwrap_or("Deepseek Harness EAC").to_string();
+            let body = params.get("body").and_then(|value| value.as_str()).unwrap_or("").to_string();
+            tauri::async_runtime::spawn(async move {
+                if let Err(error) = show_system_notification(&title, &body).await {
+                    eprintln!("[shell] system notification failed: {}", error);
+                }
+            });
+        }
         _ => {}
     }
 }
@@ -1329,7 +1554,11 @@ fn main() {
                     });
                 }
                 "feedback" => {
-                    open_external("https://github.com/zouyuxuan122/Deepseek-Harness-EAC/issues");
+                    tauri::async_runtime::spawn(async move {
+                        if let Err(error) = open_external("https://github.com/zouyuxuan122/Deepseek-Harness-EAC/issues").await {
+                            eprintln!("[tray] open feedback failed: {}", error);
+                        }
+                    });
                 }
                 "recovery" => {
                     open_recovery_center_window(app);

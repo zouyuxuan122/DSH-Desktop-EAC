@@ -19,11 +19,12 @@ import cp = require('node:child_process');
 import type { ChildProcess } from 'node:child_process';
 
 // 兄弟 / 根模块窄签名消费（Wave 3 收编完成后改为具名类型化导入）。
-const { killTree, killTreeAndWait, waitForProcExit, childEnv } = require('./proc') as {
+const { killTree, killTreeAndWait, waitForProcExit, childEnv, childProcessSpawnOptions } = require('./proc') as {
   killTree(p: ChildProcess | null | undefined): void;
   killTreeAndWait(p: ChildProcess | null | undefined, o?: { graceMs?: number; hardMs?: number }): Promise<void>;
   waitForProcExit(p: ChildProcess | null | undefined, timeoutMs: number): Promise<void>;
   childEnv(): NodeJS.ProcessEnv;
+  childProcessSpawnOptions(): { detached: boolean };
 };
 const { restrictedPortOf, chooseStableWebPort } = require('../../stable-port') as {
   restrictedPortOf(url: string): number;
@@ -102,6 +103,7 @@ async function startServer(unsafePortRetries = 4, overlays: string[] = []): Prom
       nodeBin,
       ['--use-system-ca', bin, '--profile', ctx.getDesktopProfile(), '--host', '127.0.0.1', '--no-open', '--port', String(webPort), ...patchArgs],
       {
+        ...childProcessSpawnOptions(),
         cwd: ctx.getUserDataDir(),
         env: childEnv(),
         windowsHide: true,

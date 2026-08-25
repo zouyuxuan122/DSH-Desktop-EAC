@@ -274,7 +274,7 @@
         @{
             Name = 'packaging'
             Domain = 'updates-packaging'
-            Pattern = 'stage-resources|make-portable|tauri\.conf\.json|installer|electron-builder|bundle-integrity|verify-dist'
+            Pattern = 'stage-resources|stage-platform-cache|audit-linux-bundle|make-portable|tauri(?:\.[^.]+)?\.conf\.json|^tauri-shell/gen/schemas/.*\.json$|installer|electron-builder|bundle-integrity|verify-dist'
             Reference = 'references/updates-and-packaging.md'
             Level = 'package'
             Tests = @(

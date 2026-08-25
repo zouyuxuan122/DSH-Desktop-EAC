@@ -31,10 +31,6 @@ const LIB = (m: string): string => path.join(DSH_DESKTOP_ROOT, 'lib', 'desktop',
 function say(s: string): void { process.stderr.write('[sidecar] ' + s + '\n'); }
 
 // ---- 宿主语义（对齐 Electron main.js 的注入值） --------------------------
-const APP_NAME = 'Deepseek Harness EAC';
-const appDataDir = path.join(os.homedir(), 'AppData', 'Roaming');
-const userDataDir = path.join(appDataDir, APP_NAME);
-const dshHome = process.env.DSH_HOME || path.join(os.homedir(), '.dsh');
 const log = (tag: string, msg: string): void => say('[' + tag + '] ' + msg);
 
 let pkgVersion = '0.0.0';
@@ -46,6 +42,17 @@ type Mod = { init: (d: unknown) => void } & Record<string, unknown>;
 const mount = (name: string): Mod => require(LIB(name)) as Mod;
 
 const procMod = mount('proc');
+const platformMod = mount('platform') as Mod & {
+  createDesktopPlatform(): {
+    userDataDir(): string;
+    capabilities(): Record<string, unknown>;
+  };
+  pluginCapabilityDetails(platform?: NodeJS.Platform): Record<string, { status: string; reason: string }>;
+};
+const desktopPlatform = platformMod.createDesktopPlatform();
+const userDataDir = desktopPlatform.userDataDir();
+const appDataDir = path.dirname(userDataDir);
+const dshHome = process.env.DSH_HOME || path.join(os.homedir(), '.dsh');
 const pathsMod = mount('runtime-paths');
 const profileMod = mount('profile');
 const guardBoxMod = mount('guard-box');
@@ -60,7 +67,7 @@ const previewMod = mount('static-preview');
 const fileRootsMod = mount('file-roots');
 const bootMod = mount('boot-server');
 
-const MOUNTED = ['proc', 'runtime-paths', 'profile', 'guard-box', 'runtime-patches', 'companion-sync', 'plugin-ops', 'market', 'shortcuts', 'junction-patrol', 'client-update', 'static-preview', 'file-roots', 'boot-server'];
+const MOUNTED = ['proc', 'platform', 'runtime-paths', 'profile', 'guard-box', 'runtime-patches', 'companion-sync', 'plugin-ops', 'market', 'shortcuts', 'junction-patrol', 'client-update', 'static-preview', 'file-roots', 'boot-server'];
 
 // ---- vnext 隔离体系（vnext-absorb Phase 2）：supervisor / extension-host / 恢复中心 ----
 // 这些模块位于 lib/{state,log,supervisor,extension-host,recovery-center}，
@@ -98,7 +105,10 @@ const showBoxFallback = async (opts: Record<string, unknown>) => {
   say('[dialog] ' + String((opts && opts.title) || '') + ': ' + String((opts && opts.message) || ''));
   return { response: 0 };
 };
-const notifyFallback = (n: { title: string; body: string }) => say('[notify] ' + n.title + ': ' + n.body);
+const notifyFallback = (n: { title: string; body: string }): void => {
+  say('[notify] ' + n.title + ': ' + n.body);
+  notify('shell.system-notification', { title: n.title, body: n.body });
+};
 // .lnk 驱动（硬门槛④）：PowerShell WScript.Shell COM 实现，接口对齐 Electron
 // shell.readShortcutLink / writeShortcutLink（同步、失败抛错）。路径经环境
 // 变量传入，规避引号/空格/中文转义；读取返回的 IconLocation 剥掉 ',N' 索引。
@@ -161,7 +171,7 @@ try {
 }
 
 procMod.init({ log, getDshHome: () => dshHome, getDesktopProfile: desktopProfileFn });
-pathsMod.init({ log, getUserDataDir: () => userDataDir, isPackaged: () => false, resourcesPath: () => '' });
+pathsMod.init({ log, getUserDataDir: () => userDataDir, isPackaged: () => false, resourcesPath: () => '', platform: process.platform });
 profileMod.init({ log, getDshHome: () => dshHome });
 guardBoxMod.init({
   log,
@@ -192,6 +202,11 @@ let updateWindowOpen = false;
 clientUpdateMod.init({
   log,
   showBox: showBoxFallback,
+  getPlatform: () => process.platform,
+  openExternal: async (url: string) => {
+    notify('shell.open-external', { url });
+    return true;
+  },
   isQuitting: () => quitting,
   getAppVersion: () => pkgVersion,
   getUserDataDir: () => userDataDir,
@@ -239,6 +254,7 @@ companionSyncMod.init({
   applyLegacySkinChoice: () => (shortcutsMod.applyLegacySkinChoice as () => void)(),
   showMainWindow: () => say('showMainWindow (host-delegated)'),
   notify: notifyFallback,
+  platform: process.platform,
 });
 
 // ---- boot-server（P2：dsh web 服务编排） --------------------------------
@@ -358,6 +374,8 @@ const methods: Record<string, (p: RpcParams) => unknown> = {
     platform: process.platform,
     pid: process.pid,
     dshHome,
+    userDataDir,
+    capabilities: desktopPlatform.capabilities(),
     version: pkgVersion,
     modules: MOUNTED,
     balance: balanceCache,
@@ -460,6 +478,7 @@ const methods: Record<string, (p: RpcParams) => unknown> = {
       closeToTray: s.closeToTray !== false,
       exitAction,
       shortcutPolicy: s.shortcutPolicy === 'never' ? 'never' : 'auto',
+      capabilities: desktopPlatform.capabilities(),
       iconDataUri,
       repoUrls: { github: repos.github ? 'https://github.com/' + repos.github : '', gitee: repos.gitee ? 'https://gitee.com/' + repos.gitee : '' },
       staticPort: 0,
@@ -529,32 +548,6 @@ function startBalanceLoop(): void {
   void refreshBalance().catch(() => {});
   balanceTimer = setInterval(() => { void refreshBalance().catch(() => {}); }, 15 * 60 * 1000);
   if (balanceTimer.unref) balanceTimer.unref();
-}
-
-// 剪贴板（PowerShell Set-Clipboard；Electron clipboard 的无 GUI 等价物）。
-// 剪贴板是全系统互斥句柄：被其他进程占开时 Set-Clipboard 报 ExternalException
-// （打开剪贴板失败），通常亚秒级释放——有界重试把瞬时锁变成成功。
-function writeClipboardText(text: string, attempts = 3): Promise<boolean> {
-  return new Promise((resolve) => {
-    const ps = cp.spawn('powershell', ['-NoProfile', '-Command', '$input | Set-Clipboard'], { windowsHide: true, stdio: ['pipe', 'ignore', 'ignore'] });
-    ps.on('error', () => resolve(false));
-    ps.on('exit', (code) => {
-      if (code === 0) { resolve(true); return; }
-      if (attempts > 1) {
-        setTimeout(() => { void writeClipboardText(text, attempts - 1).then(resolve); }, 300);
-        return;
-      }
-      resolve(false);
-    });
-    ps.stdin.end(text, 'utf8');
-  });
-}
-
-// 系统默认程序打开文件（= shell.openPath；explorer 解析关联）。
-function openPathNative(p: string): Promise<string> {
-  return new Promise((resolve) => {
-    cp.exec(`start "" "${p.replace(/"/g, '')}"`, { windowsHide: true }, (err) => resolve(err ? String(err.message) : ''));
-  });
 }
 
 const batch: Record<string, (p: RpcParams) => unknown> = {
@@ -655,11 +648,6 @@ const batch: Record<string, (p: RpcParams) => unknown> = {
       return { ok: true, models: [] };
     }
   },
-  'clipboard.write-text': async (p): Promise<Record<string, unknown>> => {
-    const text = (p && p.text) as string;
-    if (typeof text !== 'string' || !text || text.length > 2048) return { ok: false };
-    return { ok: await writeClipboardText(text) };
-  },
   'image-paste.save': (p): Record<string, unknown> => {
     try {
       return (pluginOpsMod.imagePasteSave as (d: string, n: string) => Record<string, unknown>)(String((p && p.dataUrl) || ''), String((p && p.name) || '粘贴图片'));
@@ -717,7 +705,7 @@ const batch: Record<string, (p: RpcParams) => unknown> = {
     log('file-revert', JSON.stringify(results.slice(0, 20)));
     return { results };
   },
-  'files.open': async (p): Promise<Record<string, unknown>> => {
+  'files.authorize-open': (p): Record<string, unknown> => {
     const fp = (p && p.path) as string;
     if (typeof fp !== 'string' || !path.isAbsolute(fp)) return { ok: false, error: 'path must be absolute' };
     const skillsRoots = [
@@ -734,14 +722,8 @@ const batch: Record<string, (p: RpcParams) => unknown> = {
     if ((fileRootsMod.DANGEROUS_EXT as RegExp).test(fp)) {
       return { ok: false, error: 'executable files are not openable from the file view' };
     }
-    try {
-      if (!fs.existsSync(fp)) return { ok: false, error: 'file not found' };
-      const msg = await openPathNative(fp);
-      if (msg) return { ok: false, error: msg };
-      return { ok: true };
-    } catch (e) {
-      return { ok: false, error: String(((e as Error).message) || e) };
-    }
+    if (!fs.existsSync(fp)) return { ok: false, error: 'file not found' };
+    return { ok: true, path: fp };
   },
   'plugins.list': (): Record<string, unknown> => {
     return { list: (pluginOpsMod.pluginManagerCollect as () => unknown[])() };
@@ -992,7 +974,14 @@ async function runAgentUpdateFlow(manual: boolean): Promise<void> {
 
 // ---- 内置插件选择向导（wizard.open / onboard.*，对齐 main.js ipc 面） -------
 // 页面 = 壳层 /wizard（serve assets/onboarding.html + 桥注入），RPC 走本表。
-const companionPlugins = () => (companionSyncMod.COMPANION_PLUGINS as unknown[]) || [];
+const companionPlugins = () => {
+  const select = companionSyncMod.companionPluginsForPlatform as ((platform: NodeJS.Platform) => unknown[]) | undefined;
+  return select ? select(process.platform) : (companionSyncMod.COMPANION_PLUGINS as unknown[]) || [];
+};
+const onboardingCapabilities = platformMod.pluginCapabilityDetails(process.platform);
+const unavailablePluginIds = new Set(Object.entries(onboardingCapabilities)
+  .filter(([, capability]) => capability.status === 'unavailable')
+  .map(([id]) => id));
 function pluginDirSize(dirName: string): number {
   let total = 0;
   try {
@@ -1013,6 +1002,7 @@ function buildOnboardingCatalog(): unknown[] {
     recommendedIds: onboardingLogic.RECOMMENDED_PLUGIN_IDS,
     describe: (name: string) => ((pluginOpsMod.pluginManagerPackageDescription as (n: string) => string)(name)),
     dirSize: (dirName: string) => pluginDirSize(dirName),
+    capabilities: onboardingCapabilities,
   });
 }
 function pluginCurrentState(): Record<string, boolean> | null {
@@ -1037,7 +1027,7 @@ Object.assign(methods, {
     const ids = p && Array.isArray(p.ids) ? p.ids : [];
     try {
       (profileMod.ensureDesktopProfileInit as () => void)();
-      const want = (onboardingLogic.sanitizeSelection as (i: unknown, p: unknown[], c: string[]) => Set<string>)(ids, companionPlugins(), onboardingLogic.CORE_PLUGIN_IDS);
+      const want = (onboardingLogic.sanitizeSelection as (i: unknown, p: unknown[], c: string[], u: Set<string>) => Set<string>)(ids, companionPlugins(), onboardingLogic.CORE_PLUGIN_IDS, unavailablePluginIds);
       const current = wizardMode === 'rerun' ? pluginCurrentState() : null;
       const ops = (onboardingLogic.buildSelectionOps as unknown as (
         p: unknown[], c: string[], w: Set<string>, cur: Record<string, boolean> | null,

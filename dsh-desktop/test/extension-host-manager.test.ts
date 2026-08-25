@@ -279,11 +279,11 @@ test('权限门：deny-by-default —— 未声明能力不可见，fs 限数据
   }
 });
 
-test('降级路径：Rust 模块不可用时 taskkill 围栏仍可完整运行', async () => {
+test('降级路径：Rust 模块不可用时平台进程围栏仍可完整运行', async () => {
   jobFence._forceNativeUnavailableForTest(true);
   const home = freshHome();
   try {
-    assert.equal(jobFence.fenceMode(), 'taskkill-fallback');
+    assert.equal(jobFence.fenceMode(), IS_WIN ? 'taskkill-fallback' : 'process-group');
     assert.equal(
       installPlugin(home, 'fenced', `
         module.exports.activate = function (ctx) {
@@ -294,7 +294,7 @@ test('降级路径：Rust 模块不可用时 taskkill 围栏仍可完整运行',
       true,
     );
     const mgr = fastManager();
-    assert.equal(mgr.fenceMode(), 'taskkill-fallback');
+    assert.equal(mgr.fenceMode(), IS_WIN ? 'taskkill-fallback' : 'process-group');
     try {
       assert.equal(await mgr.startPlugin('fenced'), true);
       assert.equal(entryOf('fenced').state, 'running');

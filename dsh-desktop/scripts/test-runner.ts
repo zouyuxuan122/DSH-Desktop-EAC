@@ -16,8 +16,9 @@
 import cp = require('node:child_process');
 import fs = require('node:fs');
 import path = require('node:path');
+import { nodeExecutableName } from '../lib/desktop/platform';
 
-const VENDOR_NODE = path.join(__dirname, '..', 'vendor', 'node', 'node.exe');
+const VENDOR_NODE = path.join(__dirname, '..', 'vendor', 'node', nodeExecutableName());
 
 /** 取 node 主版本号（--version 输出形如 v24.11.1）；失败返回 0。 */
 function majorOf(exe: string): number {
@@ -46,5 +47,12 @@ if (rt.major < 24) {
 }
 
 const args = ['--test', ...(process.argv.length > 2 ? process.argv.slice(2) : ['test/*.test.ts'])];
-const r = cp.spawnSync(rt.exe, args, { stdio: 'inherit', windowsHide: true, cwd: path.join(__dirname, '..') });
+const testEnv = { ...process.env };
+if (process.platform !== 'win32' && !testEnv.TMPDIR) testEnv.TMPDIR = '/tmp';
+const r = cp.spawnSync(rt.exe, args, {
+  stdio: 'inherit',
+  windowsHide: true,
+  cwd: path.join(__dirname, '..'),
+  env: testEnv,
+});
 process.exit(r.status === null ? 1 : r.status);

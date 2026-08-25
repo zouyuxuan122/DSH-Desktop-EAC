@@ -126,11 +126,11 @@ function buildSelectionOps(registry, coreIds, want, current) {
  * @param {Set} coreIds    核心锁定 id
  * @returns {Set<string>}
  */
-function sanitizeSelection(ids, registry, coreIds) {
+function sanitizeSelection(ids, registry, coreIds, unavailableIds = new Set()) {
   const valid = new Set((registry || []).map((p) => p.id));
   const want = new Set();
   for (const x of Array.isArray(ids) ? ids : []) {
-    if (typeof x !== 'string' || !valid.has(x)) continue;
+    if (typeof x !== 'string' || !valid.has(x) || unavailableIds.has(x)) continue;
     want.add(x);
   }
   for (const c of coreIds || []) want.add(c);
@@ -144,7 +144,7 @@ function sanitizeSelection(ids, registry, coreIds) {
  * @param {{ coreIds: Set, recommendedIds: Set, describe?: Function, dirSize?: Function }} opts
  * @returns {Array<{id,name,description,core,recommended,registryDisabled,size}>}
  */
-function buildCatalog(plugins, { coreIds, recommendedIds, describe, dirSize } = {}) {
+function buildCatalog(plugins, { coreIds, recommendedIds, describe, dirSize, capabilities = {} } = {}) {
   const core = coreIds || CORE_PLUGIN_IDS;
   const rec = recommendedIds || RECOMMENDED_PLUGIN_IDS;
   return (plugins || []).map((p) => ({
@@ -153,8 +153,9 @@ function buildCatalog(plugins, { coreIds, recommendedIds, describe, dirSize } = 
     description: describe ? describe(p.name) : '',
     core: core.has(p.id),
     // 注册表默认禁用的插件（p.disabled: true，如 dsh-pet）不进「推荐」勾选。
-    recommended: rec.has(p.id) && p.disabled !== true,
+    recommended: rec.has(p.id) && p.disabled !== true && capabilities[p.id]?.status !== 'unavailable',
     registryDisabled: p.disabled === true,
+    capability: capabilities[p.id] || { status: 'supported', reason: '' },
     size: dirSize ? dirSize(p.dir || (p.name.includes('/') ? p.name.split('/').pop() : p.name)) : 0,
   }));
 }

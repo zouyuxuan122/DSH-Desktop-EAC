@@ -55,6 +55,7 @@ files:
   # L2 业务服务层模块（ADR 0002）：main.js 顶层 require 的 lib/desktop/*。
   - lib/desktop/file-roots.js
   - lib/desktop/proc.js
+  - lib/desktop/platform.js
   - lib/desktop/runtime-paths.js
   - lib/desktop/profile.js
   - lib/desktop/guard-box.js

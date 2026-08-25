@@ -18,6 +18,13 @@ export interface ProcCtx {
 let ctx!: ProcCtx;
 export function init(d: ProcCtx): void { ctx = d; }
 
+/** DSH 子进程在 POSIX 上必须成为独立进程组组长，供负 PGID 树级回收。 */
+export function childProcessSpawnOptions(
+  platform: NodeJS.Platform = process.platform,
+): { detached: boolean } {
+  return { detached: platform !== 'win32' };
+}
+
 export function killTree(proc: ChildProcess | null | undefined): void {
   if (!proc || !proc.pid) return;
   try {

@@ -143,9 +143,20 @@ function createGuard(opts: GuardOpts): GuardApi {
     try {
       const dir = profileDir();
       if (!fs.existsSync(dir)) return null;
-      const stamp = new Date().toISOString().replace(/[:.]/g, '-').replace(/Z$/, '');
-      const dest = path.join(rollbacksDir(), stamp);
-      fs.mkdirSync(dest, { recursive: true });
+      const baseStamp = new Date().toISOString().replace(/[:.]/g, '-').replace(/Z$/, '');
+      fs.mkdirSync(rollbacksDir(), { recursive: true });
+      let stamp = baseStamp;
+      let dest = path.join(rollbacksDir(), stamp);
+      for (let collision = 0; ; collision += 1) {
+        try {
+          fs.mkdirSync(dest);
+          break;
+        } catch (err) {
+          if ((err as NodeJS.ErrnoException).code !== 'EEXIST') throw err;
+          stamp = `${baseStamp}-${String(collision + 1).padStart(4, '0')}`;
+          dest = path.join(rollbacksDir(), stamp);
+        }
+      }
       const files: string[] = [];
       const rows: string[] = [];
       for (const name of GUARD_FILES) {

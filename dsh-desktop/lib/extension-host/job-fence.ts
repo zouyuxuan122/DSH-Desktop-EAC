@@ -1,7 +1,7 @@
 /**
  * lib/extension-host/job-fence.ts — 进程围栏（VNext Phase 2，Task 10.4）。
  *
- * 两档实现，对外同一 `FenceHandle` 接口：
+ * 三档实现，对外同一 `FenceHandle` 接口：
  *   1. `win32-job`（首选）：Node `child_process.spawn` 持有 stdio 管道（可靠
  *      流）+ Rust 原生模块（native/supervisor/index.node）把进程绑入 Win32
  *      Job Object —— KILL_ON_JOB_CLOSE（Supervisor 崩溃时 OS 自动回收全部
@@ -9,6 +9,9 @@
  *   2. `taskkill-fallback`（降级）：纯 spawn + `taskkill /T /F` 树回收。
  *      **没有**崩溃自动回收保证 —— 降级时打显式警告，恢复中心可据此提示
  *      用户重建原生模块。
+ *   3. `process-group`（POSIX）：独立进程组 + 负 PGID 强杀整组；同时由
+ *      host-bootstrap 监听 Supervisor owner pipe EOF，在父进程崩溃时主动
+ *      SIGTERM 自身进程组。它仍没有 Job Object 的硬资源限额或不可逃逸保证。
  *
  * 实现注记（与 spec「原子 spawn-into-job」的偏差）：Node 26 的 libuv 在
  * Windows 上已不使用 CRT fd 表，原生侧自建管道无法交还 Node 流（EBADF），
@@ -42,9 +45,11 @@ interface NativeSupervisor {
   sha256Stream(path: string): string;
 }
 
+export type FenceMode = 'win32-job' | 'taskkill-fallback' | 'process-group';
+
 /** 围栏单进程句柄：stdio 流 + 树级强杀。 */
 export interface FenceHandle {
-  readonly mode: 'win32-job' | 'taskkill-fallback';
+  readonly mode: FenceMode;
   readonly pid: number;
   readonly stdin: Writable;
   readonly stdout: Readable;
@@ -61,7 +66,7 @@ export interface FenceHandle {
 
 /** 围栏实例：一个 Job（或降级通道）可容纳一次宿主启动。 */
 export interface Fence {
-  readonly mode: 'win32-job' | 'taskkill-fallback';
+  readonly mode: FenceMode;
   /** 在围栏内拉起进程（stdio 即 RPC 传输层）。 */
   launch(exe: string, args: string[], cwd?: string): FenceHandle;
   /** 释放围栏资源（launch 失败/未用时的 Job 句柄回收）。 */
@@ -79,6 +84,7 @@ let forceUnavailableForTest = false;
 /** 加载 Rust 围栏模块；缺失/失败返回 null（缓存，只警告一次）。 */
 export function loadNativeSupervisor(): NativeSupervisor | null {
   if (forceUnavailableForTest) return null;
+  if (process.platform !== 'win32') return null;
   if (nativeCache !== undefined) return nativeCache;
   const file = path.join(__dirname, '..', '..', 'native', 'supervisor', 'index.node');
   try {
@@ -95,7 +101,7 @@ export function loadNativeSupervisor(): NativeSupervisor | null {
   return nativeCache;
 }
 
-/** 强制原生模块不可用/恢复（仅测试用：验证 taskkill 降级路径）。 */
+/** 强制原生模块不可用/恢复（仅测试用：验证当前平台的降级围栏）。 */
 export function _forceNativeUnavailableForTest(unavailable: boolean): void {
   forceUnavailableForTest = unavailable;
 }
@@ -137,7 +143,7 @@ class JobFenceHandle implements FenceHandle {
       this.native.terminateJob(this.jobId, 1);
     } catch {
       // Job 已回收（进程自退出触发）等场景：兜底 taskkill。
-      await taskkillTree(this.pid);
+      await killProcessTree(this.pid, 'taskkill-fallback');
     }
     this.stdin.destroy();
     try {
@@ -219,13 +225,13 @@ class JobFence implements Fence {
 // 降级实现：spawn + taskkill /T /F
 // ---------------------------------------------------------------------------
 
-function taskkillTree(pid: number): Promise<void> {
+function killProcessTree(pid: number, mode: Exclude<FenceMode, 'win32-job'>): Promise<void> {
   return new Promise((resolve) => {
-    if (process.platform !== 'win32') {
+    if (mode === 'process-group') {
       try {
-        process.kill(pid, 'SIGKILL');
+        process.kill(-pid, 'SIGKILL');
       } catch {
-        // 已退出
+        try { process.kill(pid, 'SIGKILL'); } catch { /* 已退出 */ }
       }
       resolve();
       return;
@@ -237,7 +243,7 @@ function taskkillTree(pid: number): Promise<void> {
 }
 
 class FallbackFenceHandle implements FenceHandle {
-  readonly mode = 'taskkill-fallback' as const;
+  readonly mode: Exclude<FenceMode, 'win32-job'>;
   readonly pid: number;
   readonly stdin: Writable;
   readonly stdout: Readable;
@@ -245,8 +251,9 @@ class FallbackFenceHandle implements FenceHandle {
   private readonly child: cp.ChildProcessWithoutNullStreams;
   private killed = false;
 
-  constructor(child: cp.ChildProcessWithoutNullStreams) {
+  constructor(child: cp.ChildProcessWithoutNullStreams, mode: Exclude<FenceMode, 'win32-job'>) {
     this.child = child;
+    this.mode = mode;
     this.pid = child.pid ?? -1;
     this.stdin = child.stdin;
     this.stdout = child.stdout;
@@ -260,7 +267,7 @@ class FallbackFenceHandle implements FenceHandle {
   async kill(): Promise<void> {
     if (this.killed) return;
     this.killed = true;
-    await taskkillTree(this.pid);
+    await killProcessTree(this.pid, this.mode);
     this.stdin.destroy();
   }
 
@@ -275,15 +282,22 @@ class FallbackFenceHandle implements FenceHandle {
 }
 
 class FallbackFence implements Fence {
-  readonly mode = 'taskkill-fallback' as const;
+  readonly mode: Exclude<FenceMode, 'win32-job'> = process.platform === 'win32'
+    ? 'taskkill-fallback'
+    : 'process-group';
 
   launch(exe: string, args: string[], cwd?: string): FenceHandle {
-    const child = cp.spawn(exe, args, { cwd, stdio: 'pipe', windowsHide: true });
+    const child = cp.spawn(exe, args, {
+      cwd,
+      stdio: 'pipe',
+      windowsHide: true,
+      detached: this.mode === 'process-group',
+    });
     if (child.pid === undefined) {
       child.kill();
       throw new Error(`围栏 spawn 失败: ${exe}`);
     }
-    return new FallbackFenceHandle(child);
+    return new FallbackFenceHandle(child, this.mode);
   }
 
   dispose(): void {
@@ -302,7 +316,7 @@ export interface FenceOptions {
   cpuRatePercent?: number;
 }
 
-/** 创建围栏：优先 Rust Job Object，不可用则降级 taskkill 并告警。 */
+/** 创建围栏：Windows 优先 Rust Job Object；其余情况使用对应平台的降级围栏。 */
 export function createFence(opts: FenceOptions = {}): Fence {
   const native = loadNativeSupervisor();
   if (native) {
@@ -316,6 +330,7 @@ export function createFence(opts: FenceOptions = {}): Fence {
 }
 
 /** 原生模块是否可用（恢复中心展示围栏档位用）。 */
-export function fenceMode(): 'win32-job' | 'taskkill-fallback' {
+export function fenceMode(): FenceMode {
+  if (process.platform !== 'win32') return 'process-group';
   return loadNativeSupervisor() ? 'win32-job' : 'taskkill-fallback';
 }

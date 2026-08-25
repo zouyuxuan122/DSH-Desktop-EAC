@@ -36,7 +36,7 @@ cp.spawn = function interceptedSpawn(cmd, args, opts) {
 
 const clientUpdater = require('../client-updater.js');
 
-test('applyUpdate inlines the bundled node exe into the script body', () => {
+test('applyUpdate inlines the bundled node exe into the script body', { skip: process.platform !== 'win32' }, () => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'dsh-node-arg-'));
   // 生产环境中 updates/ 由下载器创建（Setup 就躺在里面）；applyUpdate 只写文件不建目录
   fs.mkdirSync(path.join(dir, 'updates'), { recursive: true });

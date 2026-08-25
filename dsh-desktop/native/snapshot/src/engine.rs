@@ -76,7 +76,7 @@ pub fn snapshot_create(opts: CreateSnapshotOpts) -> Result<SnapshotSummary> {
 
     for wf in &walk.files {
         let cached = index.entries.get(&wf.rel);
-        let hash = match cached.filter(|c| c.m == wf.mtime_ms && c.s == wf.size) {
+        let hash = match cached.filter(|c| c.m == wf.mtime_ns && c.s == wf.size) {
             Some(c) => c.h.clone(),
             None => {
                 let h = hash_file(&wf.abs)
@@ -98,7 +98,7 @@ pub fn snapshot_create(opts: CreateSnapshotOpts) -> Result<SnapshotSummary> {
         new_index.entries.insert(
             wf.rel.clone(),
             DiskIndexEntry {
-                m: wf.mtime_ms,
+                m: wf.mtime_ns,
                 s: wf.size,
                 h: hash.clone(),
             },

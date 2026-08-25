@@ -90,8 +90,8 @@ pub fn atomic_copy(src: &Path, dst: &Path) -> std::io::Result<()> {
 pub struct WalkedFile {
     pub rel: String,
     pub abs: PathBuf,
-    /// 修改时间毫秒（哈希缓存键）。
-    pub mtime_ms: i64,
+    /// 修改时间纳秒（哈希缓存键；同毫秒同大小的改写也必须重新哈希）。
+    pub mtime_ns: i64,
     pub size: u64,
 }
 
@@ -144,16 +144,16 @@ fn walk_rec(
             walk_rec(&abs, &child_rel, exclusions, out, skipped)?;
         } else if ft.is_file() {
             let md = entry.metadata()?;
-            let mtime_ms = md
+            let mtime_ns = md
                 .modified()
                 .ok()
                 .and_then(|t| t.duration_since(UNIX_EPOCH).ok())
-                .map(|d| d.as_millis() as i64)
+                .map(|d| d.as_nanos() as i64)
                 .unwrap_or(0);
             out.push(WalkedFile {
                 rel: child_rel,
                 abs,
-                mtime_ms,
+                mtime_ns,
                 size: md.len(),
             });
         }

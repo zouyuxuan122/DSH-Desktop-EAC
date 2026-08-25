@@ -6,6 +6,7 @@
 
 import path = require('node:path');
 import fs = require('node:fs');
+import { nodeExecutableName } from './platform';
 
 // 应用根目录（本模块位于 <root>/lib/desktop/ 下）。
 export const APP_ROOT = path.resolve(__dirname, '..', '..');
@@ -16,6 +17,7 @@ export interface RuntimePathsCtx {
   getUserDataDir(): string;
   isPackaged?(): boolean;
   resourcesPath?(): string;
+  platform?: NodeJS.Platform;
 }
 
 interface UpdCtx {
@@ -43,10 +45,14 @@ function isPackaged(): boolean {
 function resourcesDir(): string {
   return typeof ctx.resourcesPath === 'function' ? ctx.resourcesPath() : '';
 }
+function runtimePlatform(): NodeJS.Platform {
+  return ctx.platform ?? process.platform;
+}
 
 export function nodeExe(): string {
-  if (isPackaged()) return path.join(resourcesDir(), 'node', 'node.exe');
-  return path.resolve(APP_ROOT, 'vendor', 'node', 'node.exe');
+  const executable = nodeExecutableName(runtimePlatform());
+  if (isPackaged()) return path.join(resourcesDir(), 'node', executable);
+  return path.resolve(APP_ROOT, 'vendor', 'node', executable);
 }
 
 export function npmCli(): string {

@@ -141,3 +141,89 @@ jobs:
             dsh-desktop/dist/SHA256SUMS.txt
           if-no-files-found: error
           retention-days: 7
+
+  build-linux:
+    name: 测试并构建 Tauri（Ubuntu 22.04 x64）
+    runs-on: ubuntu-22.04
+    timeout-minutes: 90
+    defaults:
+      run:
+        working-directory: dsh-desktop
+    steps:
+      - name: 检出代码
+        uses: actions/checkout@v4
+
+      - name: 安装 Linux 桌面构建依赖
+        working-directory: ${{ github.workspace }}
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf
+
+      - name: 安装 Node.js（含 npm 缓存）
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: dsh-desktop/package-lock.json
+
+      - name: 安装 Rust 工具链（stable）
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: 安装依赖并获取 Linux runtime
+        run: npm ci && npm run fetch-runtime
+
+      - name: 类型检查与全量测试
+        run: npm run typecheck && npm test
+
+      - name: Rust 原生模块 clippy、测试与构建
+        run: |
+          npm run clippy:native
+          npm run clippy:native -- snapshot
+          npm run test:native
+          npm run test:native -- snapshot
+          npm run build:native
+          npm run build:native -- snapshot
+
+      - name: 装配并审计 Linux 运行树
+        working-directory: ${{ github.workspace }}
+        run: |
+          node tauri-shell/stage-resources.mjs --target=linux
+          node tauri-shell/audit-linux-bundle.mjs tauri-shell/staged-resources
+
+      - name: 构建 deb 和 AppImage
+        working-directory: tauri-shell
+        run: npx -y @tauri-apps/cli@2 build --bundles deb,appimage --ci
+
+      - name: 解包并审计最终 Linux 产物
+        working-directory: ${{ github.workspace }}
+        shell: bash
+        run: |
+          audit_tree() {
+            local tree="$1"
+            local resources
+            resources="$(dirname "$(find "$tree" -type d -name dsh-desktop -print -quit)")"
+            test -d "$resources/dsh-desktop"
+            node tauri-shell/audit-linux-bundle.mjs "$resources" "$tree"
+          }
+          audit_tmp="$(mktemp -d)"
+          trap 'rm -rf "$audit_tmp"' EXIT
+          deb="$(find tauri-shell/target/release/bundle/deb -maxdepth 1 -type f -name '*.deb' -print -quit)"
+          appimage="$(find tauri-shell/target/release/bundle/appimage -maxdepth 1 -type f -name '*.AppImage' -print -quit)"
+          test -n "$deb" && test -n "$appimage"
+          dpkg-deb -x "$deb" "$audit_tmp/deb"
+          audit_tree "$audit_tmp/deb"
+          chmod +x "$appimage"
+          appimage="$(readlink -f "$appimage")"
+          mkdir "$audit_tmp/appimage"
+          (cd "$audit_tmp/appimage" && "$appimage" --appimage-extract >/dev/null)
+          audit_tree "$audit_tmp/appimage/squashfs-root"
+
+      - name: 上传 Linux 构建产物
+        uses: actions/upload-artifact@v4
+        with:
+          name: dsh-desktop-linux-x64-ci
+          path: |
+            tauri-shell/target/release/bundle/deb/*.deb
+            tauri-shell/target/release/bundle/appimage/*.AppImage
+          if-no-files-found: error
+          retention-days: 7

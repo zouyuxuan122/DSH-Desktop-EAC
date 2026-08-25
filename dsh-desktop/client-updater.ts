@@ -64,6 +64,10 @@ interface UpdateCtx {
   log(section: string, message: string): void;
 }
 
+interface PlatformAssetOptions {
+  platform?: NodeJS.Platform;
+}
+
 interface ReleaseAsset {
   name: string;
   url: string;
@@ -343,7 +347,11 @@ function normalizeRelease(source: string, data: any): ReleaseInfo {
   };
 }
 
-async function checkLatest(ctx: UpdateCtx, currentVersion: string): Promise<ReleaseInfo> {
+async function checkLatest(
+  ctx: UpdateCtx,
+  currentVersion: string,
+  { platform = 'win32' }: PlatformAssetOptions = {},
+): Promise<ReleaseInfo> {
   const errors: string[] = [];
   for (const ep of apiEndpoints()) {
     try {
@@ -358,15 +366,13 @@ async function checkLatest(ctx: UpdateCtx, currentVersion: string): Promise<Rele
         .filter((r: ReleaseInfo) => r.version)
         .sort((a: ReleaseInfo, b: ReleaseInfo) => compareVersions(b.version, a.version));
       if (!releases.length) throw new Error('上游没有可见的 release');
-      // 自新向旧找「第一个含本平台（Windows）资产的 release」。只有
-      // Linux 资产（.AppImage/.deb/.zip 等）的版本对 selectAsset 不可选，
-      // 记录后跳过 —— Windows 用户接不到 Linux-only 更新，也不会漏掉
-      // 更早的 Windows 版本（回退语义）。
+      // 自新向旧找「第一个含目标平台资产的 release」。默认目标仍为
+      // Windows；Linux 壳显式传入 linux，只用于发现版本并外部 handoff。
       const skippedNoAsset: string[] = [];
       let picked: ReleaseInfo | null = null;
       for (const rel of releases) {
         try {
-          selectAsset(rel);
+          selectAsset(rel, { platform });
           picked = rel;
           break;
         } catch {
@@ -374,11 +380,11 @@ async function checkLatest(ctx: UpdateCtx, currentVersion: string): Promise<Rele
         }
       }
       if (!picked) {
-        throw new Error('最近 20 个 release 都没有本平台（Windows）的安装包资产');
+        throw new Error(`最近 20 个 release 都没有本平台（${platform}）的安装包资产`);
       }
       picked.isNewer = compareVersions(picked.version, currentVersion) > 0;
       ctx.log('client-update', `[${ep.name}] 本平台最新=${picked.version} 当前=${currentVersion} 资产数=${picked.assets.length}` +
-        (skippedNoAsset.length ? `；跳过无 Windows 资产的版本: ${skippedNoAsset.join(', ')}` : ''));
+        (skippedNoAsset.length ? `；跳过无 ${platform} 资产的版本: ${skippedNoAsset.join(', ')}` : ''));
       return picked;
     } catch (err) {
       errors.push(`${ep.name}: ${(err as Error).message}`);
@@ -390,7 +396,18 @@ async function checkLatest(ctx: UpdateCtx, currentVersion: string): Promise<Rele
 
 // --- 资产选择 / 下载 -------------------------------------------------------
 
-function selectAsset(release: ReleaseInfo): SelectedAsset {
+function selectAsset(release: ReleaseInfo, { platform = 'win32' }: PlatformAssetOptions = {}): SelectedAsset {
+  if (platform === 'linux') {
+    const linuxAsset = release.assets.find((asset) =>
+      !/arm64|aarch64/i.test(asset.name) && /(?:x86_64|amd64).*(?:\.AppImage|\.deb)$|(?:\.AppImage|_amd64\.deb)$/i.test(asset.name));
+    if (!linuxAsset) {
+      throw new Error('未找到匹配的 Linux x86_64 安装包资产（' + release.assets.map((a) => a.name).join(', ') + '）');
+    }
+    return { parts: [linuxAsset], name: linuxAsset.name, totalSize: linuxAsset.size };
+  }
+  if (platform !== 'win32') {
+    throw new Error(`不支持 ${platform} 平台的客户端资产`);
+  }
   // 资产命名：Deepseek-Harness-EAC-<version>-Setup-x64.exe / …-Portable-x64.exe。
   // 旧正则 /-setup-.*-x64\.exe$/ 要求 -setup- 之后还有第二个 "-x64"，
   // 对 "…-v2.0.1-Setup-x64.exe"（-Setup- 直接连 x64.exe）永远匹配失败，

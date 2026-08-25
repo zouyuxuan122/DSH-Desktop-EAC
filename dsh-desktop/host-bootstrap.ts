@@ -19,6 +19,7 @@
  */
 
 import { RpcPeer } from './lib/extension-host/rpc.js';
+import fs = require('node:fs');
 import {
   buildSdk, dispatchEvent, collectContext,
   validateArgs, type SdkRuntime,
@@ -98,6 +99,16 @@ peer.handle('collect-context', async (params) => {
 });
 
 process.stdin.on('data', (chunk: Buffer) => peer.feed(chunk));
+process.stdin.once('end', () => {
+  // POSIX owner-pipe lease：Supervisor 崩溃时内核关闭管道，Host 主动终止
+  // 自己的独立进程组。它不提供 Job Object 的硬配额/不可逃逸保证，因此能力
+  // 仍显式报告 degraded。
+  fs.writeSync(2, '[host-bootstrap] supervisor owner pipe closed\n');
+  if (process.platform !== 'win32') {
+    try { process.kill(-process.pid, 'SIGTERM'); return; } catch { /* 非组长时退回普通退出 */ }
+  }
+  process.exit(0);
+});
 
 // 插件把宿主搞崩：留最后一行 stderr 给诊断，快速退出（Supervisor 感知 exit）
 process.on('uncaughtException', (err) => {

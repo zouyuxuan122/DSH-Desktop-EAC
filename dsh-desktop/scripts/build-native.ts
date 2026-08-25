@@ -65,12 +65,15 @@ function prepareLldLink(): string {
   return dst;
 }
 
-/** 以 lld-link 为链接器调用 cargo（返回 cargo 退出码）。 */
+/** Windows 以 lld-link 为链接器；其他平台使用当前 Rust 工具链默认链接器。 */
 function runCargo(sub: string, rest: string[]): number {
-  const linker = prepareLldLink();
-  // 路径含空格（如 "DeepSeek Harness\dsh max"）时必须以引号包住 linker 值，
-  // 否则 rustc 的 RUSTFLAGS 按空白拆分会把路径截断成多个输入文件。
-  const env = { ...process.env, RUSTFLAGS: `-C linker=${linker}` };
+  const env = { ...process.env };
+  if (process.platform === 'win32') {
+    const linker = prepareLldLink();
+    // 路径含空格（如 "DeepSeek Harness\dsh max"）时必须以引号包住 linker 值，
+    // 否则 rustc 的 RUSTFLAGS 按空白拆分会把路径截断成多个输入文件。
+    env.RUSTFLAGS = `-C linker=${linker}`;
+  }
   const r = cp.spawnSync('cargo', [sub, '--manifest-path', manifest, ...rest], {
     stdio: 'inherit',
     env,

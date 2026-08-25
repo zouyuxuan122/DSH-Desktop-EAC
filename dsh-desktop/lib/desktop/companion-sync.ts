@@ -11,6 +11,7 @@ import { updCtx, APP_ROOT } from './runtime-paths';
 import { desktopProfile, desktopProfileDir, ensureDesktopProfileInit } from './profile';
 import { ensureGuard } from './guard-box';
 import { applySessionManageFix } from './runtime-patches';
+import { pluginCapabilityDetails } from './platform';
 // 未类型化依赖（Wave 3 收编），先以窄签名消费。
 const updater = require('../../updater') as {
   loadSettings(c: ReturnType<typeof updCtx>): { removedPlugins?: unknown };
@@ -48,8 +49,6 @@ const { hasEntryId, removePluginFromPatch } = require('../../scripts/plugin-mana
   removePluginFromPatch(text: string, id: string): string;
 };
 
-const IS_WIN = process.platform === 'win32';
-
 /** 注入接口：由宿主（Electron main / Tauri sidecar）在启动时提供。 */
 export interface CompanionSyncCtx {
   log(tag: string, msg: string): void;
@@ -58,12 +57,13 @@ export interface CompanionSyncCtx {
   applyLegacySkinChoice(): void;
   showMainWindow(): void;
   notify(n: { title: string; body: string; icon?: string; onClick?: () => void }): void;
+  platform?: NodeJS.Platform;
 }
 
 let ctx!: CompanionSyncCtx;
 export function init(d: CompanionSyncCtx): void { ctx = d || ({} as CompanionSyncCtx); }
 
-interface CompanionPluginDef {
+export interface CompanionPluginDef {
   id: string;
   name: string;
   dir?: string;
@@ -224,6 +224,11 @@ export const COMPANION_PLUGINS: CompanionPluginDef[] = [
   // 纯客户端 + host 半边（loopback 路由），peer 依赖全部由 dsh 宿主提供。
   { id: 'dsh-webui-prompt-optimizer', name: 'dsh-webui-prompt-optimizer', dir: 'dsh-webui-prompt-optimizer' },
 ];
+
+export function companionPluginsForPlatform(platform: NodeJS.Platform = 'win32'): CompanionPluginDef[] {
+  const capabilities = pluginCapabilityDetails(platform);
+  return COMPANION_PLUGINS.filter((plugin) => capabilities[plugin.id]?.status !== 'unavailable');
+}
 
 // ---------------------------------------------------------------------------
 // 内置插件上游更新源（V4.3，plugin-updater.js 消费）：
@@ -405,7 +410,7 @@ function safeModeActive(): boolean {
 }
 
 export function syncCompanionPlugins(): void {
-  if (!IS_WIN) return;
+  const platform = ctx.platform ?? 'win32';
   const inSafeMode = safeModeActive();
   if (inSafeMode) ctx.log('boot', '安全模式激活中：跳过配套插件 patch 行同步（退出安全模式后恢复）');
   try {
@@ -423,27 +428,31 @@ export function syncCompanionPlugins(): void {
     // 首次工具调用/回复后开放完整 Standard 目录）：安装到用户 preset 根。
     // preset 不进插件树，坏 preset 不会拖垮启动；已存在则跳过（用户手装
     // 或改过的版本优先），见 preset-sync.js。
-    const presetsSynced = syncBundledPresets(
-      path.join(APP_ROOT, 'assets', 'agent-presets'),
-      path.join(home, '.agent-presets'),
-      (m) => ctx.log('boot', m)
-    );
-    if (presetsSynced.installed.length) ctx.log('boot', '已安装内置 agent preset: ' + presetsSynced.installed.join(', '));
-    const compactPresetResults = migrateManagedCompactPresets(
-      path.join(home, '.agent-presets'),
-      (m) => ctx.log('boot', m)
-    );
-    const compactPresetMigrated = compactPresetResults
-      .filter((result) => result.status === 'migrated')
-      .map((result) => path.basename(path.dirname(result.file)));
-    if (compactPresetMigrated.length) {
-      ctx.log('boot', '已将内置 agent preset 迁移到 dsh-compact: ' + compactPresetMigrated.join(', '));
+    if (platform === 'win32') {
+      const presetsSynced = syncBundledPresets(
+        path.join(APP_ROOT, 'assets', 'agent-presets'),
+        path.join(home, '.agent-presets'),
+        (m) => ctx.log('boot', m)
+      );
+      if (presetsSynced.installed.length) ctx.log('boot', '已安装内置 agent preset: ' + presetsSynced.installed.join(', '));
+      const compactPresetResults = migrateManagedCompactPresets(
+        path.join(home, '.agent-presets'),
+        (m) => ctx.log('boot', m)
+      );
+      const compactPresetMigrated = compactPresetResults
+        .filter((result) => result.status === 'migrated')
+        .map((result) => path.basename(path.dirname(result.file)));
+      if (compactPresetMigrated.length) {
+        ctx.log('boot', '已将内置 agent preset 迁移到 dsh-compact: ' + compactPresetMigrated.join(', '));
+      }
+      // 默认 preset 指到内置的 anchored-standard（用户已在 settings.yaml 写过
+      // default 则一律保留）。失败只降级为官方默认 preset，不影响启动。
+      const defaultResult = ensureDefaultAgentPreset(home, 'anchored-standard', (m) => ctx.log('boot', m));
+      if (defaultResult === 'set') ctx.log('boot', '已设置默认 agent preset: anchored-standard');
+      else if (defaultResult === 'kept') ctx.log('boot', '用户已设置默认 agent preset，保持不变');
+    } else {
+      ctx.log('boot', 'Linux 使用上游默认 agent preset；未同步 Windows PowerShell/Git Bash 调优 preset');
     }
-    // 默认 preset 指到内置的 anchored-standard（用户已在 settings.yaml 写过
-    // default 则一律保留）。失败只降级为官方默认 preset，不影响启动。
-    const defaultResult = ensureDefaultAgentPreset(home, 'anchored-standard', (m) => ctx.log('boot', m));
-    if (defaultResult === 'set') ctx.log('boot', '已设置默认 agent preset: anchored-standard');
-    else if (defaultResult === 'kept') ctx.log('boot', '用户已设置默认 agent preset，保持不变');
     fs.mkdirSync(path.join(profileDirP, 'node_modules'), { recursive: true });
     const pending: PendingRow[] = [];
     const removedIds = removedPluginIds();
@@ -451,7 +460,7 @@ export function syncCompanionPlugins(): void {
     // （package.json 依赖/bundles + patch 行），让内置版干净接管，避免
     // duplicate loader entry；完成后系统通知告知「插件树变化」。
     const migratedBuiltins: { name: string; dep: boolean; rows: number }[] = [];
-    for (const p of COMPANION_PLUGINS) {
+    for (const p of companionPluginsForPlatform(platform)) {
       // V4.2：用户移除过的内置插件不再复制/登记（见 pluginManagerSetRemoved）。
       if (removedIds.has(p.id)) {
         ctx.log('boot', `已按用户选择跳过被移除的内置插件: ${p.id}`);
