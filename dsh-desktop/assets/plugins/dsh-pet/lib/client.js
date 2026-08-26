@@ -48,10 +48,10 @@ window.__ModuleLoader__.load({
 		// - .dsh-pet-video      动画视频；opacity 默认 0（隐藏），.is-front 时显示
 		// - 双 video 层叠：一个显示、一个预加载，切换时交叉淡入避免闪空白
 		const css = [
-			// 根容器：fixed 固定定位、层级 40（在界面之上）、整体点击穿透（不挡界面操作）、禁止选中
+			// 根容器：相对视口固定定位，不参与页面滚动范围计算；整体点击穿透、禁止选中
 			// EAC 本地补丁：40 会被右侧栏（dsh-better-sidebar 面板 z-index:50）盖住，
 			// 提到 CSS 最大值保证页面桌宠始终是最高显示优先级（root 点击穿透不受影响）。
-			'.dsh-pet-root{position:fixed;z-index:2147483647;pointer-events:none;user-select:none}',
+			'.dsh-pet-root{position:fixed;z-index:2147483647;pointer-events:none;user-select:none;--dsh-pet-hit-x:14%;--dsh-pet-hit-top:12%;--dsh-pet-hit-bottom:2%}',
 			// EAC 本地补丁 2（根治）：官方 shell.overlay 容器（data-shell-overlay，
 			// z-index:20）创建独立层叠上下文，把上面 root 的 2147483647 限制在容器
 			// 内部、整体仍低于右侧栏(z-index:50)。这里把容器本身抬到最高 —— 容器
@@ -61,15 +61,20 @@ window.__ModuleLoader__.load({
 			'.dsh-pet-root[data-corner="bottom-right"]{right:24px;bottom:0}',
 			// 左下角位置
 			'.dsh-pet-root[data-corner="bottom-left"]{left:24px;bottom:0}',
+			// 右上角位置
+			'.dsh-pet-root[data-corner="top-right"]{right:24px;top:24px}',
+			// 左上角位置
+			'.dsh-pet-root[data-corner="top-left"]{left:24px;top:24px}',
 			// 舞台：正方形（尺寸由 --dsh-pet-size 控制，默认 260px），本身不响应鼠标
-			'.dsh-pet-stage{position:relative;width:var(--dsh-pet-size,260px);height:var(--dsh-pet-size,260px);pointer-events:none}',
-			// 视频：铺满舞台、保持比例、可交互（pointer-events:auto 重新开启）、抓取光标
+			'.dsh-pet-stage{position:relative;width:var(--dsh-pet-size,260px);height:var(--dsh-pet-size,260px);pointer-events:none;overflow:clip!important;contain:paint}',
+			// 视频只负责播放，交互交给下面的缩小热区，避免透明画布扩大命中范围
 			// opacity:0 初始隐藏，transition 做 180ms 淡入淡出
-			'.dsh-pet-video{position:absolute;inset:0;width:100%;height:100%;object-fit:contain;pointer-events:auto;cursor:grab;opacity:0;transition:opacity .18s ease;transform-origin:center}',
+			'.dsh-pet-video{position:absolute;left:0;top:var(--dsh-pet-ground-offset,0px);width:100%;height:100%;object-fit:contain;pointer-events:none;cursor:default;opacity:0;transition:opacity .18s ease;transform-origin:center}',
 			// 显示中的视频（is-front 类）
 			'.dsh-pet-video.is-front{opacity:1}',
-			// 按住时显示"抓取中"光标
-			'.dsh-pet-video:active{cursor:grabbing}',
+			// 角色近似可见区域的透明交互热区，不覆盖整张 360×360 透明画布
+			'.dsh-pet-hit-area{position:absolute;left:var(--dsh-pet-hit-x);right:var(--dsh-pet-hit-x);top:calc(var(--dsh-pet-hit-top) + var(--dsh-pet-ground-offset,0px));bottom:var(--dsh-pet-hit-bottom);border-radius:48% 48% 34% 34%;pointer-events:auto;cursor:grab;touch-action:none}',
+			'.dsh-pet-hit-area:active{cursor:grabbing}',
 			// 朝向镜像说明：不用 CSS 全局规则（data-facing）控制镜像——facing 翻转会
 			// 同步镜像所有 video（含仍在显示的旧视频），造成"旧帧被镜像"的闪烁。
 			// 镜像改为在 switchTo 的 onReady 里按实际朝向给每个 video 设置 inline
@@ -82,8 +87,8 @@ window.__ModuleLoader__.load({
 			// 工具条定位在 root 顶部内侧（top:10px），与宠物本体零间隙 —— 指针
 			// 从宠物移到按钮全程都在 root 子树内，:hover 不会断（旧版 top:-30px
 			// 悬在宠物上方 30px，移动路径穿过空隙导致工具条在到达前消失）。
-			'.dsh-pet-toolbar{position:absolute;top:10px;right:10px;display:flex;gap:4px;opacity:0;transition:opacity .15s ease;pointer-events:none}',
-			'.dsh-pet-root:hover .dsh-pet-toolbar{opacity:1;pointer-events:auto}',
+			'.dsh-pet-toolbar{position:absolute;top:calc(var(--dsh-pet-hit-top) + 4px);right:calc(var(--dsh-pet-hit-x) + 4px);display:flex;gap:4px;opacity:.72;transition:opacity .15s ease;pointer-events:auto}',
+			'.dsh-pet-root:hover .dsh-pet-toolbar,.dsh-pet-toolbar:focus-within{opacity:1}',
 			'.dsh-pet-tbtn{width:26px;height:24px;border:none;border-radius:7px;background:color-mix(in srgb,var(--dsw-alias-bg-layer-2,#101828) 90%,transparent);color:var(--dsw-alias-label-secondary,#b8c5ea);cursor:pointer;font-size:12px;line-height:1;display:grid;place-items:center;border:1px solid var(--dsw-alias-border-l1,rgba(255,255,255,.12));padding:0;font-family:inherit}',
 			'.dsh-pet-tbtn:hover{background:var(--dsw-alias-interactive-bg-hover,rgba(255,255,255,.14));color:var(--dsw-alias-label-primary,#eef2ff)}',
 			'.dsh-pet-tbtn.danger:hover{background:#e81123;color:#fff}',
@@ -107,13 +112,16 @@ window.__ModuleLoader__.load({
 			'@media (prefers-reduced-motion: reduce){.dsh-pet-toolbar,.dsh-pet-call,.dsh-pet-root,.dsh-pet-panel{transition:none}}',
 		].join('\n');
 		const cssTag = 'dsh-pet/style.css';
-		// 只在页面还没有这个 style 标签时才注入（防止热重载/重复挂载时重复）
-		if (typeof document !== 'undefined' && document.querySelector('style[data-plugin-css="' + cssTag + '"]') === null) {
-			const tag = document.createElement('style');
-			tag.dataset.plugin = 'dsh-pet';
-			tag.dataset.pluginCss = cssTag;
+		// 热重载和内置插件同步后必须刷新既有样式，否则新 JS 会继续配旧 CSS。
+		if (typeof document !== 'undefined') {
+			let tag = document.querySelector('style[data-plugin-css="' + cssTag + '"]');
+			if (tag === null) {
+				tag = document.createElement('style');
+				tag.dataset.plugin = 'dsh-pet';
+				tag.dataset.pluginCss = cssTag;
+				document.head.appendChild(tag);
+			}
 			tag.textContent = css;
-			document.head.appendChild(tag);
 		}
 
 		// ============================================================================
@@ -195,6 +203,21 @@ window.__ModuleLoader__.load({
 			{ value: 'top-left', label: '左上角' },
 			{ value: 'free', label: '自由位置（拖拽）' },
 		];
+		const PET_EDGE_MARGIN = 24;
+		const fitPetSize = (requested, viewportWidth, viewportHeight) => {
+			const widthLimit = Math.max(1, viewportWidth - PET_EDGE_MARGIN * 2);
+			const heightLimit = Math.max(1, viewportHeight - PET_EDGE_MARGIN);
+			return Math.max(1, Math.min(requested, widthLimit, heightLimit));
+		};
+		const clampPetPosition = (rx, ry, size, viewportWidth, viewportHeight) => {
+			const half = size / 2;
+			const maxLeft = Math.max(0, viewportWidth - size);
+			const maxTop = Math.max(0, viewportHeight - size);
+			return {
+				left: Math.min(Math.max(rx * viewportWidth - half, 0), maxLeft),
+				top: Math.min(Math.max(ry * viewportHeight - half, 0), maxTop),
+			};
+		};
 		const readSettings = (config) => {
 			let saved = {};
 			try { saved = JSON.parse(localStorage.getItem(SETTINGS_KEY) || '{}') || {}; } catch {}
@@ -233,13 +256,19 @@ window.__ModuleLoader__.load({
 			const [settings, setSettings] = useState(() => readSettings(config));
 			const [panelOpen, setPanelOpen] = useState(false);
 			const [collapsed, setCollapsed] = useState(false); // 自动挂边折叠
+			const [viewport, setViewport] = useState(() => ({
+				width: window.innerWidth,
+				height: window.innerHeight,
+			}));
 			const lastInteractRef = useRef(Date.now());
 			// 写入即持久化
 			useEffect(() => { saveSettings(settings); }, [settings]);
 			const patchSetting = (key, value) => setSettings((prev) => ({ ...prev, [key]: value }));
 
-			const size = settings.size;
+			// 小窗口下不能让固定尺寸的舞台超过视口，否则 overlay 会产生滚动溢出。
+			const size = fitPetSize(settings.size, viewport.width, viewport.height);
 			const corner = settings.corner === 'free' ? 'bottom-right' : settings.corner;
+			const isBottomCorner = corner === 'bottom-right' || corner === 'bottom-left';
 			const interactions = settings.interactions;
 			// 挂边折叠的 idle 计时：设置里没开自动挂边时永不折叠
 			useEffect(() => {
@@ -262,7 +291,7 @@ window.__ModuleLoader__.load({
 			// seq 变化也能保证 switchTo 重新执行、视频重新播放（否则 anim 没变 React 不重渲染）。
 			const [seq, setSeq] = useState(0);
 			// ---- DOM 引用 ----
-			const rootRef = useRef(null);  // 根容器（fixed 定位）
+			const rootRef = useRef(null);  // 根容器（相对视口固定定位）
 			const stageRef = useRef(null); // 内部舞台（落地对齐）
 			const videoARef = useRef(null); // 视频 A
 			const videoBRef = useRef(null); // 视频 B
@@ -351,6 +380,7 @@ window.__ModuleLoader__.load({
 			// ---- 窗口尺寸变化：重算比例位置（触发重渲染，宠物保持相对窗口位置） ----
 			useEffect(() => {
 				const onResize = () => {
+					setViewport({ width: window.innerWidth, height: window.innerHeight });
 					// 有自定义位置时，用同值 setCustomPos 触发重渲染；
 					// 渲染逻辑会用新窗口尺寸 × 比例重算坐标。
 					setCustomPos((prev) => (prev ? { ...prev } : prev));
@@ -598,8 +628,6 @@ window.__ModuleLoader__.load({
 						rx: e.clientX / window.innerWidth,
 						ry: e.clientY / window.innerHeight,
 					});
-					const stageEl = stageRef.current;
-					if (stageEl) stageEl.style.transform = 'translateY(' + bottomPad + 'px)'; // 恢复落地对齐
 					setAnim(IDLE);
 					setOnce(false);
 				}
@@ -625,10 +653,10 @@ window.__ModuleLoader__.load({
 			// bottomPad = size × (360-330)/360，把舞台向下平移这么多，
 			// 让"脚"正好落在视口底线上（宠物看起来站在地上而不是悬空）。
 			const bottomPad = (size * (CANVAS_H - FEET_Y)) / CANVAS_H;
-			// 舞台样式：拖拽中无偏移；平时 translateY(bottomPad) 落地
-			const stageStyle = dragging
-				? { transform: 'none' }
-				: { transform: 'translateY(' + bottomPad + 'px)' };
+			// 舞台样式：只偏移视频和交互热区，舞台本身始终留在 overlay 边界内。
+			const stageStyle = dragging || !isBottomCorner
+				? { '--dsh-pet-ground-offset': '0px' }
+				: { '--dsh-pet-ground-offset': bottomPad + 'px' };
 
 			// 根容器样式：有自定义位置（拖过/走过）就按"相对窗口比例 × 当前窗口尺寸"定位；
 			// 否则不设（走 CSS 的 data-corner 默认角落，天然响应式）。
@@ -636,26 +664,30 @@ window.__ModuleLoader__.load({
 			// 同时钳制到窗口内，防止窗口缩小到宠物放不下时跑出屏幕。
 			const rootStyle = customPos
 				? (() => {
-					const half = size / 2;
 					const rx = customPos.rx;
 					const ry = customPos.ry;
-					const left = Math.min(Math.max(rx * window.innerWidth - half, 0), window.innerWidth - size);
-					const top = Math.min(Math.max(ry * window.innerHeight - half, 0), window.innerHeight - size);
-					return { left: left + 'px', top: top + 'px', right: 'auto', bottom: 'auto' };
+					const pos = clampPetPosition(rx, ry, size, viewport.width, viewport.height);
+					return { left: pos.left + 'px', top: pos.top + 'px', right: 'auto', bottom: 'auto' };
 				})()
 				: {};
 
-			// 两个 video 共用的 props（事件绑定 + 播放属性）
+			// 视频只保留播放属性；交互事件绑定到缩小后的透明热区。
 			const commonVideoProps = {
 				muted: true,
 				playsInline: true,
 				autoPlay: true,
+				title: 'dsh-pet',
+			};
+			const hitAreaProps = {
+				className: 'dsh-pet-hit-area',
+				role: 'button',
+				'aria-label': '桌宠',
+				tabIndex: 0,
 				onClick: handleClick,
 				onPointerDown: handlePointerDown,
 				onPointerMove: handlePointerMove,
 				onPointerUp: handlePointerUp,
 				onPointerCancel: handlePointerUp,
-				title: 'dsh-pet',
 			};
 
 			// 渲染树：root > [toolbar, panel, stage > [video A, video B]]
@@ -687,6 +719,7 @@ window.__ModuleLoader__.load({
 					// 悬停工具条：设置 ⚙ / 关闭 ×（stopPropagation 防止触发宠物点击回应）
 					h('div', {
 						className: 'dsh-pet-toolbar',
+						style: { zIndex: 4 },
 						children: [
 							h('button', {
 								type: 'button',
@@ -778,6 +811,7 @@ window.__ModuleLoader__.load({
 						children: [
 							h('video', Object.assign({}, commonVideoProps, { ref: videoARef, className: 'dsh-pet-video is-front' })),
 							h('video', Object.assign({}, commonVideoProps, { ref: videoBRef, className: 'dsh-pet-video' })),
+							h('div', hitAreaProps),
 						],
 					}),
 				],
@@ -809,6 +843,7 @@ window.__ModuleLoader__.load({
 		exports.apply = apply;
 		exports.inject = inject;
 		exports.name = name;
+		exports.__internals = { fitPetSize, clampPetPosition };
 		return module.exports;
 	}
 });
