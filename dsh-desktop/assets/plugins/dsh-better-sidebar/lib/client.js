@@ -1306,8 +1306,18 @@ window.__ModuleLoader__.load({
 		/** Chunk script endpoint served by the plugin host half (src/bundle-route.ts). */
 		const CHUNK_URL = (name) => `/sidebar/bundle/${name}.js`;
 		/** Resolve the shell-installed module system (set before any plugin activates). */
+		let fallbackModuleSystem;
 		function moduleSystem() {
-			return globalThis.__DSH_MODULES__;
+			const globalModules = globalThis.__DSH_MODULES__;
+			if (globalModules && typeof globalModules.import === "function") return globalModules;
+			// The plugin entry already receives the same resolver from ModuleLoader.
+			// Reuse it when the legacy global is absent (older shells / early loads).
+			if (fallbackModuleSystem === void 0 && typeof require === "function") {
+				fallbackModuleSystem = {
+					import: async (specifier) => require(specifier)
+				};
+			}
+			return fallbackModuleSystem;
 		}
 		function chunkRegistry() {
 			const g = globalThis;
