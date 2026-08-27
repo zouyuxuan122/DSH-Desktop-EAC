@@ -41,6 +41,23 @@ next2（功能包体系：.dshpack 打包分发插件+预设+技能，声明官�
 官方版本升级自动检出并一键迁移/回滚 —— 核心在 L2 功能包引擎 + CLI，
 交互集成进 dsh-unified-market 插件；详见下方「功能包体系（Feature Pack）」批次）
 
+## 文档：插件致谢补齐提供者并按首字母排序 · next
+
+### README.md / README.en.md「插件致谢」
+
+- 插件致谢表按插件名首字母重新排序（忽略 `@scope/` 前缀，与既有排列规则一致；
+  `computer-user`、`picturereader` 归位，`web-mobile-fix` / `web-plugin-manager`
+  顺序修正）。
+- 补齐缺失的提供者标注（经 GitHub / npm 交叉核实）：
+  - `@deepseek-ai/*` 12 款官方自带插件 → `deepseek-ai`；
+  - `dsh-compact` → `zixin947`（PR #145 作者，GitHub 同名仓库描述一致）；
+  - `dsh-session-manager` → `hkkz9522`（npm maintainer + GitHub 同名仓库）；
+  - `dsh-undo-savepoint` → `lire1131`（npm maintainer，EAC 内置即其版本）；
+  - `dsh-settings-scroll-fix` → `says693`（PR 提交者陆玖叁）；
+  - `dsh-unified-market` / `picturereader` / `computer-user` / `dsh-file-drop-eac`
+    → `jing-hy`（自研，GitHub 仓库归属一致）。
+- 英文版致谢表补上此前缺失的 `computer-user` 条目，与中文版对齐。
+
 ## 功能包体系（Feature Pack · 借鉴 HMCL 整合包架构）· next
 
 ### 功能包（.dshpack）：插件 + 预设 + 技能打包分发
