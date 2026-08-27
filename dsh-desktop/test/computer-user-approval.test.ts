@@ -3,21 +3,28 @@ import assert from 'node:assert/strict'
 import { createComputerTools } from '../assets/plugins/computer-user/src/tools.js'
 
 // ---------------------------------------------------------------------------
-// computer-user 5.1.1 手动批准流单测：
-//   1) 优先弹官方批准问答（requestApproval → allowed-once 放行）
-//   2) 拒绝 / 取消 / 服务不可用 时给出一致的错误标记
-//   3) /computer 已批准会话直接放行
+// computer-user 手动批准流单测（manual 模式 /computer 批准语义）：
+//   1) manual 模式未批准会话 → awaitingApproval（提示发送 /computer 批准）
+//   2) /computer 已批准会话 → 直接放行执行
+//   3) 批准是会话级别的：其他会话已批准不影响本会话
 //   4) 只读工具在 manual 模式不要求批准
+//   5) disabled / readonly 模式拒绝副作用工具（readonly 下截图类放行）
+//
+// 兼容说明：历史版本（main 上的 tools.js）通过 exec.agent.session.header.sessionId
+// 判定已批准会话；0.3.6 之后改为构造入参 sessionId。为同时覆盖两种接线方式，
+// 本测试既在构造时传入 sessionId，也在 execute 时携带会话头 —— 两者任一命中
+// approvedSessions 均视为已批准。测试不再依赖 5.1.1 的 requestApproval 问答
+// （0.3.6 已移除该流程，manual 模式统一由 /computer 命令批准）。
 // ---------------------------------------------------------------------------
 
-function makeTools({ mode = 'manual', approvedSessions, requestApproval } = {}) {
+function makeTools({ mode = 'manual', approvedSessions, sessionId } = {}) {
   const calls = []
   const runPs = async (script, payload) => {
     calls.push({ script, payload })
     return { ok: true, cursor: [1, 2] }
   }
   const getConfig = () => ({ mode, screenshot_dir: '', default_scale: 1, typing_interval_ms: 0, scroll_units: 120, debug: false })
-  const tools = createComputerTools({ runPs, getConfig, approvedSessions, setMode: async () => {}, requestApproval })
+  const tools = createComputerTools({ runPs, getConfig, approvedSessions, sessionId, setMode: async () => {} })
   const byName = (name) => tools.find((t) => t.name === name)
   return { calls, byName, runPs }
 }
@@ -31,71 +38,35 @@ function execFor(sid) {
   }
 }
 
-test('manual + approval 问答 allowed-once → 工具放行执行', async () => {
-  const asks = []
-  const t = makeTools({
-    requestApproval: async (req) => { asks.push(req); return 'allowed-once' },
-  })
-  const res = await t.byName('computer_click').execute({ coordinate: [10, 20] }, execFor('s1'))
-  assert.equal(res.clicked !== undefined, true)
-  assert.equal(asks.length, 1)
-  assert.equal(asks[0].toolName, 'computer_click')
-  assert.equal(asks[0].callId, 'call-1')
-  assert.match(asks[0].reason, /computer_click/)
-  assert.ok(t.calls.some((c) => c.script === 'input.ps1'))
-})
-
-test('manual + approval 拒绝 → 抛 approvalRejected 且不执行', async () => {
-  const t = makeTools({ requestApproval: async () => 'rejected' })
+test('manual + 未批准会话 → 抛 awaitingApproval 且不执行', async () => {
+  const t = makeTools({ approvedSessions: new Set() })
   await assert.rejects(
     () => t.byName('computer_click').execute({ coordinate: [10, 20] }, execFor('s1')),
-    (err) => err.approvalRejected === true && /已拒绝/.test(err.message),
+    (err) => err.awaitingApproval === true && /\/computer/.test(err.message),
   )
   assert.equal(t.calls.length, 0)
 })
 
-test('manual + approval 取消 → 抛 approvalCancelled', async () => {
-  const t = makeTools({ requestApproval: async () => 'cancelled' })
-  await assert.rejects(
-    () => t.byName('computer_click').execute({ coordinate: [10, 20] }, execFor('s1')),
-    (err) => err.approvalCancelled === true,
-  )
-})
-
-test('manual + 批准服务不可用（返回 unavailable 或未提供）→ 落回 /computer 指令路径', async () => {
-  const cases = [
-    makeTools({ requestApproval: async () => 'unavailable' }),
-    makeTools({ requestApproval: undefined }),
-  ]
-  for (const t of cases) {
-    await assert.rejects(
-      () => t.byName('computer_click').execute({ coordinate: [10, 20] }, execFor('s1')),
-      (err) => err.awaitingApproval === true && /\/computer/.test(err.message),
-    )
-    assert.equal(t.calls.length, 0)
-  }
-})
-
-test('manual + /computer 已批准会话 → 直接放行（不再弹问答）', async () => {
-  const asks = []
-  const approvedSessions = new Set(['s1'])
-  const t = makeTools({
-    approvedSessions,
-    requestApproval: async (req) => { asks.push(req); return 'allowed-once' },
-  })
-  await t.byName('computer_click').execute({ coordinate: [10, 20] }, execFor('s1'))
-  assert.equal(asks.length, 0, '已批准会话不应再发批准请求')
+test('manual + 已批准会话 → 直接放行执行', async () => {
+  const t = makeTools({ approvedSessions: new Set(['s1']), sessionId: 's1' })
+  const res = await t.byName('computer_click').execute({ coordinate: [10, 20] }, execFor('s1'))
+  assert.equal(res.clicked !== undefined, true)
   assert.ok(t.calls.some((c) => c.script === 'input.ps1'))
 })
 
+test('manual + 其他会话已批准 → 本会话仍要求批准', async () => {
+  const t = makeTools({ approvedSessions: new Set(['s-other']), sessionId: 's1' })
+  await assert.rejects(
+    () => t.byName('computer_click').execute({ coordinate: [10, 20] }, execFor('s1')),
+    (err) => err.awaitingApproval === true,
+  )
+  assert.equal(t.calls.length, 0)
+})
+
 test('readonly 工具在 manual 模式不要求批准', async () => {
-  const asks = []
-  const t = makeTools({
-    requestApproval: async (req) => { asks.push(req); return 'allowed-once' },
-  })
+  const t = makeTools({ approvedSessions: new Set() })
   const res = await t.byName('computer_wait').execute({ ms: 1 }, execFor('s1'))
   assert.equal(res.waited, 1)
-  assert.equal(asks.length, 0)
 })
 
 test('disabled 与 readonly 模式拒绝副作用工具', async () => {
