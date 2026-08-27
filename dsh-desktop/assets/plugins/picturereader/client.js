@@ -1,7 +1,12 @@
 /**
  * picturereader — Web settings card (client half).
  *
- * registers a "图片阅读" section inside the DSH Web settings page:
+ * Registers a "图片阅读" section inside the DSH Web settings page, restyled to
+ * the settings-panel design language (the same vocabulary the General-section
+ * rows and the models page use: 720px section, bordered 12px card groups,
+ * capsule buttons h36 r18, 32px inputs, custom-chevron selects, details
+ * disclosure with rotating marker). Business logic is unchanged.
+ *
  *   - Top: usage mode dropdown (privacy / smart / strict)
  *   - Vision bridge model picker (checkbox list of all text-only models,
  *     each with an optional note field; checked models get a "(视觉)" variant)
@@ -9,7 +14,10 @@
  *   - OCR engine selector
  *   - Advanced settings (timeout / max tokens / export dir / debug)
  *
- * Hand-written ModuleLoader bundle — no build step.
+ * Hand-written ModuleLoader bundle — no build step. scope.load() usage is
+ * guarded (`typeof scope.load === "function"`) so the card runs on DSH hosts
+ * without a scope load surface (EAC desktop shells) as well as those that
+ * have one.
  */
 window.__ModuleLoader__.load({
   id: "picturereader",
@@ -20,34 +28,53 @@ window.__ModuleLoader__.load({
     var react = require("react");
     var h = react.createElement;
 
-    // ── CSS (theme tokens) ────────────────────────────────────────────────
+    // ── CSS (settings-panel design language) ───────────────────────────────
+    // Token vocabulary mirrored from dsh-client-ui-settings-models: sections
+    // max 720px, bordered rowCards (r12, pad 14/16), capsule buttons
+    // (h36 r18 primary fill / outline), inputs h32 r8 on bg-layer-1 with
+    // brand-primary focus, enum selects with the shared inset chevron,
+    // disclosure markers as a rotating 5px chevron.
     var CSS =
-      ".__pr_root{max-width:640px;display:flex;flex-direction:column;gap:10px}" +
-      ".__pr_field{display:flex;flex-direction:column;gap:4px}" +
-      ".__pr_label{font-size:12px;font-weight:600;color:var(--dsw-alias-label-primary);display:flex;align-items:center;gap:6px}" +
-      ".__pr_hint{font-size:11px;color:var(--dsw-alias-label-tertiary)}" +
-      ".__pr_row{display:flex;align-items:center;gap:8px}" +
+      ".__pr_section{max-width:720px;display:flex;flex-direction:column;gap:12px;color:var(--dsw-alias-label-primary)}" +
+      ".__pr_intro{margin:0;font-size:14px;line-height:22px;color:var(--dsw-alias-label-tertiary)}" +
+      ".__pr_card{border:1px solid var(--dsw-alias-border-l2);border-radius:12px;padding:14px 16px;display:flex;flex-direction:column;gap:12px}" +
+      ".__pr_cardTitle{margin:0;font-size:14px;line-height:22px;font-weight:500;color:var(--dsw-alias-label-primary)}" +
+      ".__pr_subHint{margin:0;font-size:12px;line-height:18px;color:var(--dsw-alias-label-tertiary)}" +
+      ".__pr_field{display:flex;flex-direction:column;gap:6px}" +
+      ".__pr_label{display:inline-flex;align-items:center;gap:6px;font-size:12px;line-height:18px;font-weight:500;color:var(--dsw-alias-label-secondary)}" +
+      ".__pr_hint{margin:0;font-size:12px;line-height:18px;color:var(--dsw-alias-label-tertiary)}" +
+      ".__pr_input{box-sizing:border-box;width:100%;height:32px;padding:0 10px;border:1px solid var(--dsw-alias-border-l2);border-radius:8px;font:inherit;font-size:14px;line-height:22px;background:var(--dsw-alias-bg-layer-1);color:var(--dsw-alias-label-primary)}" +
+      ".__pr_input:focus{outline:none;border-color:var(--dsw-alias-brand-primary)}" +
+      ".__pr_input::placeholder{color:var(--dsw-alias-label-dimmed)}" +
+      ".__pr_inputSmall{box-sizing:border-box;width:150px;height:28px;padding:0 8px;border:1px solid var(--dsw-alias-border-l2);border-radius:8px;font:inherit;font-size:12px;line-height:18px;background:var(--dsw-alias-bg-layer-1);color:var(--dsw-alias-label-primary)}" +
+      ".__pr_inputSmall:focus{outline:none;border-color:var(--dsw-alias-brand-primary)}" +
+      "select.__pr_input{width:auto;min-width:240px;max-width:100%;cursor:pointer;appearance:none;padding-right:32px;background-image:url('data:image/svg+xml,%3Csvg xmlns=%27http://www.w3.org/2000/svg%27 width=%2712%27 height=%2712%27 viewBox=%270 0 12 12%27 fill=%27none%27%3E%3Cpath d=%27M3 4.5L6 7.5L9 4.5%27 stroke=%27%2381858C%27 stroke-width=%271.5%27 stroke-linecap=%27round%27 stroke-linejoin=%27round%27/%3E%3C/svg%3E');background-repeat:no-repeat;background-position:right 12px center;background-size:12px 12px}" +
       ".__pr_check{accent-color:var(--dsw-alias-state-business-primary)}" +
-      ".__pr_input{border:1px solid var(--dsw-alias-border-l2);background:var(--dsw-alias-bg-layer-3);font:inherit;color:var(--dsw-alias-label-primary);border-radius:8px;padding:6px 10px;font-size:13px;box-sizing:border-box;width:100%}" +
-      ".__pr_inputSmall{border:1px solid var(--dsw-alias-border-l2);background:var(--dsw-alias-bg-layer-3);font:inherit;color:var(--dsw-alias-label-primary);border-radius:6px;padding:3px 6px;font-size:11px;width:100px;box-sizing:border-box}" +
-      ".__pr_select{border:1px solid var(--dsw-alias-border-l2);background:var(--dsw-alias-bg-layer-3);font:inherit;color:var(--dsw-alias-label-primary);border-radius:8px;padding:6px 8px;font-size:13px}" +
-      ".__pr_actions{display:flex;gap:8px;align-items:center;margin-top:4px}" +
-      ".__pr_btn{border:1px solid var(--dsw-alias-border-l2);background:var(--dsw-alias-bg-layer-3);color:var(--dsw-alias-label-primary);border-radius:8px;padding:6px 14px;font:inherit;font-size:13px;cursor:pointer}" +
-      ".__pr_btn:hover:not(:disabled){border-color:var(--dsw-alias-state-business-primary)}" +
-      ".__pr_btn:disabled{opacity:.5;cursor:default}" +
-      ".__pr_btnPrimary{border-color:var(--dsw-alias-state-business-primary);background:var(--dsw-alias-state-business-primary);color:var(--dsw-alias-label-on-accent)}" +
-      ".__pr_status{font-size:12px;color:var(--dsw-alias-label-tertiary)}" +
-      ".__pr_error{font-size:12px;color:var(--dsw-alias-state-error-primary)}" +
-      ".__pr_advanced{margin-top:8px;border-top:1px solid var(--dsw-alias-border-l2);padding-top:6px}" +
-      ".__pr_advancedSummary{cursor:pointer;font-size:13px;font-weight:600;color:var(--dsw-alias-label-secondary);user-select:none;display:flex;align-items:center;gap:5px}" +
-      ".__pr_advancedArrow{display:inline-block;transition:transform .18s ease;font-size:13px;line-height:1;color:var(--dsw-alias-label-secondary);transform:rotate(0)}" +
-      ".__pr_advanced[open] .__pr_advancedArrow{transform:rotate(90deg)}" +
-      ".__pr_unavailable{font-size:13px;color:var(--dsw-alias-label-tertiary)}" +
-      ".__pr_modelList{display:flex;flex-direction:column;gap:4px;max-height:240px;overflow-y:auto;border:1px solid var(--dsw-alias-border-l2);border-radius:8px;padding:8px;background:var(--dsw-alias-bg-layer-2)}" +
-      ".__pr_modelRow{display:flex;align-items:center;gap:6px;padding:3px 0;font-size:12px}" +
-      ".__pr_modelName{flex:1;color:var(--dsw-alias-label-primary);min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}" +
-      ".__pr_modelProvider{font-size:10px;color:var(--dsw-alias-label-tertiary);max-width:80px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}" +
-      ".__pr_empty{font-size:12px;color:var(--dsw-alias-label-tertiary);font-style:italic;padding:8px 0}";
+      ".__pr_actions{display:flex;align-items:center;gap:8px;margin-top:4px}" +
+      ".__pr_btn{box-sizing:border-box;display:inline-flex;align-items:center;justify-content:center;gap:4px;height:36px;padding:0 14px;border:none;border-radius:18px;font:inherit;font-size:14px;line-height:22px;cursor:pointer}" +
+      ".__pr_btnPrimary{background:var(--dsw-alias-button-primary-fill);color:var(--dsw-alias-label-primary-foreground)}" +
+      ".__pr_btnPrimary:hover:not(:disabled){background:var(--dsw-alias-button-primary-hover)}" +
+      ".__pr_btnSecondary{border:1px solid var(--dsw-alias-border-l2);background:transparent;color:var(--dsw-alias-label-primary)}" +
+      ".__pr_btnSecondary:hover:not(:disabled){background:var(--dsw-alias-interactive-bg-hover)}" +
+      ".__pr_btn:disabled{opacity:.4;cursor:default}" +
+      ".__pr_btn:focus-visible,.__pr_input:focus-visible,.__pr_inputSmall:focus-visible{outline:none;box-shadow:0 0 0 2px var(--dsw-alias-border-l3)}" +
+      ".__pr_status{font-size:12px;line-height:18px;color:var(--dsw-alias-label-tertiary)}" +
+      ".__pr_saved{font-size:12px;line-height:18px;color:var(--dsw-alias-state-success-primary)}" +
+      ".__pr_error{font-size:12px;line-height:18px;color:var(--dsw-alias-state-error-primary)}" +
+      ".__pr_advanced{border-top:1px solid var(--dsw-alias-border-l2);padding-top:12px;display:flex;flex-direction:column;gap:12px}" +
+      ".__pr_advancedSummary{display:flex;align-items:center;gap:6px;width:fit-content;padding:2px 4px;margin-left:-4px;border-radius:6px;cursor:pointer;list-style:none;font-size:12px;line-height:18px;font-weight:500;color:var(--dsw-alias-label-secondary)}" +
+      ".__pr_advancedSummary::-webkit-details-marker{display:none}" +
+      ".__pr_advancedSummary::before{content:'';width:5px;height:5px;border-right:1.5px solid currentcolor;border-bottom:1.5px solid currentcolor;transform:rotate(-45deg) translate(-1px,-1px);transition:transform 120ms ease}" +
+      "details.__pr_advanced[open] > .__pr_advancedSummary::before{transform:rotate(45deg) translate(-1px,-1px)}" +
+      ".__pr_advancedSummary:hover{color:var(--dsw-alias-label-primary)}" +
+      ".__pr_advancedBody{display:flex;flex-direction:column;gap:12px;padding-top:12px}" +
+      ".__pr_modelList{display:flex;flex-direction:column;gap:8px;max-height:260px;overflow-y:auto;padding-right:4px}" +
+      ".__pr_modelRow{display:flex;align-items:center;gap:8px;padding:6px 8px;border:1px solid var(--dsw-alias-border-l2);border-radius:8px;background:var(--dsw-alias-bg-layer-1)}" +
+      ".__pr_modelMain{display:flex;flex-direction:column;gap:2px;min-width:0;flex:1}" +
+      ".__pr_modelName{font-size:13px;line-height:20px;color:var(--dsw-alias-label-primary);min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}" +
+      ".__pr_modelProvider{font-size:11px;line-height:16px;color:var(--dsw-alias-label-tertiary);max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}" +
+      ".__pr_empty{font-size:12px;line-height:18px;color:var(--dsw-alias-label-tertiary);font-style:italic;padding:8px 0;margin:0}" +
+      ".__pr_unavailable{font-size:13px;line-height:20px;color:var(--dsw-alias-label-tertiary)}";
     var tagId = "picturereader/main.css";
     if (typeof document !== "undefined" && document.querySelector("style[data-plugin-css=\"" + tagId + "\"]") === null) {
       var tag = document.createElement("style");
@@ -82,8 +109,10 @@ window.__ModuleLoader__.load({
       vlmKeyEnv: "Key 环境变量（apiKey 为空时读取）",
       ocr: "默认 OCR 引擎",
       ocrWindows: "windows（系统内置，无需安装）",
+      ocrMacos: "macos（macOS 原生 Vision，免装第三方，首次需编译）",
       ocrPaddle: "paddle（PaddleOCR，对发光/弯曲/游戏文字更好）",
       ocrRapid: "rapid（RapidOCR，轻量快速，选装）",
+      debug: "调试日志（llm/stream 图片桥与模型缓存读取的诊断输出）",
       advanced: "高级设置",
       vlmTimeoutMs: "视觉请求超时（毫秒）",
       vlmMaxTokens: "视觉最大输出 Tokens",
@@ -131,8 +160,10 @@ window.__ModuleLoader__.load({
       vlmKeyEnv: "Key env var (used when apiKey empty)",
       ocr: "Default OCR Engine",
       ocrWindows: "windows (built-in, no install)",
+      ocrMacos: "macos (macOS built-in Vision, no third-party install; one-time compile)",
       ocrPaddle: "paddle (PaddleOCR, best for glowing/curved/game text)",
       ocrRapid: "rapid (RapidOCR, lightweight, optional)",
+      debug: "Debug logging (llm/stream bridge & model-cache reads)",
       advanced: "Advanced",
       vlmTimeoutMs: "Vision request timeout (ms)",
       vlmMaxTokens: "Vision max output tokens",
@@ -165,11 +196,21 @@ window.__ModuleLoader__.load({
       { value: "smart", labelKey: "modeSmart" },
       { value: "strict", labelKey: "modeStrict" },
     ];
-    var OCR_OPTS = [
-      { value: "windows", labelKey: "ocrWindows" },
-      { value: "paddle", labelKey: "ocrPaddle" },
-      { value: "rapid", labelKey: "ocrRapid" },
-    ];
+    // 平台条件：windows OCR 引擎仅在 Windows 显示，macos OCR 引擎仅在
+    // macOS 显示（paddle / rapid 为跨平台选装，始终显示）。DEFAULT_OCR 作为
+    // 「未配置时的平台原生默认」，与 src 侧引擎缺失时的平台降级目标一致。
+    var OCR_PLATFORM = (function () {
+      if (typeof navigator === "undefined") return null;
+      var ua = String(navigator.userAgent || "");
+      if (/Mac|iPhone|iPad|iPod/i.test(ua)) return "macos";
+      if (/Win/i.test(ua)) return "windows";
+      return null;
+    })();
+    var DEFAULT_OCR = OCR_PLATFORM === "macos" ? "macos" : (OCR_PLATFORM === "windows" ? "windows" : "paddle");
+    var OCR_OPTS = []
+      .concat(OCR_PLATFORM === "windows" ? [{ value: "windows", labelKey: "ocrWindows" }] : [])
+      .concat(OCR_PLATFORM === "macos" ? [{ value: "macos", labelKey: "ocrMacos" }] : [])
+      .concat([{ value: "paddle", labelKey: "ocrPaddle" }, { value: "rapid", labelKey: "ocrRapid" }]);
     // FIELDS: mode, vision_models (custom), vlm_enabled (checkbox), vlm_*, ocr_engine, advanced
     var FIELDS = [
       { key: "mode", type: "mode" },
@@ -183,6 +224,7 @@ window.__ModuleLoader__.load({
       { key: "vlm_timeout_ms", type: "number", advanced: true, labelKey: "vlmTimeoutMs" },
       { key: "vlm_max_tokens", type: "number", advanced: true, labelKey: "vlmMaxTokens" },
       { key: "bridge_export_dir", type: "text", advanced: true, labelKey: "bridgeExportDir" },
+      { key: "debug", type: "checkbox", advanced: true, labelKey: "debug" },
       { key: "max_image_bytes", type: "number", advanced: true, labelKey: "maxImageBytes" },
       { key: "scan_default_size", type: "number", advanced: true, labelKey: "scanDefaultSize" },
       { key: "scan_palette", type: "text", advanced: true, labelKey: "scanPalette" },
@@ -194,7 +236,6 @@ window.__ModuleLoader__.load({
       { key: "batch_ocr_limit_chars", type: "number", advanced: true, labelKey: "batchOcrLimitChars" },
       { key: "doc_dpi", type: "number", advanced: true, labelKey: "docDpi" },
       { key: "doc_max_pages", type: "number", advanced: true, labelKey: "docMaxPages" },
-      { key: "debug", type: "checkbox", advanced: true, labelKey: "debug" },
     ];
     var FIELD_LABELS = {
       mode: "mode", vlm_enabled: "vlmEnabled", vlm_base: "vlmBase", vlm_model: "vlmModel", vlm_key: "vlmKey",
@@ -237,9 +278,15 @@ window.__ModuleLoader__.load({
             }
           }
         }
-        // 初始加载：一律从 getSnapshot 读取，兼容无 load 能力的宿主；
-        // 与 dsh-eac 内置插件契约一致。
-        syncFromScope();
+        // Initial load: prefer scope.load() when the host provides it, else a
+        // plain getSnapshot read (compatible with EAC hosts without load).
+        if (typeof scope.load === "function") {
+          scope.load().then(function () {
+            if (alive) syncFromScope();
+          }).catch(function () {});
+        } else {
+          syncFromScope();
+        }
         // Subscribe to scope changes (triggers after save)
         var unsubscribe = typeof scope.subscribe === "function" ? scope.subscribe(function () {
           if (alive) syncFromScope();
@@ -260,14 +307,7 @@ window.__ModuleLoader__.load({
           fetch('/picturereader/models')
             .then(function (res) { return res.ok ? res.json() : []; })
             .then(function (data) {
-              if (!alive || !Array.isArray(data)) return;
-              // 模型列表未变化时不 setState：5s 轮询原本每次都用新数组
-              // 引用触发重渲染，设置页展开「视觉模型」组时每 5s 重置一次
-              // 列表滚动位置/悬停状态（issue #220 观感）。
-              setAvailable(function (prev) {
-                if (prev && JSON.stringify(prev) === JSON.stringify(data)) return prev;
-                return data;
-              });
+              if (alive && Array.isArray(data)) setAvailable(data);
             })
             .catch(function () {});
         }
@@ -328,35 +368,34 @@ window.__ModuleLoader__.load({
         return entry ? (entry.note || "") : "";
       };
 
-      return h("div", { className: "__pr_field" },
-        h("span", { className: "__pr_label" }, t("visionBridgeModels")),
-        h("span", { className: "__pr_hint" }, t("visionBridgeModelsHint")),
-        available.length === 0
-          ? h("p", { className: "__pr_empty" }, t("noModels"))
-          : h("div", { className: "__pr_modelList" },
-              available.map(function (m) {
-                var key = m.provider + "/" + m.id;
-                var checked = isSelected(m);
-                return h("div", { key: key, className: "__pr_modelRow" },
-                  h("input", {
-                    className: "__pr_check",
-                    type: "checkbox",
-                    checked: checked,
-                    onChange: function () { toggleModel(m); },
-                  }),
+      // 标题与说明由外层卡片渲染，这里只负责模型勾选列表。
+      return available.length === 0
+        ? h("p", { className: "__pr_empty" }, t("noModels"))
+        : h("div", { className: "__pr_modelList" },
+            available.map(function (m) {
+              var key = m.provider + "/" + m.id;
+              var checked = isSelected(m);
+              return h("div", { key: key, className: "__pr_modelRow" },
+                h("input", {
+                  className: "__pr_check",
+                  type: "checkbox",
+                  checked: checked,
+                  onChange: function () { toggleModel(m); },
+                }),
+                h("div", { className: "__pr_modelMain" },
                   h("span", { className: "__pr_modelName" }, m.name || m.id),
-                  h("span", { className: "__pr_modelProvider" }, m.provider),
-                  checked ? h("input", {
-                    className: "__pr_inputSmall",
-                    type: "text",
-                    value: noteOf(m),
-                    placeholder: t("visionBridgeNotePH"),
-                    onChange: function (e) { setNote(m, e.target.value); },
-                  }) : null
-                );
-              })
-            )
-      );
+                  h("span", { className: "__pr_modelProvider" }, m.provider)
+                ),
+                checked ? h("input", {
+                  className: "__pr_inputSmall",
+                  type: "text",
+                  value: noteOf(m),
+                  placeholder: t("visionBridgeNotePH"),
+                  onChange: function (e) { setNote(m, e.target.value); },
+                }) : null
+              );
+            })
+          );
     }
 
     function tOf(props) { return props.t; }
@@ -373,6 +412,7 @@ window.__ModuleLoader__.load({
       var [error, setError] = react.useState(null);
 
       react.useEffect(function () {
+        if (typeof scope.load === "function") scope.load();
         var alive = true;
         var sync = function () { if (alive) setSnapshot(scope.getSnapshot()); };
         var un = typeof scope.subscribe === "function" ? scope.subscribe(sync) : null;
@@ -436,7 +476,7 @@ window.__ModuleLoader__.load({
           }
           // For select fields (mode, ocr_engine), use draft value if touched, otherwise use current value
           if (f.type === "mode" || f.type === "ocr") {
-            var selectVal = draft[f.key] !== void 0 ? draft[f.key] : (value[f.key] || (f.type === "mode" ? "smart" : "windows"));
+            var selectVal = draft[f.key] !== void 0 ? draft[f.key] : (value[f.key] || (f.type === "mode" ? "smart" : DEFAULT_OCR));
             if (selectVal) ops.push({ op: "set", key: f.key, value: selectVal });
             return;
           }
@@ -459,8 +499,13 @@ window.__ModuleLoader__.load({
         });
         Promise.all(writes).then(function () {
           setBusy(false); setNotice(t("saved"));
-          // 保存后手动刷新 snapshot（不采用宿主 load 机制，遵守内置插件契约）。
-          try { setSnapshot(scope.getSnapshot()); } catch (_e) {}
+          // 保存后刷新本机 snapshot：优先走宿主 load（若提供），否则直接
+          // 读 getSnapshot（兼容无 load 的 EAC 宿主）。
+          if (typeof scope.load === "function") {
+            scope.load();
+          } else {
+            try { setSnapshot(scope.getSnapshot()); } catch (_e) {}
+          }
         }).catch(function (e) {
           setBusy(false); setError(t("error") + ": " + String(e && e.message || e));
         });
@@ -470,56 +515,57 @@ window.__ModuleLoader__.load({
         Promise.all(FIELDS.filter(function (f) { return f.type !== "models"; }).map(function (f) { return scope.unset(f.key); })).then(function () {
           setBusy(false); setNotice(t("saved"));
           setTimeout(function () {
-            var fresh = scope.getSnapshot();
-            if (fresh.status === "ready" && fresh.value !== void 0) setDraft(Object.assign({}, valueToDraft(fresh.value)));
+            if (typeof scope.load === "function") {
+              scope.load().then(function () {
+                var fresh = scope.getSnapshot();
+                if (fresh.status === "ready" && fresh.value !== void 0) setDraft(Object.assign({}, valueToDraft(fresh.value)));
+              }).catch(function () {});
+            } else {
+              var fresh = scope.getSnapshot();
+              if (fresh.status === "ready" && fresh.value !== void 0) setDraft(Object.assign({}, valueToDraft(fresh.value)));
+            }
           }, 120);
         }).catch(function (e) { setBusy(false); setError(t("error") + ": " + String(e && e.message || e)); });
       }
 
       function renderField(f) {
-        // Vision models picker (custom component, not a standard field)
-        if (f.type === "models") {
-          return h(VisionBridgePicker, { key: f.key, t: t, scope: scope });
-        }
-        // VLM fields hidden unless vlm_enabled checked
-        if (f.key.indexOf("vlm_") === 0 && f.key !== "vlm_enabled") {
-          var vlmOn = draft["vlm_enabled"] !== void 0 ? !!draft["vlm_enabled"] : Boolean(value["vlm_enabled"]);
-          if (!vlmOn) return null;
-        }
         if (f.type === "checkbox") {
           var checked = !!fieldDraft(f);
           return h("label", { key: f.key, className: "__pr_field" },
-            h("span", { className: "__pr_row" },
+            h("span", { className: "__pr_label" },
               h("input", { className: "__pr_check", type: "checkbox", checked: checked, onChange: function (e) { setField(f, e.target.checked); } }),
-              h("span", { className: "__pr_label" }, t(FIELD_LABELS[f.key]))
+              h("span", null, t(FIELD_LABELS[f.key]))
             ),
-            f.hintKey ? h("span", { className: "__pr_hint" }, t(f.hintKey)) : null
+            f.hintKey ? h("p", { className: "__pr_hint" }, t(f.hintKey)) : null
           );
         }
         if (f.type === "mode") {
           return h("label", { key: f.key, className: "__pr_field" },
             h("span", { className: "__pr_label" }, t("mode")),
             h("select", {
-              className: "__pr_select",
+              className: "__pr_input",
               value: fieldDraft(f) || "smart",
               onChange: function (e) { setField(f, e.target.value); },
             }, MODE_OPTS.map(function (o) {
               return h("option", { key: o.value, value: o.value }, t(o.labelKey));
             })),
-            h("span", { className: "__pr_hint" }, t("modeHint"))
+            h("p", { className: "__pr_hint" }, t("modeHint"))
           );
         }
         if (f.type === "ocr") {
+          // 存储值未在当前平台可用的选项中时，回落到平台原生默认引擎，
+          // 避免 select 空白（例如跨平台迁移后的旧配置）。
+          var ocrDisplay = fieldDraft(f);
+          if (OCR_OPTS.every(function (o) { return o.value !== ocrDisplay; })) ocrDisplay = DEFAULT_OCR;
           return h("label", { key: f.key, className: "__pr_field" },
             h("span", { className: "__pr_label" }, t("ocr")),
             h("select", {
-              className: "__pr_select",
-              value: fieldDraft(f) || "windows",
+              className: "__pr_input",
+              value: ocrDisplay,
               onChange: function (e) { setField(f, e.target.value); },
             }, OCR_OPTS.map(function (o) {
               return h("option", { key: o.value, value: o.value }, t(o.labelKey));
-            })),
-            h("span", { className: "__pr_hint" }, null)
+            }))
           );
         }
         return h("label", { key: f.key, className: "__pr_field" },
@@ -531,26 +577,46 @@ window.__ModuleLoader__.load({
             placeholder: f.placeholderKey ? t(f.placeholderKey) : (f.type === "password" ? (value[f.key] ? "••••••••" : t("vlmKeyHint")) : ""),
             onChange: function (e) { setField(f, e.target.value); },
           }),
-          f.hintKey ? h("span", { className: "__pr_hint" }, t(f.hintKey)) : null
+          f.hintKey ? h("p", { className: "__pr_hint" }, t(f.hintKey)) : null
         );
       }
 
-      var primary = FIELDS.filter(function (f) { return !f.advanced; });
+      var vlmHidden = draft["vlm_enabled"] !== void 0 ? !draft["vlm_enabled"] : !value["vlm_enabled"];
+      var vlmFields = FIELDS.filter(function (f) { return f.key.indexOf("vlm_") === 0 && f.key !== "vlm_enabled"; });
       var advanced = FIELDS.filter(function (f) { return f.advanced; });
-      return h("div", { className: "__pr_root" },
-        h("p", { className: "__pr_hint", style: { margin: "0 0 4px" } }, t("intro")),
-        primary.map(renderField),
+
+      return h("div", { className: "__pr_section" },
+        h("p", { className: "__pr_intro" }, t("intro")),
+        // 使用模式（自带 label，无需卡片标题）
+        h("div", { className: "__pr_card" }, renderField(FIELDS[0])),
+        // 视觉桥模型
+        h("div", { className: "__pr_card" },
+          h("h3", { className: "__pr_cardTitle" }, t("visionBridgeModels")),
+          h("p", { className: "__pr_subHint" }, t("visionBridgeModelsHint")),
+          h(VisionBridgePicker, { t: t, scope: scope })
+        ),
+        // 外部视觉 API
+        h("div", { className: "__pr_card" },
+          renderField(FIELDS[2]),
+          vlmHidden ? null : h("div", { className: "__pr_advancedBody" },
+            vlmFields.map(function (f) {
+              return renderField(f);
+            })
+          )
+        ),
+        // OCR 引擎（自带 label，无需卡片标题）
+        h("div", { className: "__pr_card" }, renderField(FIELDS[7])),
+        // 高级设置
         advanced.length ? h("details", { className: "__pr_advanced" },
-          h("summary", { className: "__pr_advancedSummary" },
-            h("span", null, t("advanced")),
-            h("span", { className: "__pr_advancedArrow" }, "\u25b8")
-          ),
-          advanced.map(renderField)
+          h("summary", { className: "__pr_advancedSummary" }, t("advanced")),
+          h("div", { className: "__pr_advancedBody" },
+            advanced.map(renderField)
+          )
         ) : null,
         h("div", { className: "__pr_actions" },
           h("button", { type: "button", className: "__pr_btn __pr_btnPrimary", onClick: onSave, disabled: busy || !snapshot.writable }, t("save")),
-          h("button", { type: "button", className: "__pr_btn", onClick: onReset, disabled: busy || !snapshot.writable }, t("reset")),
-          notice ? h("span", { className: "__pr_status" }, notice) : null,
+          h("button", { type: "button", className: "__pr_btn __pr_btnSecondary", onClick: onReset, disabled: busy || !snapshot.writable }, t("reset")),
+          notice ? h("span", { className: "__pr_saved" }, notice) : null,
           busy ? h("span", { className: "__pr_status" }, t("saving")) : null,
           error ? h("span", { className: "__pr_error" }, error) : null
         )

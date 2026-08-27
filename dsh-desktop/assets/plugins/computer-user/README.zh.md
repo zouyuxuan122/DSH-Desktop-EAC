@@ -77,6 +77,9 @@ computer_screenshot → image_compare           # 验证
 
 ## 设置卡
 
+设置卡（「电脑操作」）采用 DSH settings-panel 设计语言：卡片分组 + 胶囊按钮 + 32px
+输入框 + chevron 下拉 + 折叠箭头；`scope.load()` 兼容无 load 宿主（EAC 桌面壳）。
+
 - **模式下拉框**（卡片顶部）：
   - `disabled` 禁用 —— 所有 `computer_*` 工具一律拒绝。
   - `readonly` 只读 —— 仅截图 / 读光标 / 等待可用。
@@ -103,7 +106,7 @@ computer_screenshot → image_compare           # 验证
 
 ## 验证与已知限制
 
-- `node --test` 单测 16/16 通过（工具注册、门禁、参数校验）。
+- `node --test` 单测 39/39 通过（工具注册、门禁、参数校验、output guard）。
 - 实机安全窗口冒烟（一次性窗口 + cmd.exe，绝不碰用户应用）：截图 PNG 正确；光标读/移
   往返精确；`hello 中文 123!` 逐字回读一致；keypress Home/End 导航+插入验证
   （`HEADzzzTAIL`）；双击选词、单击取消、拖拽选区均通过控件状态断言。

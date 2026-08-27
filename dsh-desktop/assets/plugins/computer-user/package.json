@@ -1,6 +1,6 @@
 {
   "name": "computer-user",
-  "version": "0.3.4",
+  "version": "0.3.5",
   "description": "Codex-style computer use for DeepSeek Harness (DSH): read the screen and drive the mouse & keyboard. Pairs with picturereader (image_scan/image_ocr) to close the look-act-verify loop. Windows.",
   "type": "module",
   "main": "src/index.js",
@@ -68,3 +68,4 @@
     "url": "https://github.com/jing-hy/computer-user/issues"
   }
 }
+

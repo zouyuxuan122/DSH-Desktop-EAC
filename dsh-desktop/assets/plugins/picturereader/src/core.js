@@ -24,7 +24,7 @@ import * as jpeg from 'jpeg-js';
 import { GifReader } from 'omggif';
 import { spawn } from 'node:child_process';
 import { writeFile, rm, stat } from 'node:fs/promises';
-import { tmpdir, release } from 'node:os';
+import { tmpdir, release, homedir } from 'node:os';
 import { join } from 'node:path';
 import { randomBytes } from 'node:crypto';
 
@@ -1133,6 +1133,10 @@ export async function ocrImage(buffer, ext, { region, language, engine = 'window
       const result = await runRapidOcr(tmpPath);
       return { width: work.width, height: work.height, lines: result.lines };
     }
+    if (engine === 'macos') {
+      const result = await runMacOcr(tmpPath, language);
+      return { width: work.width, height: work.height, lines: result.lines };
+    }
     return await runOcr(winPath, { language });
   } finally {
     await rm(tmpPath, { force: true }).catch(() => {});
@@ -1143,9 +1147,10 @@ export async function ocrImage(buffer, ext, { region, language, engine = 'window
 export function paddlePython() {
   return process.env.DSH_PADDLE_PYTHON ?? 'C:/Users/Administrator/paddle_venv/Scripts/python.exe';
 }
-/** PaddleX model cache (the default ~/.paddlex is broken on this machine); overridable via DSH_PADDLE_CACHE. */
+/** PaddleX model cache; overridable via DSH_PADDLE_CACHE. Default: user home
+ *  (previous default was a hard-coded author machine path). */
 export function paddleCacheHome() {
-  return process.env.DSH_PADDLE_CACHE ?? 'D:/coding/picturereader/.paddlex-cache';
+  return process.env.DSH_PADDLE_CACHE ?? join(homedir(), '.paddlex-cache');
 }
 
 /**
@@ -1187,9 +1192,9 @@ export function runPaddleOcr(pngPath) {
     '        if i < len(polys):',
     '            pts = [[int(float(v)) for v in pt] for pt in polys[i]]',
     '            xs = [pt[0] for pt in pts]; ys = [pt[1] for pt in pts]',
-    '            box = {"x": min(xs), "y": min(ys), "w": max(xs)-min(xs), "h": max(ys)-min(ys)}',
+    '            box = {"x": min(xs), "y": min(ys), "width": max(xs)-min(xs), "height": max(ys)-min(ys)}',
     '        else:',
-    '            box = {"x": 0, "y": 0, "w": 0, "h": 0}',
+    '            box = {"x": 0, "y": 0, "width": 0, "height": 0}',
     "        score = round(float(scores[i]), 3) if i < len(scores) else 0.0",
     "        lines.append({'text': t, 'score': score, **box})",
     "out = json.dumps({'lines': lines}, ensure_ascii=False)",
@@ -1219,8 +1224,16 @@ export function runPaddleOcr(pngPath) {
         reject(new Error(`image_ocr: PaddleOCR failed (exit ${code}): ${tail}`));
         return;
       }
+      // 首次下载模型时 AI Studio 源可能把 `<Response [404]>` 之类的调试行
+      // 打到 stdout（aistudio_sdk 缺陷），污染 base64。防御：只取合法
+      // base64 行再拼接解码（issue #2 Bug 1）。
+      const b64 = stdout.split('\n').map((l) => l.trim()).filter((l) => l && /^[A-Za-z0-9+/=]+$/.test(l)).join('');
+      if (!b64) {
+        reject(new Error('image_ocr: PaddleOCR produced no base64 output (tail: ' + stdout.trim().split('\n').slice(-3).join(' | ').slice(0, 200) + ')'));
+        return;
+      }
       try {
-        const json = Buffer.from(stdout.trim(), 'base64').toString('utf8');
+        const json = Buffer.from(b64, 'base64').toString('utf8');
         const parsed = JSON.parse(json);
         resolve({ lines: parsed.lines ?? [] });
       } catch (error) {
@@ -1312,6 +1325,70 @@ export function runRapidOcr(pngPath) {
         resolve({ lines: parsed.lines ?? [] });
       } catch (error) {
         reject(new Error(`image_ocr: cannot parse RapidOCR result: ${error.message}`));
+      }
+    });
+  });
+}
+
+/** Absolute path to the compiled macOS OCR binary (Apple Vision CLI); overridable via DSH_MACOS_OCR_BIN. */
+export function macOcrBinary() {
+  return process.env.DSH_MACOS_OCR_BIN ?? join(homedir(), '.dsh', 'cache', 'picturereader', 'macos-ocr');
+}
+
+/**
+ * Whether the optional macOS OCR binary is available (built via scripts/setup-macos.mjs).
+ * @param binary - binary path to probe (defaults to the configured path).
+ * @returns true when the binary exists.
+ */
+export async function macOcrAvailable(binary = macOcrBinary()) {
+  try {
+    await stat(binary);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Run macOS OCR on an image file via the compiled Swift CLI (Apple Vision
+ * framework, VNRecognizeTextRequest). Fully local, no Python, ~100ms warm.
+ * Chinese-first by default; `language` (BCP-47) overrides the priority.
+ * @param pngPath - absolute path to a PNG/JPEG/TIFF file.
+ * @param language - optional BCP-47 tag (e.g. "zh-Hans", "en-US").
+ * @returns `{ lines: [{ text, score, x, y, width, height }] }` (pixel boxes, top-left origin).
+ */
+export function runMacOcr(pngPath, language) {
+  const args = [String(pngPath)];
+  if (language !== undefined && String(language).trim() !== '') args.push(String(language).trim());
+  return new Promise((resolve, reject) => {
+    const child = spawn(macOcrBinary(), args);
+    let stdout = '';
+    let stderr = '';
+    const timer = setTimeout(() => {
+      child.kill();
+      reject(new Error('image_ocr: macOS OCR timed out after 60s'));
+    }, 60_000);
+    child.stdout.on('data', (chunk) => { stdout += chunk; });
+    child.stderr.on('data', (chunk) => { stderr += chunk; });
+    child.on('error', (error) => {
+      clearTimeout(timer);
+      if (error.code === 'ENOENT') {
+        reject(new Error(`image_ocr: macOS OCR binary not found — build it with: node scripts/setup-macos.mjs (or set DSH_MACOS_OCR_BIN)`));
+        return;
+      }
+      reject(new Error(`image_ocr: cannot start macOS OCR: ${error.message}`));
+    });
+    child.on('close', (code) => {
+      clearTimeout(timer);
+      if (code !== 0) {
+        reject(new Error(`image_ocr: macOS OCR failed (exit ${code}): ${stderr.trim().slice(-200)}`));
+        return;
+      }
+      try {
+        const parsed = JSON.parse(stdout.trim());
+        resolve({ lines: parsed.lines ?? [] });
+      } catch (error) {
+        reject(new Error(`image_ocr: cannot parse macOS OCR result: ${error.message}`));
       }
     });
   });

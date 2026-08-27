@@ -1,11 +1,9 @@
 # picturereader
 
-> **v3.2.0** — 给纯文本模型（DeepSeek / text-only）的全能「看图 / 读文档 / 修图」能力。
-> 融合 **视觉孪生 adapter**（把任意文本模型原位包装成「支持图片」→ DSH 原生缩略图 + 图片块自动分析）、**三模式路由**、**本地像素级工具链**（scan / OCR×3 引擎 / crop / palette / compare / batch）、**文档转图片**（pdf / word / excel / ppt）、**本地修图工具 `image_edit`**（Pillow/OpenCV 纯 CPU：缩放 / 旋转 / 滤镜 / 合成 / 水印 / 去背景 / 超分等）与**可选外部 VLM 桥**。一个插件全包。
+> **v3.3.0** — 给纯文本模型（DeepSeek / text-only）的全能「看图 / 读文档 / 修图」能力。
+> 融合 **视觉孪生 adapter**（把任意文本模型原位包装成「支持图片」→ DSH 原生缩略图 + 图片块自动分析）、**三模式路由**、**本地像素级工具链**（scan / OCR×4 引擎 / crop / palette / compare / batch）、**文档转图片**（pdf / word / excel / ppt）、**本地修图工具 `image_edit`**（Pillow/OpenCV 纯 CPU：缩放 / 旋转 / 滤镜 / 合成 / 水印 / 去背景 / 超分等）与**可选外部 VLM 桥**。一个插件全包。
 >
-> **v3.2.0 新增**：`image_edit` 本地修图工具 — 22 种纯 CPU 图像处理动作（Pillow + OpenCV，可选 rembg/rawpy/realesrgan），无需 GPU / 大模型。
->
-> **v3.1.0 新增**：`read_image` 工具拦截 — 当 LLM 调用 DSH 内置的 `read_image` 工具时，如果返回了 image block，会自动替换为文本引导，避免后续请求因 image block 导致 `UNSUPPORTED_CONTENT` 错误。内置 `image-reading` 技能注册。
+> **v3.3.0 新增**：**macOS 原生 Vision OCR 引擎**（`engine="macos"`，`scripts/setup-macos.mjs` 一键编译，PR #4 合入）；OCR 引擎选项按平台条件显示（macos 仅 macOS、windows 仅 Windows，paddle/rapid 跨平台始终显示）；修复 PaddleOCR 新环境首次调用三个缺陷（stdout 污染 / w/h→width/height / 缓存路径写死，issue #2）；设置卡 UI 重做（settings-panel 设计语言）；调试日志门控（llm/stream 桥不再刷屏）；peerDependencies 兼容 DSH 0.1.1-rc.2（issue #3）。
 
 [![dsh-plugin](https://awesome-dsh-plugin.com/badge.svg)](https://github.com/awesome-dsh-plugin/awesome-dsh-plugin)
 
@@ -19,13 +17,13 @@ DeepSeek 等纯文本模型没有视觉编码器，无法直接看图片；DSH �
 
 picturereader 现在解决三件事：
 
-1. **把「看图/读文档」翻译成纯文本模型能理解的结构化证据**（像素级 huel/结构/材质分析 + OCR 实读 + 可选 VLM 语义描述），并沉淀为读图方法论 skill。
+1. **把「看图/读文档」翻译成纯文本模型能理解的结构化证据**（像素级 hue/结构/材质分析 + OCR 实读 + 可选 VLM 语义描述），并沉淀为读图方法论 skill。
 2. **通过「视觉孪生 adapter」让纯文本模型在 DSH 里获得原生缩略图体验**：勾选模型即生成「(视觉)」变体，粘贴图片显示原生缩略图、图片块进会话、并被自动分析成文本路径 + 本地证据再交给模型——模型拿到的永远是纯文本，不会触发 `UNSUPPORTED_CONTENT`。
 3. **本地直接修图 / 批量处理图片**：`image_edit` 提供缩放、旋转、滤镜、合成、水印、去背景、拼接、透视校正等纯 CPU 动作，图片不出本机。
 
-> **版本兼容性**：本版本专门兼容 **dsh 0.1.1-rc.2** 及 **dsheac 5.1.0**，已针对这两个版本进行适配测试与优化，确保稳定运行。同时兼容 DeepSeek Harness EAC 4.2.0 与 `@deepseek-ai/dsh-client-ui-workspace` rc.7。
+> **版本兼容性**：本版本专门兼容 **dsh 0.1.1-rc.2** 及 **dsheac 5.1.0**，已针对这两个版本进行适配测试与优化，确保稳定运行。同时兼容 DeepSeek Harness EAC 4.2.0 与 `@deepseek-ai/dsh-client-ui-workspace` rc.7。`peerDependencies` 采用 `^0.1.0-rc.6 || ^0.1.1-rc.2` 联合区间，覆盖两条 0.1.x 发布线。
 
-> 🚀 **后续将作为 DeepSeek Harness EAC 的内置视觉插件**：本插件计划替换内置的 `dsh-tool-vision`，随 DSH EAC 桌面版直接捆绑发布，开箱即用（见上游 PR）。作为独立包发布的目的，是让非 EAC / 旧版用户也能通过 `dsh plugin add picturereader` 或 Git/npm 安装获得同等「看图 / 读文档」能力。
+> 🚀 **后续将作为 DeepSeek Harness EAC 的内置视觉插件**：本插件计划替换内置的 `dsh-tool-vision`，随 DSH EAC 桌面版直接捆绑发布，开箱即用。作为独立包发布的目的，是让非 EAC / 旧版用户也能通过 `dsh plugin add picturereader` 或 Git/npm 安装获得同等「看图 / 读文档」能力。
 
 ## 功能总览
 
@@ -49,7 +47,7 @@ picturereader 现在解决三件事：
         → 读入当前「模式」→ 得到该模式的路由策略
         → 模型 / 工具按策略选路线：
             本地像素分析（image_scan / image_sample）
-            本地文字识别（image_ocr：windows / paddle / rapid）
+            本地文字识别（image_ocr：windows / macos / paddle / rapid）
             外部语义理解（vision_analyze include_vlm=true → VLM）
             交叉验证（多路证据对照）
 ```
@@ -95,7 +93,7 @@ picturereader 现在解决三件事：
 | 工具 | 作用 |
 |---|---|
 | `image_scan` | 全局/区域扫描：颜色网格 + regions 色块 + shade diversity + texture + structure + hue families；支持 `focus`/`region`/`px_per_cell` 定向放大 |
-| `image_ocr` | 文字识别**三引擎**：`windows`（内置）/ `paddle`（选装，发光/弯曲/游戏字更强）/ `rapid`（选装，轻量快速），失败自动降级不崩溃 |
+| `image_ocr` | 文字识别**四引擎**：`windows`（内置）/ `macos`（macOS 原生 Vision，免装第三方，首次一条命令编译）/ `paddle`（选装，发光/弯曲/游戏字更强）/ `rapid`（选装，轻量快速）；paddle/rapid 缺失自动降级不崩溃 |
 | `image_sample` | N×N 精确像素取样，判断材质/纹理 |
 | `image_crop` | 按 region 裁剪并导出 PNG |
 | `image_palette` | 颜色提取：主色列表（hex + 命名单 + 占比）+ 色相家族 |
@@ -103,9 +101,11 @@ picturereader 现在解决三件事：
 | `image_batch` | 批量规模/上下文验证：批量扫描 + 类型判定 + 自动全量 OCR + 是否值得深入建议 |
 | `vision_analyze` | 统一入口：低信息拦截 + 可选像素扫描 / OCR / VLM，按模式路由，返回多路证据 |
 
+> **OCR 引擎平台说明**：`windows` 引擎仅在 Windows 平台可用、`macos` 引擎仅在 macOS 平台可用（设置卡按平台条件显示对应选项）；`paddle` / `rapid` 为跨平台选装引擎，任何平台都可使用。未配置时默认跟随当前平台原生引擎（Windows→windows、macOS→macos、其他→paddle），跨平台迁移的旧配置会自动回落到平台默认值。
+
 ### ④ 文档转图片 `document_to_image`
 
-把 **pdf / docx / doc / xlsx / xls / pptx / ppt** 逐页转成 PNG（LiberOffice headless → PDF → PyMuPDF），供模型逐页 OCR / 扫描分析。纯本地、零网络；支持 `dpi` / `max_pages` / `out_dir` / 批量 `file_paths`。
+把 **pdf / docx / doc / xlsx / xls / pptx / ppt** 逐页转成 PNG（LibreOffice headless → PDF → PyMuPDF），供模型逐页 OCR / 扫描分析。纯本地、零网络；支持 `dpi` / `max_pages` / `out_dir` / 批量 `file_paths`。
 
 ### ⑤ 外部 VLM 桥（已支持，由 LLM 自行调用）
 
@@ -116,13 +116,13 @@ picturereader 现在解决三件事：
 
 ### ⑥ 设置卡片「图片阅读」
 
-Web 设置页注册「图片阅读」卡片：使用模式、外部视觉 API、视觉桥模型多选、高级设置（详见「设置卡字段」）。改动写 `~/.dsh/settings.yaml` 即时生效。
+Web 设置页注册「图片阅读」卡片（settings-panel 设计语言：卡片分组 + 胶囊按钮 + 折叠高级项）：使用模式、外部视觉 API、视觉桥模型多选、OCR 引擎（平台条件显示）、高级设置（详见「设置卡字段」）。改动写 `~/.dsh/settings.yaml` 即时生效。
 
 ### ⑦ 粘贴即用 + 缩略图
 
 开启视觉孪生并选择「(视觉)」模型变体后：粘贴/拖入图片 → 原生缩略图 → 图片块进会话 → 被孪生 `stream` 拦截 → 导出文本路径 + 本地证据 → 纯文本模型拿到结果，可继续用 `image_scan` / `image_ocr` 深挖。
 
-### ⑧ 本地修图工具 `image_edit`（v3.2.0 新增）
+### ⑧ 本地修图工具 `image_edit`
 
 一个工具、多个 action 分发，后端为隔离的 `image_venv` Python（Pillow + OpenCV-headless，可选 rembg / rawpy / realesrgan CLI），**纯 CPU、无需 GPU / 大模型**。所有图片字节不出本机。
 
@@ -179,7 +179,7 @@ Web 设置页注册「图片阅读」卡片：使用模式、外部视觉 API、
 对比常见方案（`dsh-tool-vision`、`dsh-image-paste`、`dsh-vision-bridge` 等）：
 
 1. **不绑定单一厂商**：视觉孪生对任意 provider 生效（含 `opencode-go` / xiaomi / qiu 等 pi-ai 系），不是只适配某一家 API。
-2. **全链路可离线**：隐私模式零外呼；本地纯 JS 像素工具 + 3 引擎 OCR，不依赖云端。
+2. **全链路可离线**：隐私模式零外呼；本地纯 JS 像素工具 + 4 引擎 OCR（含平台原生引擎），不依赖云端。
 3. **工具链完整**：裁剪 / 取色 / 对比 / 批量 / 文档转图 / **本地修图 image_edit**，一个插件全覆盖。
 4. **原生缩略图**：真正 DSH 原生图片块（`inputModalities` 声明），非文本路径模拟。
 5. **快**：本地工具毫秒级；可控 VLM 调用（低信息拦截 + 智能模式"值得才调"）省轮数与耗时。
@@ -209,8 +209,9 @@ copy skills\image-reading.md %USERPROFILE%\.dsh\skills\          # Windows
 # cp skills/image-reading.md ~/.dsh/skills/                      # macOS / Linux
 
 # 3.（可选）增强 OCR 引擎
-node scripts/setup-ocr.mjs       # PaddleOCR（发光/弯曲/游戏字更强）
-node scripts/setup-rapid.mjs     # RapidOCR（轻量快速）
+node scripts/setup-ocr.mjs       # PaddleOCR（发光/弯曲/游戏字更强；跨平台选装）
+node scripts/setup-rapid.mjs     # RapidOCR（轻量快速；跨平台选装）
+node scripts/setup-macos.mjs     # macOS 原生 Vision OCR（仅 macOS，需 Xcode 命令行工具）
 
 # 4.（可选）文档转图片依赖（需已装 LibreOffice）
 node scripts/setup-doc-venv.mjs  # 建 doc_venv 装 PyMuPDF
@@ -271,6 +272,8 @@ await main()
 
 ## 设置卡字段（图片阅读）
 
+设置卡片采用 settings-panel 设计语言（卡片分组 / 胶囊按钮 / 折叠高级项），包含：
+
 - **使用模式**：隐私 / 智能 / 严谨（`mode`）。
 - **启用外部视觉 API（选配）**：勾选后才显示并允许调用外部视觉端点；不勾选一律走本地，图片绝不外发（`vlm_enabled`）。
 - 勾选后显示：
@@ -278,7 +281,7 @@ await main()
   - **视觉模型**（`vlm_model`）
   - **视觉 API Key**（`vlm_key`，`password`+`secret`：只写不读，留空保持当前，填写保存即覆盖、不回显）
   - **Key 环境变量**（`vlm_key_env`，apiKey 为空时回退读取）
-  - **默认 OCR 引擎**（`ocr_engine`：windows / paddle / rapid）
+  - **默认 OCR 引擎**（`ocr_engine`：按平台条件显示——Windows 显示 windows/paddle/rapid，macOS 显示 macos/paddle/rapid，其他平台显示 paddle/rapid；未配置时默认跟随平台原生引擎）
 - **视觉桥模型多选**（`vision_models`）：勾选即生成该模型的「(视觉)」变体；改动需**重启 DSH** 生效；已勾选模型会被兜底并入列表保持打钩，与孪生注入一致。
 - **高级设置**（折叠）：
 
@@ -298,9 +301,11 @@ await main()
 | `batch_ocr_limit_chars` | `800` | image_batch 每张 OCR 截断字符数 |
 | `doc_dpi` | `150` | document_to_image 渲染 DPI |
 | `doc_max_pages` | `50` | document_to_image 最大页数 |
-| `debug` | `false` | 调试日志 |
+| `debug` | `false` | 调试日志（llm/stream 图片桥与模型缓存读取的诊断输出） |
 
 ## 环境变量
+
+> 以下 venv 解释器默认路径指向作者开发环境，普通用户请按本机实际 venv 路径设置对应环境变量（或仅使用平台原生引擎：Windows 的 `windows` / macOS 的 `macos` 零依赖）。
 
 ### 本地修图 image_edit（选装，Pillow+OpenCV）
 
@@ -314,8 +319,9 @@ await main()
 | 变量 | 默认值 | 作用 |
 |---|---|---|
 | `DSH_PADDLE_PYTHON` | `C:\Users\Administrator\paddle_venv\Scripts\python.exe` | PaddleOCR 解释器路径 |
-| `DSH_PADDLE_CACHE` | `D:/coding/picturereader/.paddlex-cache` | PaddleX 模型缓存目录 |
+| `DSH_PADDLE_CACHE` | `~/.paddlex-cache` | PaddleX 模型缓存目录（v3.0.x 曾默认到作者开发机路径 `D:/coding/.../.paddlex-cache`，已修复为 HOME） |
 | `DSH_RAPID_PYTHON` | `C:\Users\Administrator\rapid_venv\Scripts\python.exe` | RapidOCR 解释器路径 |
+| `DSH_MACOS_OCR_BIN` | `~/.dsh/cache/picturereader/macos-ocr` | macOS Vision OCR 可执行文件路径（setup-macos.mjs 编译产物） |
 
 ### 文档转图片（选装）
 
@@ -341,8 +347,10 @@ await main()
 - **DSH attachment 单图默认约 5MB**：超大图片可能被宿主上传限制拦截；工具端的 `max_image_bytes`（默认 50MB）是读取上限。
 - **原生缩略图需启用视觉孪生**：文本模型默认不被 DSH 视为「支持图片」，需在设置卡勾选生成「(视觉)」变体并重启。
 - **WebP 暂不支持**：`image_scan` / `vision_analyze` 等对 WebP 报错，请先转成 PNG / JPEG；`image_edit` 的 `convert` 可把 WebP 转成 PNG/JPEG。
+- **平台引擎不可跨平台**：`windows` / `macos` OCR 引擎分别限定对应平台（设置卡按平台显示）；跨平台迁移后旧配置会自动回落到当前平台默认引擎。
 - **`image_edit` 部分动作需可选依赖**：`remove_background`（rembg）、`raw_convert`（rawpy）、`upscale`（realesrgan CLI）需 `--full` 安装或外部 CLI；缺失时返回安装提示而非崩溃。
 - **rembg 首次运行需联网下载 U²-Net 模型**：约 35–176MB，缓存于 `~/.u2net`；之后离线可用。
+- **paddle 引擎首次调用会下载模型**（多源 fallback，缓存于 `~/.paddlex-cache`）：下载过程可能打印干扰行，插件已做防御过滤，首次调用不再失败（issue #2 已修复）。
 - **视觉桥模型勾选需重启 DSH** 生效（`vision_models` 的改动不会热加载）。
 - **`dsh-file-drop` 需停用**：其「拖入图片即注入文本」与视觉孪生/图片桥的自动分析可能冲突（重复/竞争注入），建议在对应 profile 停用；原生缩略图 + 图片桥自动分析已覆盖该需求。
 - **外部 VLM 依赖网络/端点**：未配置端点或离线时自动跳过并给出提示；隐私模式恒不调用。
@@ -363,11 +371,14 @@ await main()
 
 ## 测试情况
 
-### v3.2.0 测试
+### v3.3.0
 
-- `tests/image-edit.test.js`：8 项 node:test 单测通过——action 校验、缺输入、request JSON 构造（action/from/from_extra/out/参数）、默认/动作专属超时、错误透传。
-- 后端 `scripts/image-edit.py` 端到端冒烟（Pillow 12 + OpenCV 4.13）：**24/24 通过**，覆盖 resize(stretch/fit) / rotate / flip / convert(jpg/webp) / adjust / blur / sharpen / composite / watermark(text+image) / thumbnail / edges / equalize_hist(auto+clahe) / denoise / perspective / colorspace(gray/hsv/lab) / morphology / exif_read / 未知 action 负例。
-- 既有的读图工具链、三模式、视觉孪生、document_to_image 测试保持通过。
+- `node --test` 全量 **146 通过 / 0 失败**：
+  - `tests/macos.test.js`：macOS Vision OCR 引擎套件（Windows 平台自动跳过，需编译 `macos-ocr` 二进制后实跑）。
+  - `tests/image-edit.test.js`：8 项单测（action 校验、参数构造、超时、错误透传）。
+  - `tests/ocr.test.js`：paddle 引擎真实用例（本机 paddle_venv 实测 `image_ocr(engine="paddle")` 通过，验证 w/h→width/height 修复）。
+  - 其余读图工具链、三模式、视觉孪生、document_to_image、batch、decode、sample 等全部通过。
+- 后端 `scripts/image-edit.py` 端到端冒烟（Pillow + OpenCV）：**24/24 通过**。
 
 ### v3.1.0 集成测试
 
@@ -396,7 +407,20 @@ await main()
 
 ## 版本更新日志
 
-### v3.2.0（本次）
+### v3.3.1（本次）
+
+- 元数据修正：npm `description` 中 OCR 引擎数量更正为 ×4（windows / macos / paddle / rapid）。
+
+### v3.3.0
+
+- **新增 macOS 原生 Vision OCR 引擎**：`engine="macos"`（`scripts/macos-ocr.swift` + `scripts/setup-macos.mjs` 一键编译，默认中文优先、BCP-47 language 参数、像素坐标框契约与 paddle/rapid 一致），供 macOS 用户零第三方依赖使用（PR #4 合入）。
+- **OCR 引擎按平台条件显示**：设置卡 `windows` 引擎仅 Windows、`macos` 引擎仅 macOS（paddle/rapid 跨平台始终显示），未配置时默认平台原生引擎；跨平台迁移旧配置自动回落。
+- **修复 PaddleOCR 新环境首次调用必失败（issue #2）**：① AI Studio 下载源的 `<Response [404]>` stdout 污染 → 解码前过滤非 base64 行；② paddle 输出 `w/h` → 改为 schema 要求的 `width/height`；③ `paddleCacheHome()` 默认路径从作者开发机改为 `~/.paddlex-cache`。
+- **peerDependencies 兼容 DSH 0.1.1-rc.2（issue #3）**：`^0.1.0-rc.6 || ^0.1.1-rc.2` 联合区间。
+- **设置卡 UI 重做**：settings-panel 设计语言（卡片分组、胶囊按钮、32px 输入框、chevron 下拉、折叠箭头）；`scope.load()` 兼容无 load 宿主（EAC 桌面壳）。
+- **调试日志门控**：llm/stream 图片桥诊断日志改由 `debug` 设置项控制，默认不再刷屏。
+
+### v3.2.0
 
 - **新增 `image_edit` 本地修图工具**：22 种纯 CPU 动作（Pillow + OpenCV-headless，可选 rembg / rawpy / realesrgan CLI）——P0 基础（resize/rotate/flip/convert/adjust/blur/sharpen/composite/watermark/thumbnail）、P1 进阶（edges/equalize_hist/denoise/perspective/stitch/remove_background）、P2 高级（exif_read/write/raw_convert/upscale/colorspace/morphology）。
 - 新增 `scripts/setup-image-venv.mjs`（`--full` 装 rembg+rawpy）与 `scripts/image-edit.py` 后端。
@@ -418,11 +442,12 @@ await main()
 ## 开发 / 仓库布局
 
 ```sh
-# DSH 版（本仓库 main，代码在 dsh/）
+# 本仓库 main（DSH 版，源码位于仓库根目录）
 npm install
 npm test                       # node:test
-node scripts/setup-ocr.mjs     # 可选
-node scripts/setup-rapid.mjs   # 可选
+node scripts/setup-ocr.mjs     # 可选（PaddleOCR）
+node scripts/setup-rapid.mjs   # 可选（RapidOCR）
+node scripts/setup-macos.mjs   # 可选（仅 macOS Vision OCR）
 node scripts/setup-doc-venv.mjs# 可选（文档转换）
 node scripts/setup-image-venv.mjs  # 可选（本地修图 image_edit，--full 加 rembg/rawpy）
 node scripts/preview.mjs       # 生成 fixtures 并预览渲染

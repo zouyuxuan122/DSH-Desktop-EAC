@@ -10,7 +10,7 @@
  *   vlm_model       视觉模型名
  *   vlm_key         视觉 API key（role:'secret'，只写不读、保存可覆盖、不回显）
  *   vlm_key_env     环境变量名（vlm_key 为空时回退读取）
- *   ocr_engine      默认 OCR 引擎（windows / paddle / rapid）
+ *   ocr_engine      默认 OCR 引擎（windows / paddle / rapid / macos）
  * @module picturereader/config
  */
 
@@ -21,7 +21,7 @@ export const NS = 'picturereader';
 export const MODE_KEYS = ['privacy', 'smart', 'strict'];
 
 /** 合法 OCR 引擎。 */
-export const OCR_ENGINE_KEYS = ['windows', 'paddle', 'rapid'];
+export const OCR_ENGINE_KEYS = ['windows', 'paddle', 'rapid', 'macos'];
 
 /**
  * 把扁平配置映射成稳定的模式值（容错非法输入）。

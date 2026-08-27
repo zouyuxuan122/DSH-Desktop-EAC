@@ -76,46 +76,17 @@ export function toggleApproval(approvedSessions, targets) {
   return { approved: true, targets };
 }
 
-/**
- * Idempotent approval: /computer 的默认语义是「批准」。开关（toggle）语义
- * 会在用户第二次按提示输入 /computer 时悄悄把批准撤掉，造成「输入了批准
- * 命令却没生效」的假象。撤销必须显式：/computer 撤销 / /computer revoke。
- * @param {Set<string>} approvedSessions
- * @param {Set<string>} targets
- * @param {boolean} approve - true 批准（幂等），false 撤销。
- * @returns {{approved:boolean, targets:Set<string>}}
- */
-export function setApproval(approvedSessions, targets, approve) {
-  for (const t of targets) {
-    if (approve) approvedSessions.add(t);
-    else approvedSessions.delete(t);
-  }
-  return { approved: approve, targets };
-}
-
 export function apply(ctx, config) {
-  // 手动批准问答：优先走官方 approval 服务（对话内弹出「允许/拒绝」卡）。
-  // 服务不可用 / 非轮次内时返回 'unavailable'，由 modeGate 回落 /computer 路径。
-  const requestApproval = async (req) => {
-    try {
-      const approval = ctx.get('approval')
-      if (!approval || typeof approval.request !== 'function') return 'unavailable'
-      return await approval.request(req)
-    } catch {
-      return 'unavailable'
-    }
-  }
-
   // ── register tools ──
   ctx.effect(() => {
-    for (const tool of createComputerTools({ runPs, getConfig, approvedSessions, setMode, requestApproval })) {
+    for (const tool of createComputerTools({ runPs, getConfig, approvedSessions, sessionId: undefined, setMode })) {
       ctx.tools.register({
         ...tool,
         // Wrap execute to inject the current session ID at call time
         async execute(args, exec) {
           const sid = exec?.agent?.session?.header?.sessionId ?? exec?.sessionId ?? '';
           // Rebuild gate closure with the real session ID
-          const tools = createComputerTools({ runPs, getConfig, approvedSessions, setMode, requestApproval });
+          const tools = createComputerTools({ runPs, getConfig, approvedSessions, sessionId: sid, setMode });
           const realTool = tools.find((t) => t.name === tool.name);
           return realTool.execute(args, exec);
         },
@@ -144,17 +115,13 @@ export function apply(ctx, config) {
         name: 'computer',
         description: '批准当前会话使用 computer-user 的全部工具（手动批准模式下需要）',
         handler: async (invocation) => {
-          // /computer 批准（幂等，默认）：批准当前会话；输入「/computer 撤销」
-          // （或 revoke/off）才撤销。不要再做开关切换——按提示第二次输入
-          // /computer 会把第一次的批准撤掉，表现为「批准了但没生效」。
+          // /computer 是开关：第一次批准当前会话，再按一次撤销批准。
           const targets = sessionTargetsFromInvocation(invocation);
-          const raw = String(invocation?.rawInput ?? '');
-          const wantsRevoke = /撤销|revoke|revocation|\boff\b|取消/i.test(raw);
-          const { approved } = setApproval(approvedSessions, targets, !wantsRevoke);
+          const { approved } = toggleApproval(approvedSessions, targets);
           const ids = [...targets].join(', ');
           return approved
-            ? { kind: 'success', text: `✅ 已批准：computer-user 全部工具在当前会话可用（${ids}）。本轮及后续轮次持续生效；如需撤销请输入「/computer 撤销」。` }
-            : { kind: 'success', text: `🔒 已撤销批准：computer-user 有副作用工具需重新输入「/computer 批准」（${ids}）。` };
+            ? { kind: 'success', text: `✅ 已批准：computer-user 全部工具在当前会话可用（${ids}）。后续轮次持续生效；再按 /computer 可撤销。` }
+            : { kind: 'success', text: `🔒 已撤销批准：computer-user 有副作用工具需重新 /computer 批准（${ids}）。` };
         },
       });
       ctx.logger?.info?.('[computer-user] /computer command registered');

@@ -14,6 +14,7 @@
 
 import { extname } from 'node:path';
 import { stat } from 'node:fs/promises';
+import { getRuntimeConfig } from './runtime.js';
 
 /** Hard cap on file bytes we are willing to read for a scan. */
 export const BYTE_CAP = 50 * 1024 * 1024;
@@ -255,10 +256,10 @@ export function createImageOcrTool(ctx) {
   return {
     name: 'image_ocr',
     description: [
-      'Recognize text in a local image. Three engines: engine="windows" (default) uses the Windows built-in OCR (no install, good for printed/UI text); engine="paddle" uses PaddleOCR via the local paddle_venv (much better for glowing, curved, stylized or game-rendered text and complex backgrounds, Chinese-friendly; ~2s model load per call); engine="rapid" uses RapidOCR via the local rapid_venv (bundled ONNX models, no network download, fast).',
-      'Use it together with image_scan: when the pixel grid shows a dense, regular, high-contrast structure that looks like text (e.g. titles, labels, buttons, dialogs, glowing banners), call image_ocr on that region and read the actual characters. If the Windows engine returns nothing but text is expected, retry with engine="paddle" or engine="rapid".',
-      'Parameters: file_path (required), region: [x0, y0, x1, y1] (0..1 fractions) or focus: [row0, col0, row1, col1] (grid coordinates) to restrict recognition to an area, language (optional BCP-47 tag like "zh-Hans" or "en-US", Windows engine only), engine ("windows" default, "paddle", "rapid").',
-      'The result lists each recognized line with its pixel bounding box and confidence score (paddle).'
+      'Recognize text in a local image. Four engines: engine="windows" uses the Windows built-in OCR (no install, good for printed/UI text); engine="macos" uses the macOS built-in Apple Vision OCR (no third-party install; one-time compile via scripts/setup-macos.mjs, fast, Chinese-friendly); engine="paddle" uses PaddleOCR via the local paddle_venv (much better for glowing, curved, stylized or game-rendered text and complex backgrounds, Chinese-friendly; ~2s model load per call); engine="rapid" uses RapidOCR via the local rapid_venv (bundled ONNX models, no network download, fast). Default follows the plugin setting ocr_engine ("windows" when unset).',
+      'Use it together with image_scan: when the pixel grid shows a dense, regular, high-contrast structure that looks like text (e.g. titles, labels, buttons, dialogs, glowing banners), call image_ocr on that region and read the actual characters. If the default engine returns nothing but text is expected, retry with another engine.',
+      'Parameters: file_path (required), region: [x0, y0, x1, y1] (0..1 fractions) or focus: [row0, col0, row1, col1] (grid coordinates) to restrict recognition to an area, language (optional BCP-47 tag like "zh-Hans" or "en-US", windows/macos engines), engine (default from settings: "windows", "macos", "paddle", "rapid").',
+      'The result lists each recognized line with its pixel bounding box and confidence score.'
     ].join(' '),
     parameters: {
       type: 'object',
@@ -280,12 +281,12 @@ export function createImageOcrTool(ctx) {
         },
         language: {
           type: 'string',
-          description: 'Optional BCP-47 language tag (e.g. "zh-Hans", "en-US"); defaults to the user languages. Windows engine only.'
+          description: 'Optional BCP-47 language tag (e.g. "zh-Hans", "en-US"); defaults to zh-Hans first on the macos engine, user languages on windows.'
         },
         engine: {
           type: 'string',
-          enum: ['windows', 'paddle', 'rapid'],
-          description: '"windows" (default) = Windows built-in OCR; "paddle" = PaddleOCR via local paddle_venv (better for glowing/curved/game text); "rapid" = RapidOCR via local rapid_venv (bundled ONNX models, fast).'
+          enum: ['windows', 'paddle', 'rapid', 'macos'],
+          description: '"windows" = Windows built-in OCR; "macos" = macOS Apple Vision OCR (one-time build via scripts/setup-macos.mjs, fast, Chinese-friendly); "paddle" = PaddleOCR via local paddle_venv (better for glowing/curved/game text); "rapid" = RapidOCR via local rapid_venv (bundled ONNX models, fast). Default follows the plugin setting (windows).'
         }
       },
       required: ['file_path']
@@ -299,7 +300,7 @@ export function createImageOcrTool(ctx) {
           width: { type: 'integer' },
           height: { type: 'integer' },
           region: { type: 'string' },
-          engine: { type: 'string', enum: ['windows', 'paddle', 'rapid'] },
+          engine: { type: 'string', enum: ['windows', 'paddle', 'rapid', 'macos'] },
           note: { type: 'string' },
           lines: {
             type: 'array',
@@ -348,9 +349,13 @@ export function createImageOcrTool(ctx) {
       if (args.language !== undefined && String(args.language).trim().length === 0) {
         throw new Error('image_ocr: language must be a non-empty BCP-47 tag');
       }
-      const engine = args.engine === undefined ? 'windows' : String(args.engine);
-      if (engine !== 'windows' && engine !== 'paddle' && engine !== 'rapid') {
-        throw new Error("image_ocr: engine must be 'windows' (default) or 'paddle' or 'rapid'");
+      // Engine default follows the plugin setting (runtime snapshot of
+      // ocr_engine); explicit args.engine always wins. Falls back to
+      // 'windows' when unset — unchanged behavior for existing setups.
+      const configuredEngine = String(getRuntimeConfig().ocr?.engine ?? 'windows');
+      const engine = args.engine === undefined ? configuredEngine : String(args.engine);
+      if (engine !== 'windows' && engine !== 'paddle' && engine !== 'rapid' && engine !== 'macos') {
+        throw new Error("image_ocr: engine must be 'windows', 'macos', 'paddle' or 'rapid'");
       }
 
       const cwd = exec.agent?.session?.header?.cwd;
@@ -388,17 +393,19 @@ export function createImageOcrTool(ctx) {
       }
 
       // PaddleOCR / RapidOCR are optional engines: degrade gracefully to the
-      // Windows engine (with a note) when they are missing or fail — never crash.
+      // platform-native engine (with a note) when they are missing or fail —
+      // never crash. On macOS the native engine is macos, elsewhere windows.
       const OPTIONAL = {
         paddle: { available: () => core.paddleAvailable(), install: 'node scripts/setup-ocr.mjs' },
         rapid: { available: () => core.rapidAvailable(), install: 'node scripts/setup-rapid.mjs' }
       };
+      const nativeEngine = process.platform === 'darwin' && (await core.macOcrAvailable()) ? 'macos' : 'windows';
       let effectiveEngine = engine;
       let note;
       const opt = OPTIONAL[engine];
       if (opt !== undefined && !(await opt.available())) {
-        effectiveEngine = 'windows';
-        note = `${engine[0].toUpperCase()}${engine.slice(1)}OCR is not installed (engine="${engine}" requested) — fell back to Windows OCR. To install it, run: ${opt.install} (see README).`;
+        effectiveEngine = nativeEngine;
+        note = `${engine[0].toUpperCase()}${engine.slice(1)}OCR is not installed (engine="${engine}" requested) — fell back to ${nativeEngine} OCR. To install it, run: ${opt.install} (see README).`;
       }
       let result;
       try {
@@ -409,12 +416,12 @@ export function createImageOcrTool(ctx) {
         });
       } catch (error) {
         if (opt !== undefined && effectiveEngine === engine) {
-          effectiveEngine = 'windows';
-          note = `${engine[0].toUpperCase()}${engine.slice(1)}OCR failed (${error.message.slice(0, 140)}) — fell back to Windows OCR.`;
+          effectiveEngine = nativeEngine;
+          note = `${engine[0].toUpperCase()}${engine.slice(1)}OCR failed (${error.message.slice(0, 140)}) — fell back to ${nativeEngine} OCR.`;
           result = await core.ocrImage(data, ext, {
             region: regionArray,
             language: args.language === undefined ? undefined : String(args.language).trim(),
-            engine: 'windows'
+            engine: nativeEngine
           });
         } else {
           throw error;
