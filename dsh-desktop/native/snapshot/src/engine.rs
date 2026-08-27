@@ -682,7 +682,9 @@ mod tests {
         let src = c.src.to_str().unwrap();
         write_file(&c.src, "a.txt", "v1");
         let s1 = create(st, src, "1");
-        write_file(&c.src, "a.txt", "v2");
+        // 使用不同长度，避免 Linux runner 的粗粒度 mtime 让哈希缓存误判为未变化；
+        // 本用例只验证删除中间快照后孤儿对象会被 GC 回收。
+        write_file(&c.src, "a.txt", "v2x");
         let s2 = create(st, src, "2");
 
         // head 不可删
