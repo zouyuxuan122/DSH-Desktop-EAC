@@ -38,10 +38,22 @@ test('5 个 uSES 插件：不再 require ui-renderer，且内联 shim 存在、�
   }
 });
 
-test('3 个 scope.load 插件：不再出现 scope.load 调用', () => {
+test('3 个 scope.load 插件：scope.load 调用必须是守卫式（rc.2 宿主无 load）', () => {
+  // rc.2 设置作用域（SettingsScopeController）无 load()，裸调 scope.load() 会
+  // 在无 load 宿主上崩溃；守卫式（typeof scope.load === "function" 或
+  // scope.load && …）与 dsh-easy-setup 同款，允许保留。注释里的提及不算调用。
   for (const rel of SCOPE_LOAD_PLUGINS) {
     const src = readFileSync(join(PLUGINS, rel), 'utf8');
-    assert.doesNotMatch(src, /scope\.load/, `${rel} 仍引用 scope.load`);
+    for (const m of src.matchAll(/scope\.load\s*\(/g)) {
+      const lineStart = src.lastIndexOf('\n', m.index) + 1;
+      const lineHead = src.slice(lineStart, m.index).trimStart();
+      if (lineHead.startsWith('//') || lineHead.startsWith('*') || lineHead.startsWith('/*')) continue;
+      const pre = src.slice(Math.max(0, m.index - 120), m.index);
+      const guarded =
+        /typeof\s+scope\.load\s*===/.test(pre) ||
+        /scope\.load\s*&&/.test(pre);
+      assert.ok(guarded, `${rel} 存在未守卫的 scope.load() 调用（字符 ${m.index}）：rc.2 宿主无 load()，必须 typeof 守卫或短路守卫`);
+    }
     assert.doesNotThrow(() => new Function(src), `${rel} 语法解析失败`);
   }
 });
