@@ -25,7 +25,7 @@ import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync
 import { homedir, tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
-import { spawn } from 'node:child_process'
+import { spawn, spawnSync } from 'node:child_process'
 // pnpm 重写 node_modules 前后快照/回填第三方包的本地构建产物
 // （meow-memory 等人工补齐的 lib/ 不再被每次安装/更新清掉）。
 import { snapshotArtifacts, restoreArtifacts } from './artifact-keep.mjs'
@@ -39,7 +39,7 @@ import { scanCandidate, collectProfileState } from './plugin-conflict-scan.mjs'
 export const name = 'dsh-unified-market'
 
 /** 本市场自身版本（与 package.json 同步；自更新检测用）。 */
-export const SELF_VERSION = '0.2.1'
+export const SELF_VERSION = '0.3.0'
 
 /** Hard dependency: the HTTP carrier must exist before the route registers. */
 export const inject = ['webServer']
@@ -1638,6 +1638,139 @@ function hasUpdateOfVersion(local, latest) {
   } catch { return local !== latest }
 }
 
+// ---------------------------------------------------------------------------
+// 功能包（Feature Pack，.dshpack）—— 交互编排层。
+// 核心（解析/校验/semver/注册表/兼容/装配）在 L2 功能包 CLI
+// （dsh-desktop/scripts/feature-pack-cli.js，经 DSH_DESKTOP_RESOURCE_ROOT
+// 定位）；本层只做：spawn CLI、op 轮询、上传/下载中转、市场索引浏览，
+// 不重复实现任何核心逻辑（避免双实现漂移）。
+// ---------------------------------------------------------------------------
+
+// Phase 3：功能包市场索引（packs-index.json）托管地址；正式仓库确认前保持
+// 为空数组 → 仅离线快照（data/packs-snapshot.json）可用。
+const PACKS_INDEX_URLS = []
+const PACKS_CACHE_TTL = 5 * 60 * 1000
+let packsCache = null // { at, packs, source }
+const PACK_UPLOAD_MAX = 128 * 1024 * 1024
+
+function packCliPath() {
+  const root = process.env.DSH_DESKTOP_RESOURCE_ROOT
+  if (!root) return null
+  const cli = join(root, 'scripts', 'feature-pack-cli.js')
+  try { return existsSync(cli) ? cli : null } catch { return null }
+}
+
+/** 同步跑功能包 CLI（快命令：list/inspect/export/rollback/scan）。 */
+function runPackCli(args) {
+  const cli = packCliPath()
+  if (!cli) return { ok: false, error: '功能包 CLI 不可用（缺少 DSH_DESKTOP_RESOURCE_ROOT，请在桌面壳内使用）' }
+  let r
+  try {
+    r = spawnSync(process.execPath, [cli, ...args], {
+      cwd: dshHome(),
+      env: { ...process.env, CI: 'true' },
+      encoding: 'utf8',
+      windowsHide: true,
+      timeout: 90000,
+    })
+  } catch (err) {
+    return { ok: false, error: String((err && err.message) || err) }
+  }
+  const out = String(r.stdout || '')
+  if (r.status !== 0) {
+    const tail = (out + '\n' + String(r.stderr || '')).split('\n').filter(Boolean).slice(-3).join('\n')
+    return { ok: false, error: tail || ('功能包 CLI 失败（exit ' + r.status + '）') }
+  }
+  try { return { ok: true, json: JSON.parse(out) } } catch { return { ok: true, output: out } }
+}
+
+/** 异步慢命令（install/uninstall/update）作为 op 跑，复用现有 op 轮询模型。 */
+function startPackOp(packArgs, label, initialOutput) {
+  const cli = packCliPath()
+  if (!cli) return { ok: false, error: '功能包 CLI 不可用（缺少 DSH_DESKTOP_RESOURCE_ROOT，请在桌面壳内使用）' }
+  if (activeOp && activeOp.status === 'running') {
+    return { ok: false, busy: true, output: '已有任务进行中：' + activeOp.label }
+  }
+  const op = {
+    id: 'pack-' + (++opCounter),
+    kind: 'pack', profile: desktopProfile(), target: label, label,
+    startedAt: Date.now(), status: 'running',
+    output: initialOutput || '', exitCode: null, bin: cli, hot: false,
+  }
+  const child = spawn(process.execPath, [cli, ...packArgs], {
+    cwd: dshHome(),
+    env: { ...process.env, CI: 'true' },
+    windowsHide: true,
+    stdio: ['ignore', 'pipe', 'pipe'],
+  })
+  op.child = child
+  child.stdout.on('data', (d) => appendOutput(op, d.toString()))
+  child.stderr.on('data', (d) => appendOutput(op, d.toString()))
+  child.on('error', (err) => {
+    if (op.status !== 'running') return
+    appendOutput(op, '\n[error] ' + String((err && err.message) || err))
+    settleOp(op, 'failed')
+  })
+  child.on('close', (code) => {
+    if (op.status !== 'running') return
+    settleOp(op, code === 0 ? 'done' : 'failed', code)
+    if (code === 3) {
+      // 文件锁（CLI exit 3）：CLI 已把任务写入 feature-packs/.ops/pending.json，
+      // sidecar 在下次服务启动前的无锁窗口经 feature-pack-cli resume 消费。
+      appendOutput(op, '\n[pending] 文件被运行中的服务占用（Windows 文件锁）。任务已排队：重启 Web 服务后自动完成（功能包排队）。\n')
+    }
+  })
+  op.timer = setTimeout(() => {
+    if (op.status !== 'running') return
+    appendOutput(op, '\n\n[timeout] 操作超过 ' + Math.round(DEFAULT_TIMEOUT / 1000) + ' 秒未完成，已自动终止（可能是网络不通或 pnpm 卡住，可重试）')
+    settleOp(op, 'timeout')
+    killChild(child)
+  }, DEFAULT_TIMEOUT)
+  activeOp = op
+  return { ok: true, opId: op.id, op }
+}
+
+/** 保存客户端上传的 .dshpack（base64）到临时目录，返回本地路径。 */
+function savePackUpload(data64) {
+  let buf
+  try { buf = Buffer.from(String(data64 || ''), 'base64') } catch { return null }
+  if (buf.length === 0 || buf.length > PACK_UPLOAD_MAX) return null
+  const dir = join(dshHome().replace(/[\\/]+$/, ''), 'feature-packs', '.uploads')
+  mkdirSync(dir, { recursive: true })
+  const file = join(dir, 'upload-' + Date.now() + '-' + Math.random().toString(36).slice(2, 8) + '.dshpack')
+  try { writeFileSync(file, buf); return file } catch { return null }
+}
+
+/**
+ * 功能包市场索引（packs-index.json）：live → 5 分钟缓存 → 内置离线快照。
+ * 依赖下载与 SHA-256 校验由安装链路完成（见 pack.install）。
+ */
+async function loadPacksIndex() {
+  if (packsCache && Date.now() - packsCache.at < PACKS_CACHE_TTL) {
+    return { packs: packsCache.packs, source: packsCache.source }
+  }
+  for (const url of PACKS_INDEX_URLS) {
+    try {
+      const r = await fetch(url, { redirect: 'follow', signal: AbortSignal.timeout(15000) })
+      if (!r.ok) continue
+      const json = await r.json()
+      if (json && Array.isArray(json.packs)) {
+        packsCache = { at: Date.now(), packs: json.packs, source: 'live' }
+        return { packs: json.packs, source: 'live' }
+      }
+    } catch { /* 下一镜像 */ }
+  }
+  const snapFile = join(dirname(fileURLToPath(import.meta.url)), '..', 'data', 'packs-snapshot.json')
+  try {
+    const snap = JSON.parse(readFileSync(snapFile, 'utf8'))
+    if (Array.isArray(snap.packs)) {
+      packsCache = { at: Date.now(), packs: snap.packs, source: 'snapshot' }
+      return { packs: snap.packs, source: 'snapshot' }
+    }
+  } catch { /* 无快照 */ }
+  return { packs: [], source: 'none' }
+}
+
 export { classifyPlugin, runProbe, whitelistSource, loadCatalog, parseSimplePatch, checkUpdates, parseSite, registryToCatalog, normalizeRepoUrl, readInstalledProvenance, matchInstalledPackage, resolveProfile, githubList, npmSearch, readZhIntro, selfUpdateCheck, autoUpdateState, setAutoUpdate, desktopProfile, resolveLinkedUpstream, fetchUpstreamVersion, findUpstreamByName, npmLatestInfo, linkedUpdateTarget } // test hooks; cordis only reads name/inject/apply
 
 export function apply(ctx) {
@@ -2040,6 +2173,85 @@ export function apply(ctx) {
         if (method === 'selfUpdate') {
           const r = await selfUpdateCheck()
           return sendJson(res, 200, r)
+        }
+        // ---------- 功能包（Feature Pack）----------（核心逻辑在 L2 CLI）
+        if (method === 'pack.list') {
+          const r = runPackCli(['list'])
+          if (!r.ok) return sendJson(res, 200, r)
+          return sendJson(res, 200, { ok: true, ...(r.json || {}) })
+        }
+        if (method === 'pack.inspect') {
+          // 来源：客户端上传 base64（body.data）或市场 url / 本地路径（body.target）。
+          const target = String(body.target || '').trim()
+          let file = null
+          if (body.data) {
+            file = savePackUpload(body.data)
+            if (!file) return sendJson(res, 400, { ok: false, error: '上传数据无效或超过大小上限' })
+          } else if (!target) {
+            return sendJson(res, 400, { ok: false, error: '缺少 target（url/路径）或 data（base64 文件）' })
+          }
+          const r = runPackCli(['inspect', file || target])
+          if (file) { try { rmSync(file, { force: true, maxRetries: 3 }) } catch {} }
+          if (!r.ok) return sendJson(res, 200, r)
+          return sendJson(res, 200, { ok: true, ...(r.json || {}) })
+        }
+        if (method === 'pack.install' || method === 'pack.update') {
+          if (!sameOrigin(req)) return sendJson(res, 403, { ok: false, error: 'untrusted origin' })
+          const pc = method === 'pack.install'
+          const id = pc ? null : String(body.id || '').trim()
+          if (!pc && !id) return sendJson(res, 400, { ok: false, error: '缺少功能包 id' })
+          // 上传（base64）优先；否则 url / 本地路径（市场条目、手动填写）。
+          let file = null
+          if (body.data) {
+            file = savePackUpload(body.data)
+            if (!file) return sendJson(res, 400, { ok: false, error: '上传数据无效或超过大小上限' })
+          }
+          const target = String(body.target || '').trim()
+          if (!file && !target) return sendJson(res, 400, { ok: false, error: '缺少 target（url/路径）或 data（base64 文件）' })
+          const sha = String(body.sha256 || '').trim()
+          const args = pc
+            ? ['install', file || target, ...(body.force ? ['--force'] : []), ...(sha ? ['--sha256', sha] : [])]
+            : ['update', id, file || target, ...(body.force ? ['--force'] : []), ...(sha ? ['--sha256', sha] : [])]
+          const started = startPackOp(args, (body.label || (pc ? '安装功能包' : '更新功能包 ' + id)) + (file ? '' : '（' + target + '）'),
+            '[功能包] ' + (pc ? '开始安装' : '开始更新') + (file ? '' : ': ' + target) + '\n')
+          if (!started.ok) return sendJson(res, 200, started)
+          if (file && started.op && started.op.child) {
+            // 上传文件在 CLI 使用完毕后清理（op 结束时）。
+            started.op.child.on('close', () => { try { rmSync(file, { force: true, maxRetries: 3 }) } catch {} })
+          }
+          return sendJson(res, 200, { ok: true, opId: started.opId, timeoutMs: DEFAULT_TIMEOUT })
+        }
+        if (method === 'pack.uninstall') {
+          if (!sameOrigin(req)) return sendJson(res, 403, { ok: false, error: 'untrusted origin' })
+          const id = String(body.id || '').trim()
+          if (!id) return sendJson(res, 400, { ok: false, error: '缺少功能包 id' })
+          const started = startPackOp(['uninstall', id], '卸载功能包 ' + id, '[功能包] 开始卸载: ' + id + '\n')
+          if (!started.ok) return sendJson(res, 200, started)
+          return sendJson(res, 200, { ok: true, opId: started.opId, timeoutMs: DEFAULT_TIMEOUT })
+        }
+        if (method === 'pack.export') {
+          const id = String(body.id || '').trim()
+          if (!id) return sendJson(res, 400, { ok: false, error: '缺少功能包 id' })
+          const out = join(dshHome().replace(/[\\/]+$/, ''), 'feature-packs', 'exports', id + '-' + Date.now() + '.dshpack')
+          const r = runPackCli(['export', id, '-o', out])
+          if (!r.ok) return sendJson(res, 200, r)
+          return sendJson(res, 200, { ok: true, path: out, json: r.json || null })
+        }
+        if (method === 'pack.rollback') {
+          const id = String(body.id || '').trim()
+          if (!id) return sendJson(res, 400, { ok: false, error: '缺少功能包 id' })
+          const r = runPackCli(['rollback', id])
+          if (!r.ok) return sendJson(res, 200, r)
+          return sendJson(res, 200, { ok: true, ...(r.json || {}) })
+        }
+        if (method === 'pack.scan') {
+          const r = runPackCli(['scan'])
+          if (!r.ok) return sendJson(res, 200, r)
+          return sendJson(res, 200, { ok: true, ...(r.json || {}) })
+        }
+        if (method === 'pack.market') {
+          const idx = await loadPacksIndex()
+          return sendJson(res, 200, { ok: true, packs: idx.packs, source: idx.source })
         }
         return sendJson(res, 404, { ok: false, error: 'unknown method ' + method })
       } catch (e) {

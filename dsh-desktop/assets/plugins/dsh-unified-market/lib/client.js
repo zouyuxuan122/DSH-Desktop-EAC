@@ -882,6 +882,163 @@ window.__ModuleLoader__.load({ id: 'dsh-unified-market', factory: (require) => {
     )
   }
 
+  // ─────────────────────────────────────────────────────────────────────
+  // 功能包（Feature Pack）面板：交互编排层，核心逻辑在 L2 功能包 CLI。
+  // host pack.* method ↔ CLI；本组件只做 UI 与 op 轮询。
+  // ─────────────────────────────────────────────────────────────────────
+  function FeaturePackPanel() {
+    const [data, setData] = useState({ phase: 'loading', packs: [], kernel: null, error: null })
+    const [market, setMarket] = useState({ packs: [], source: 'none', phase: 'idle' })
+    const [op, setOp] = useState(null)
+    const [msg, setMsg] = useState('')
+    const fileRef = useRef(null)
+    const updateTargetRef = useRef(null)
+
+    const pollStop = useRef(false)
+    useEffect(() => () => { pollStop.current = true }, [])
+
+    const loadPacks = () => {
+      api('pack.list').then((r) => {
+        setData({ phase: 'ready', packs: (r && r.packs) || [], kernel: (r && r.kernel) || null, error: (r && r.error) || null })
+      }).catch((err) => setData({ phase: 'ready', packs: [], kernel: null, error: String((err && err.message) || err) }))
+    }
+    const loadMarket = () => {
+      api('pack.market').then((r) => {
+        setMarket({ packs: (r && r.packs) || [], source: (r && r.source) || 'none', phase: 'ready' })
+      }).catch(() => setMarket({ packs: [], source: 'none', phase: 'ready' }))
+    }
+    useEffect(() => { loadPacks(); loadMarket() }, [])
+
+    const pollOp = (opId) => {
+      const tick = () => {
+        if (pollStop.current) return
+        api('op', { opId }).then((r) => {
+          const o = r && r.op
+          if (!o) { setOp(null); return }
+          if (o.status === 'done') { setOp(o); loadPacks(); return }
+          setOp(o)
+          if (o.status === 'running') setTimeout(tick, 1200)
+        }).catch(() => setTimeout(tick, 1600))
+      }
+      tick()
+    }
+
+    const runOp = (method, params, label) => {
+      if (op && op.status === 'running') { setMsg('已有任务进行中，请先等待完成'); return }
+      setMsg('')
+      api(method, params).then((r) => {
+        if (!r || !r.ok) {
+          setOp({ id: 'err', status: 'failed', output: (r && (r.error || r.output)) || '操作失败', label: label || '' })
+          if (r && r.busy) setMsg('已有任务进行中')
+          return
+        }
+        setOp({ id: r.opId, status: 'running', output: '', label: label || '' })
+        pollOp(r.opId)
+      }).catch((err) => setOp({ id: 'err', status: 'failed', output: String((err && err.message) || err), label: label || '' }))
+    }
+    const killOp = () => { api('kill', {}).catch(() => {}) }
+    const closeOp = () => { setOp(null); loadPacks() }
+
+    const pickFile = (mode, packId) => {
+      updateTargetRef.current = mode === 'update' ? packId : null
+      if (fileRef.current) fileRef.current.value = ''
+      if (fileRef.current) fileRef.current.click()
+    }
+    const onFile = (e) => {
+      const f = e.target.files && e.target.files[0]
+      if (!f) return
+      const reader = new FileReader()
+      reader.onload = () => {
+        const raw = String(reader.result || '')
+        const b64 = raw.slice(raw.indexOf(',') + 1)
+        if (updateTargetRef.current) {
+          runOp('pack.update', { id: updateTargetRef.current, data: b64, label: f.name }, '更新功能包')
+        } else {
+          runOp('pack.install', { data: b64, label: f.name }, '安装功能包')
+        }
+      }
+      reader.readAsDataURL(f)
+    }
+
+    const exportPack = (id) => {
+      api('pack.export', { id }).then((r) => {
+        setMsg(r && r.ok ? ('已导出到：' + (r.path || '')) : ((r && r.error) || '导出失败'))
+      }).catch((err) => setMsg('导出失败：' + String((err && err.message) || err)))
+    }
+
+    const compatBanner = (data.packs || []).filter((p) => p.compatOk === false)
+    const running = !!(op && op.status === 'running')
+
+    return h('div', { className: 'mkts' },
+      h('div', { className: 'mkts-sec' }, '📦 功能包',
+        h('small', null, '把插件 + 预设 + 技能打包分发；声明官方内核兼容范围，官方版本升级后自动检出（思路借鉴 HMCL 整合包）。')),
+      compatBanner.length > 0 ? h('div', { className: 'mkts-health' },
+        h('div', { className: 'mkts-health-item mkts-hl-err' }, '官方内核 ' + (data.kernel || '未知') + ' 与以下功能包不兼容（迁移：安装兼容新版；回滚：恢复安装前状态）：'),
+        compatBanner.map((p) => h('div', { className: 'mkts-update-row', key: p.id },
+          h('span', null, p.name + '（v' + p.version + '）'), ' ',
+          h('button', { className: 'mkts-cmdbtn', disabled: running, onClick: () => pickFile('update', p.id) }, '迁移（选新版 .dshpack）'), ' ',
+          h('button', { className: 'mkts-cmdbtn mkts-cmdbtn-danger', disabled: running || !p.snapshotRef,
+            onClick: () => { if (window.confirm('回滚到安装「' + p.name + '」之前的状态？')) runOp('pack.rollback', { id: p.id }, '回滚 ' + p.id) } }, '回滚'),
+        )),
+      ) : null,
+      data.error ? h('div', { className: 'mkts-err' }, '功能包 CLI 不可用：' + data.error + '（请确认本客户端在桌面壳内运行）') : null,
+      h('div', { className: 'mkts-sec' }, '已安装功能包', h('small', null, String((data.packs || []).length) + ' 个')),
+      data.phase === 'ready' && (data.packs || []).length === 0
+        ? h('div', { className: 'mkts-hint' }, '还没有安装功能包：在下方「导入 .dshpack」本地安装，或到「功能包市场」浏览安装。')
+        : (data.packs || []).map((p) => h('div', { className: 'mkts-item', key: p.id },
+            h('div', { className: 'mkts-avatar' }, (p.name || '?').slice(0, 1)),
+            h('div', { className: 'mkts-main' },
+              h('h3', null, p.name, h('span', { className: 'mkts-by' }, 'v' + p.version),
+                p.compatOk === false
+                  ? h('span', { className: 'mkts-state mkts-state-off' }, '⚠ 不兼容')
+                  : h('span', { className: 'mkts-state mkts-state-on' }, p.state === 'active' ? '正常' : '已回滚')),
+              h('p', { className: 'mkts-desc' }, '插件 ' + String((p.plugins || []).length) + ' · 预设 ' + String((p.presets || []).length) + ' · 技能 ' + String((p.skills || []).length)
+                + (p.requires && p.requires.dsh ? ' · 内核要求 ' + p.requires.dsh : '')),
+            ),
+            h('div', { className: 'mkts-actions' },
+              h('button', { className: 'mkts-cmdbtn', disabled: running, onClick: () => pickFile('update', p.id) }, '更新'),
+              h('button', { className: 'mkts-cmdbtn', disabled: running, onClick: () => exportPack(p.id) }, '导出'),
+              h('button', { className: 'mkts-cmdbtn mkts-cmdbtn-danger', disabled: running,
+                onClick: () => { if (window.confirm('卸载功能包「' + p.name + '」？（仅移除该包装配的插件/预设/技能，其余数据不动）')) runOp('pack.uninstall', { id: p.id }, '卸载 ' + p.id) } }, '卸载'),
+            ),
+          )),
+      h('div', { className: 'mkts-sec' }, '导入 / 安装'),
+      h('div', { className: 'mkts-cmdrow' },
+        h('button', { className: 'mkts-cmdbtn mkts-cmdbtn-primary', disabled: running, onClick: () => pickFile('install', null) }, '导入 .dshpack 安装'),
+        h('input', { ref: fileRef, type: 'file', accept: '.dshpack,application/zip', style: { display: 'none' }, onChange: onFile }),
+      ),
+      h('div', { className: 'mkts-sec' }, '功能包市场', h('small', null, market.phase === 'ready' ? '来源：' + market.source : '加载中…')),
+      market.phase === 'ready' && (market.packs || []).length === 0
+        ? h('div', { className: 'mkts-hint' }, '市场索引为空：尚未配置远端仓库（可先用本地导入，或等待正式市场仓库上线）。')
+        : (market.packs || []).map((p) => h('div', { className: 'mkts-item', key: p.id },
+            h('div', { className: 'mkts-avatar' }, (p.name || '?').slice(0, 1)),
+            h('div', { className: 'mkts-main' },
+              h('h3', null, p.name, h('span', { className: 'mkts-by' }, 'v' + p.version + (p.author ? ' · ' + p.author : ''))),
+              h('p', { className: 'mkts-desc' }, p.desc || ''),
+              p.requires && p.requires.dsh ? h('div', { className: 'mkts-hint' }, '内核要求：' + p.requires.dsh) : null,
+            ),
+            h('div', { className: 'mkts-actions' },
+              h('button', { className: 'mkts-cmdbtn mkts-cmdbtn-primary', disabled: running,
+                onClick: () => runOp('pack.install', { target: p.url, sha256: p.sha256 || undefined, label: p.name }, '安装 ' + p.name) }, '安装'),
+            ),
+          )),
+      msg ? h('div', { className: 'mkts-hint' }, msg) : null,
+      op ? h('div', { className: 'mkts-modal-bg' },
+        h('div', { className: 'mkts-modal' },
+          h('h4', null, (op.label || '功能包任务') + (op.status === 'running' ? ' …' : ' [' + op.status + ']')),
+          op.output ? h('pre', { className: 'mkts-log' }, op.output) : h('div', { className: 'mkts-hint' }, '任务进行中…（插件安装可能较长，可收起等待）'),
+          h('div', { className: 'mkts-cmdrow' },
+            op.status === 'running'
+              ? h('button', { className: 'mkts-cmdbtn mkts-cmdbtn-danger', onClick: killOp }, '终止任务')
+              : h('button', { className: 'mkts-cmdbtn mkts-cmdbtn-primary', onClick: closeOp }, op.status === 'failed' ? '关闭' : '完成并刷新'),
+          ),
+          op.status === 'done' ? h('div', { className: 'mkts-hint' }, '完成。若安装了新插件，可能需要在 ⋯ 菜单「重启 Web 服务」后生效。') : null,
+          op.status === 'failed' ? h('div', { className: 'mkts-hint' }, '操作失败：请查看上方输出；文件锁类失败会自动排队，重启服务后完成。') : null,
+        ),
+      ) : null,
+    )
+  }
+
   const inject = ['slots']
 
   function apply(ctx) {
@@ -900,6 +1057,10 @@ window.__ModuleLoader__.load({ id: 'dsh-unified-market', factory: (require) => {
     slots.inject('settings.plugins.tab', () => slots.register(
       { name: 'settings.plugins.tab', id: 'market', order: 5, label: () => (LOCALE === 'zh' ? '🛒 统一市场' : '🛒 Unified Market') },
       MarketPanel,
+    ))
+    slots.inject('settings.plugins.tab', () => slots.register(
+      { name: 'settings.plugins.tab', id: 'feature-pack', order: 6, label: () => (LOCALE === 'zh' ? '📦 功能包' : '📦 Feature Packs') },
+      FeaturePackPanel,
     ))
   }
 

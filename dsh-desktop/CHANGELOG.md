@@ -36,7 +36,45 @@ allowBuilds 放行；已下载插件更新面板 + 一键全部/逐个更新 + �
 修复；computer-use 批准问答卡 + /computer 幂等批准；400 瞬态自愈与压缩
 误报护栏；移除内置「第三方模型思考强度」插件；手机连接桥（LAN 配对 +
 白名单 RPC，手机端占位）；内置鲸鱼余额挂件与 AgentTeams（均默认关闭）。
-版本号字段保持 5.1.0，不引 5.1.1 —— 与 R13 产物命名规则一致）
+版本号字段保持 5.1.0，不引 5.1.1 —— 与 R13 产物命名规则一致）→
+next2（功能包体系：.dshpack 打包分发插件+预设+技能，声明官方内核兼容范围，
+官方版本升级自动检出并一键迁移/回滚 —— 核心在 L2 功能包引擎 + CLI，
+交互集成进 dsh-unified-market 插件；详见下方「功能包体系（Feature Pack）」批次）
+
+## 功能包体系（Feature Pack · 借鉴 HMCL 整合包架构）· next
+
+### 功能包（.dshpack）：插件 + 预设 + 技能打包分发
+
+- **新格式与规范**：`.dshpack`（zip）＝ `pack.json` 清单 + 可选 `payload/`
+  （内嵌 preset/skills）+ `icon.png`；清单声明 `requires.dsh`（官方内核 semver
+  兼容范围）、`plugins[]`（builtin:/github:/npm 声明式引用，安装时解析，不内嵌
+  插件代码，来源可追溯）、`presets[]`、`skills[]`、`conflicts[]`。
+  规范与 JSON Schema：`docs/feature-pack-spec.md`、`docs/schemas/feature-pack-pack.json`。
+- **L2 核心引擎**（`lib/desktop/feature-pack.ts`，壳无关纯 Node）：
+  清单解析/校验、`matchSemverRange`（支持 `^ ~ x 部分版本 || 空格 &&` 与
+  预发布宽容——适配 `0.1.1-rc.x` 内核命名）、注册表
+  （`DSH_HOME/feature-packs/registry.json`，原子写）、内核版本探测、
+  安装/卸载/更新/导出/回滚编排（事务化：保护中心快照 → 装配 → 失败回滚；
+  `dsh plugin` 前后复用 artifact-keep 保护第三方构建产物；preset/skills 沿用
+  skip-if-exists，用户自建同名永不覆盖；卸载只拆本包登记物+引用计数）；
+  启动兼容扫描：官方内核版本变化自动把失配包置 `incompatible`（幂等）。
+- **功能包 CLI**（`scripts/feature-pack-cli.ts`）：
+  `inspect/list/install/update/uninstall/export/rollback/scan/resume`；
+  退出码 0/1/2/3/4/5（3=文件锁待排队、4=兼容失配、5=冲突阻断）；URL 安装 +
+  `--sha256` 校验；撞文件锁自动写入 `feature-packs/.ops/pending.json`，
+  sidecar 在无锁窗口（启动/重启前）经 `resume` 自动续跑。
+- **市场插件集成**（`dsh-unified-market`，SELF_VERSION 0.2.1 → 0.3.0）：
+  - host：`pack.list/inspect/install/uninstall/update/export/rollback/scan/market`
+    方法（spawn CLI + 复用 op 串行/轮询/超时；`pack.market` 索引 live→缓存→
+    内置 `data/packs-snapshot.json` 离线快照三级降级；上传文件 op 结束自动清理）；
+  - client：设置页新增「📦 功能包」tab —— 已安装列表（版本/兼容徽标/更新/导出/
+    卸载）、本地导入 `.dshpack`（文件选择→base64→安装）、功能包市场浏览一键安装、
+    官方内核升级后不兼容包提示条 + 「迁移（选新版）」/「回滚（保护中心快照）」；
+  - CLI 定位经 sidecar 注入的 `DSH_DESKTOP_RESOURCE_ROOT`（proc.ts childEnv）。
+- **打包与验证**：`electron-builder` 清单补 `lib/desktop/feature-pack.js` 与
+  `scripts/feature-pack-cli.js`；`unzipper` 移入 dependencies（CLI 运行时依赖）；
+  新增 `test/feature-pack.test.ts`（14 项：semver 全分支/校验/注册表/装卸往返/
+  用户保护/兼容扫描/导出/CLI）。
 
 ## 5.1.0 修复批次（内部代号 5.1.1）· 2026-08-27
 

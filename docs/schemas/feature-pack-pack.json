@@ -1,0 +1,121 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://github.com/zouyuxuan122/Deepseek-Harness-EAC/blob/main/docs/schemas/feature-pack-pack.json",
+  "title": "EAC 功能包清单（pack.json）",
+  "description": ".dshpack 归档内 pack.json 的契约（事实源：docs/feature-pack-spec.md；两者不一致时以本 schema 为准并修文档）。",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["formatVersion", "id", "name", "version"],
+  "properties": {
+    "formatVersion": {
+      "type": "integer",
+      "const": 1,
+      "description": "清单格式版本。当前仅支持 1。"
+    },
+    "id": {
+      "type": "string",
+      "pattern": "^[a-z0-9][a-z0-9._-]{2,63}$",
+      "description": "全局唯一 id（小写字母/数字开头，长度 3–64）。"
+    },
+    "name": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 64
+    },
+    "version": {
+      "type": "string",
+      "pattern": "^\\d+\\.\\d+\\.\\d+(?:-[0-9A-Za-z.-]+)?(?:\\+[0-9A-Za-z.-]+)?$",
+      "description": "semver（允许 rc/预发布与 build 元数据）。"
+    },
+    "description": { "type": "string", "maxLength": 500 },
+    "author": { "type": "string", "maxLength": 128 },
+    "license": { "type": "string", "maxLength": 64 },
+    "icon": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9._/-]+\\.png$",
+      "description": "包内图标相对路径（必须存在且 ≤ 512 KiB）。"
+    },
+    "requires": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "dsh": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256,
+          "description": "官方内核 @deepseek-ai/dsh 的 semver 兼容范围（语法见 feature-pack-spec.md §5.1）。"
+        }
+      }
+    },
+    "plugins": {
+      "type": "array",
+      "maxItems": 64,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["ref"],
+        "properties": {
+          "ref": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 256,
+            "description": "builtin:<assets 目录名> | github:owner/repo | npm/registry 包名。"
+          },
+          "version": {
+            "type": "string",
+            "maxLength": 256,
+            "description": "期望的 semver 范围（github/npm 源；与已装版本不符时升级式重装）。"
+          },
+          "enabled": {
+            "type": "boolean",
+            "description": "v1 预留：目前不改变行为，插件启停始终走插件管理页。"
+          }
+        }
+      }
+    },
+    "presets": {
+      "type": "array",
+      "maxItems": 32,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id"],
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9._-]+$",
+            "maxLength": 128
+          }
+        }
+      }
+    },
+    "skills": {
+      "type": "array",
+      "maxItems": 32,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id"],
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9._-]+$",
+            "maxLength": 128
+          }
+        }
+      }
+    },
+    "conflicts": {
+      "type": "array",
+      "maxItems": 64,
+      "items": { "type": "string", "minLength": 1, "maxLength": 256 }
+    },
+    "overrides": {
+      "type": "array",
+      "maxItems": 64,
+      "description": "v1 预留：必须为空数组。出现非空值判为无效（防目录穿越路径在安装器另行拒绝）。",
+      "items": { "type": "string", "minLength": 1, "maxLength": 256 }
+    },
+    "changelog": { "type": "string", "maxLength": 2000 }
+  }
+}

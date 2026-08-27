@@ -72,6 +72,7 @@ const runtimePatchesMod = require('./lib/desktop/runtime-patches');
 const companionSyncMod = require('./lib/desktop/companion-sync');
 const pluginOpsMod = require('./lib/desktop/plugin-ops');
 const marketMod = require('./lib/desktop/market');
+const featurePackMod = require('./lib/desktop/feature-pack');
 const { killTree, killTreeAndWait, childEnv, waitForProcExit } = procMod;
 const { nodeExe, npmCli, updCtx, dshBin, dshVersion, dshVersionSource } = pathsMod;
 const { DESKTOP_PROFILE, DESKTOP_PROFILE_BUNDLES, desktopProfile, desktopProfileDir, ensureDesktopProfileInit } = profileMod;
@@ -132,6 +133,18 @@ companionSyncMod.init({
 });
 pluginOpsMod.init({ log });
 marketMod.init({ log, getDshHome: () => dshHome, getUserDataDir: () => userDataDir });
+featurePackMod.init({
+  log,
+  getDshHome: () => dshHome,
+  getDesktopProfile: desktopProfile,
+  getUserDataDir: () => userDataDir,
+  getDshBin: dshBin,
+  getNodeExe: nodeExe,
+  getChildEnv: childEnv,
+  builtinSourceDir,
+  snapshot: (label) => { try { return ensureGuard().snapshot(label); } catch (err) { log('feature-pack', '快照失败: ' + String((err && err.message) || err)); return null; } },
+  restoreSnapshot: (id) => { try { return ensureGuard().restore(id); } catch (err) { return { ok: false, error: String((err && err.message) || err) }; } },
+});
 const shortcutsMod = require('./lib/desktop/shortcuts');
 const junctionPatrolMod = require('./lib/desktop/junction-patrol');
 const clientUpdateMod = require('./lib/desktop/client-update');
@@ -2186,11 +2199,17 @@ async function restartWebServiceCore() {
     // 最后才拉起新服务 —— 排队安装正需要这个"无锁窗口"。
     await waitForProcExit(oldProc, 20000);
     await processPendingMarketOps();
+    // 功能包排队任务（CLI 撞文件锁时写入 feature-packs/.ops/pending.json）：
+    // 同样趁"无锁窗口"由功能包核心引擎自动续跑。
+    try { await featurePackMod.resumePending(); } catch (err) { log('feature-pack', '功能包排队任务消费失败: ' + String((err && err.message) || err)); }
     // pnpm（排队安装/卸载）会重写 profile node_modules：可能删掉配套插件
     // 副本、重新 hoist 核心包。服务拉起前重建 + 清理，顺序不能反。
     syncCompanionPlugins();
     healProfileModules();
     await restoreKeptArtifacts(desktopProfile());
+    // 功能包兼容扫描：官方内核版本可能随更新变化，把失配包置 incompatible
+    // （幂等），供「功能包」UI 提示一键迁移/回滚。
+    try { featurePackMod.scanFeaturePackCompatibility(); } catch (err) { log('feature-pack', '兼容扫描失败: ' + String((err && err.message) || err)); }
     const url = await startAndShowGuarded();
     log('service', 'dsh web 服务已重启: ' + url);
     return { ok: true, url };
@@ -3260,6 +3279,8 @@ async function boot() {
     // 尚未启动、无文件锁时先完成，再拉起 Web 服务。
     .then(() => processPendingMarketOps())
     .then(async () => {
+      // 功能包排队任务（CLI 撞文件锁时写入）一样在无锁窗口续跑。
+      try { await featurePackMod.resumePending(); } catch (err) { log('feature-pack', '功能包排队任务消费失败: ' + String((err && err.message) || err)); }
       retireRemovedBuiltinPlugins(desktopProfileDir());
       // 排队的 pnpm 操作可能刚重写 profile node_modules（删掉配套插件副本、
       // hoist 核心包形成双实例）—— 服务启动前重建副本并清理遮蔽，
@@ -3271,6 +3292,10 @@ async function boot() {
       // 的 lib/ 等）在这里补上（processPendingMarketOps 正常路径已含回填，
       // 这里覆盖崩溃/强杀场景；无缓存时为空操作）。
       await restoreKeptArtifacts(desktopProfile());
+    })
+    .then(() => {
+      // 功能包兼容扫描（内核版本可能随官方更新变化，幂等写回 state）。
+      try { featurePackMod.scanFeaturePackCompatibility(); } catch (err) { log('feature-pack', '兼容扫描失败: ' + String((err && err.message) || err)); }
     })
     .then(() => verifyBundledModules())
     .then(() => startAndShowGuarded())

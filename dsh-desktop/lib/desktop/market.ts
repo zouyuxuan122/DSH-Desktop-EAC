@@ -1,4 +1,4 @@
-﻿'use strict';
+'use strict';
 
 // 插件市场排队任务（ADR 0002 L2 业务服务层；Wave 2 自 market.js 类型化迁出，
 // 行为零变更）：服务运行中安装/卸载撞上 Windows 文件锁（EPERM，如
@@ -41,10 +41,14 @@ export function init(d: MarketCtx): void { ctx = d; }
 interface MarketJob {
   target: string;
   profile: string;
-  kind: 'install' | 'uninstall';
+  kind: 'install' | 'uninstall' | 'pack-install' | 'pack-uninstall' | 'pack-update';
   label?: string;
+  /** 功能包任务专用：包 id（pack-update / pack-uninstall）。 */
+  packId?: string;
   attempts?: number;
 }
+
+const MARKET_KINDS: ReadonlySet<string> = new Set(['install', 'uninstall', 'pack-install', 'pack-uninstall', 'pack-update']);
 
 // V4 退出清理：当前正在执行的插件市场排队任务子进程（退出时强杀）。
 // 由 main.js 的 before-quit 经 getMarketOpChild() 读取。
@@ -84,7 +88,7 @@ export function pendingMarketMarkers(): { marker: string; job: MarketJob }[] {
         const job = JSON.parse(fs.readFileSync(marker, 'utf8').replace(/^\uFEFF/, '')) as MarketJob;
         if (job && typeof job.target === 'string' && job.target
           && typeof job.profile === 'string' && /^[A-Za-z0-9_-]+$/.test(job.profile)
-          && (job.kind === 'install' || job.kind === 'uninstall')) {
+          && MARKET_KINDS.has(job.kind)) {
           // V4.2：旧版 host 可能把目录默认 profile 'web' 写进标记（桌面壳跑
           // 在 web-desktop，profiles/web 不存在）—— 归一化后再执行，避免对
           // 不存在的 profile 跑 pnpm（spawn 报 node.exe ENOENT）。
@@ -245,12 +249,24 @@ export async function processPendingMarketOps(): Promise<void> {
       const { marker, job } = items[idx]!;
       const retried = retriedMarkers.has(marker);
       const attempts = Number(job.attempts || 0) + 1;
-      const action = job.kind === 'uninstall' ? 'remove' : 'add';
+      // 功能包任务（pack-install / pack-uninstall / pack-update）走功能包 CLI；
+      // 普通插件任务走 dsh plugin CLI。
+      const isPack = job.kind.startsWith('pack-');
+      const packCli = path.join(APP_ROOT, 'scripts', 'feature-pack-cli.js');
+      const spawnArgs = isPack
+        ? [
+            packCli,
+            job.kind === 'pack-install' ? 'install'
+              : job.kind === 'pack-uninstall' ? 'uninstall' : 'update',
+            ...(job.kind === 'pack-update' && job.packId ? [job.packId] : []),
+            ...(job.kind === 'pack-update' ? [job.target] : [job.target]),
+          ]
+        : [bin, 'plugin', '--profile', job.profile, job.kind === 'uninstall' ? 'remove' : 'add', job.target];
       // 安装前快照（保护中心）：排队任务改的是 profile 配置面，出问题可
       // 一键/自动回滚到这里。
-      ensureGuard().snapshot('market:' + job.target);
-      ctx.log('market-pending', `执行(${attempts}/${MARKER_MAX_ATTEMPTS}): dsh plugin --profile ${job.profile} ${action} ${job.target}`);
-      const child = spawn(nodeBin, [bin, 'plugin', '--profile', job.profile, action, job.target], {
+      ensureGuard().snapshot('market:' + job.label || job.target);
+      ctx.log('market-pending', `执行(${attempts}/${MARKER_MAX_ATTEMPTS}): ${spawnArgs.join(' ')}`);
+      const child = spawn(nodeBin, spawnArgs, {
         cwd: ctx.getUserDataDir(),
         // CI=true 与市场插件 host 侧一致：pnpm v10 无 TTY 时对被忽略的构建
         // 脚本（如 node-llama-cpp）静默放行，而不是 ERR_PNPM_IGNORED_BUILDS 硬失败。

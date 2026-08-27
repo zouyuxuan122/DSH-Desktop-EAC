@@ -7,6 +7,7 @@ import cp = require('node:child_process');
 import type { ChildProcess } from 'node:child_process';
 import fs = require('node:fs');
 import path = require('node:path');
+import { APP_ROOT } from './runtime-paths';
 
 const IS_WIN = process.platform === 'win32';
 
@@ -120,6 +121,8 @@ export function childEnv(): NodeJS.ProcessEnv {
   // MCP 等）据此把安装/读写落到桌面专属 profile，而不是原生的 web profile。
   env.DSH_DESKTOP = '1';
   env.DSH_DESKTOP_PROFILE = ctx.getDesktopProfile();
+  // 资源根（dsh-desktop 树）：L3 插件进程据此定位功能包 CLI 等随包资源。
+  env.DSH_DESKTOP_RESOURCE_ROOT = APP_ROOT;
   if (dshHome && userDefaultPreset() === 'danger-full-access') {
     env.DSH_PERMISSION_MODE = 'danger-full-access';
   }

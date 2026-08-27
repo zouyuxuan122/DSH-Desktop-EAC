@@ -67,6 +67,7 @@ files:
   - lib/desktop/junction-patrol.js
   - lib/desktop/client-update.js
   - lib/desktop/static-preview.js
+  - lib/desktop/feature-pack.js
   - assets/**/*
   # 运行时脚本：koffi 预检探针（scripts/koffi-preflight.cjs）、会话删除补丁与
   # 插件启停手术脚本（main.js 启动时 require）等必须在成品里存在。
@@ -75,6 +76,8 @@ files:
   - scripts/plugin-manager-patch.js
   - scripts/onboarding.js
   - scripts/make-release-hashes.js
+  # 功能包 CLI：L3 市场插件（web 进程）经 DSH_DESKTOP_RESOURCE_ROOT 定位 spawn。
+  - scripts/feature-pack-cli.js
   - package.json
   - "!**/*.md"
   # `!**/*.md` above would strip every .md from node_modules too, which removes

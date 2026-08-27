@@ -70,6 +70,8 @@ build/*
 /lib/desktop/shortcuts.js
 /lib/desktop/static-preview.js
 /lib/desktop/companion-sync.js
+/lib/desktop/feature-pack.js
+/scripts/feature-pack-cli.js
 /stable-port.js
 /error-detail.js
 /bundle-integrity.js
