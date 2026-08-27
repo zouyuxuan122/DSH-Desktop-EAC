@@ -1,6 +1,6 @@
 {
   "name": "dsh-dafeiyu",
-  "version": "0.1.0-alpha.6",
+  "version": "0.1.6",
   "description": "A desktop-native BigFish companion driven by DeepSeek Harness session events.",
   "author": "QCYTSN",
   "type": "module",
@@ -19,10 +19,17 @@
     "runtime/animation_model.py",
     "runtime/layout_store.py",
     "runtime/__init__.py",
-    "runtime/bin/win32-x64/dsh-dafeiyu-helper.exe",
+    "runtime/bin/",
+    "native/macos/",
     "scripts/build-helper.ps1",
+    "scripts/build-helper.sh",
+    "scripts/build-helper.mjs",
+    "scripts/run-python.mjs",
+    "scripts/generate_notification_sounds.py",
+    "scripts/test-packaged-helper.mjs",
     "assets/pet/",
     "assets/pet-manifest.json",
+    "assets/sounds/",
     "docs/",
     "cordis.patch.yml",
     "requirements.txt",
@@ -32,26 +39,31 @@
     "ASSET_LICENSE.md",
     "LICENSE"
   ],
-  "os": [
-    "win32"
-  ],
-  "cpu": [
-    "x64"
-  ],
   "engines": {
     "node": ">=22.19"
   },
   "dependencies": {
-    "@deepseek-ai/schemastery": "^3.18.1"
+    "@deepseek-ai/cosmokit": "1.8.2",
+    "@deepseek-ai/schemastery": "3.18.1",
+    "@standard-schema/spec": "1.1.0"
   },
+  "bundleDependencies": [
+    "@deepseek-ai/cosmokit",
+    "@deepseek-ai/schemastery",
+    "@standard-schema/spec"
+  ],
   "scripts": {
-    "test": "node --test --test-timeout=10000 test/assets.test.js test/config-endpoint.test.js test/protocol.test.js test/status-copy.test.js test/reducer.test.js test/helper-lifecycle.test.js test/helper-restart.test.js test/plugin-integration.test.js",
+    "test": "node --test --test-timeout=10000 test/assets.test.js test/config-endpoint.test.js test/client-slot-key.test.js test/helper-command.test.js test/protocol.test.js test/status-copy.test.js test/reducer.test.js test/helper-lifecycle.test.js test/helper-restart.test.js test/plugin-integration.test.js",
     "test:helper": "node --test test/helper-lifecycle.test.js",
-    "test:python": "py -3 -m unittest discover -s runtime/tests -t .",
+    "test:python": "node scripts/run-python.mjs -m unittest discover -s runtime/tests -t .",
     "test:ui": "node test/fixtures/ui-acceptance.js",
-    "helper:headless": "py -3 runtime/helper.py --headless",
-    "helper:visual": "py -3 runtime/helper.py",
-    "build:helper:windows": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/build-helper.ps1"
+    "helper:headless": "node scripts/run-python.mjs runtime/helper.py --headless",
+    "helper:visual": "node scripts/run-python.mjs runtime/helper.py",
+    "build:helper": "node scripts/build-helper.mjs",
+    "build:helper:windows": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/build-helper.ps1",
+    "build:helper:linux": "bash scripts/build-helper.sh",
+    "build:helper:darwin": "bash native/macos/build.sh",
+    "test:helper:packaged": "node scripts/test-packaged-helper.mjs"
   },
   "dsh": {
     "client": {

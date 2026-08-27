@@ -4,6 +4,10 @@ export interface ActivityMember {
     readonly id: string;
     readonly name: string;
     readonly role: string;
+    readonly provider?: string;
+    readonly model?: string;
+    readonly reasoningEffort?: string;
+    readonly executionPrompt?: string;
     readonly status?: 'idle' | 'working' | 'removed';
     readonly activity: 'working' | 'idle' | 'unknown';
     readonly progress: number;
@@ -16,11 +20,16 @@ export interface ActivityMember {
 export interface ActivityTask {
     readonly id: string;
     readonly subject: string;
+    readonly description?: string;
     readonly status: string;
-    readonly state: 'blocked' | 'open' | 'running' | 'completed';
+    readonly state: 'blocked' | 'open' | 'running' | 'completed' | 'failed' | 'cancelled';
     readonly assignee: string;
+    readonly model?: string;
     readonly dependencies: readonly string[];
     readonly depth: number;
+    readonly kind?: string;
+    readonly round?: number;
+    readonly verdict?: string;
 }
 /** One captain-inbox preview row. */
 export interface ActivityMessage {
@@ -34,6 +43,9 @@ export interface ActivityTeam {
     readonly name: string;
     readonly description?: string;
     readonly captainSessionId: string;
+    readonly phase: 'staged' | 'running';
+    readonly planReviewState?: 'awaiting_review' | 'awaiting_feedback';
+    readonly halted?: boolean;
     readonly members: readonly ActivityMember[];
     readonly tasks: readonly ActivityTask[];
     readonly messageCount: number;
@@ -80,6 +92,7 @@ export declare const ACTIVITY_POLL_MS = 1000;
 export declare const ACTIVITY_PROBE_MS = 5000;
 /** Host route serving live and archived team snapshots. */
 export declare const ACTIVITY_STATE_URL = "/plugins/dsh-agent-teams/state";
+export declare const ACTIVITY_HALT_URL = "/plugins/dsh-agent-teams/halt";
 interface ActivityFetchResponse {
     readonly ok: boolean;
     json(): Promise<unknown>;

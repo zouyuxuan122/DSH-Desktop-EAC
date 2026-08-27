@@ -2,7 +2,7 @@ window.__ModuleLoader__.load({ id: 'dsh-dafeiyu', factory: (require) => {
   const module = { exports: {} }
   const exports = module.exports
   const React = require('react')
-  const { useEffect, useState } = React
+  const { useEffect, useRef, useState } = React
   const CONFIG_ENDPOINT = '/plugins/dsh-dafeiyu/config'
 
   const cardStyle = {
@@ -11,6 +11,18 @@ window.__ModuleLoader__.load({ id: 'dsh-dafeiyu', factory: (require) => {
   }
   const rowStyle = { display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 20 }
   const selectStyle = { minWidth: 120, padding: '6px 10px', borderRadius: 8 }
+  const BUBBLE_STATE_OPTIONS = [
+    ['IDLE', '空闲'],
+    ['THINKING', '思考中'],
+    ['WORKING', '工作中'],
+    ['WAITING', '等待确认'],
+    ['SUCCESS', '完成'],
+    ['ERROR', '错误'],
+  ]
+  const bubbleGridStyle = {
+    display: 'grid', gridTemplateColumns: 'repeat(3, auto)', gap: '6px 14px',
+    padding: '10px 12px', border: '1px solid var(--border-color, #d8d8d8)', borderRadius: 8,
+  }
 
   function Field({ label, hint, children }) {
     return React.createElement('label', { style: rowStyle },
@@ -22,10 +34,33 @@ window.__ModuleLoader__.load({ id: 'dsh-dafeiyu', factory: (require) => {
     )
   }
 
+  function BubbleStatePicker({ value, disabled, onChange }) {
+    const selected = Array.isArray(value) ? value : []
+    const toggle = (state, checked) => {
+      const next = new Set(selected)
+      if (checked) next.add(state)
+      else next.delete(state)
+      onChange([...next])
+    }
+    return React.createElement('div', { style: bubbleGridStyle },
+      ...BUBBLE_STATE_OPTIONS.map(([state, label]) =>
+        React.createElement('label', { key: state, style: { display: 'flex', alignItems: 'center', gap: 4 } },
+          React.createElement('input', {
+            type: 'checkbox', checked: selected.includes(state), disabled,
+            onChange: (event) => toggle(state, event.target.checked),
+          }),
+          label,
+        ),
+      ),
+    )
+  }
+
   function BigFishCard() {
     const [status, setStatus] = useState('loading')
     const [value, setValue] = useState({})
     const [busy, setBusy] = useState(false)
+    const patchSeq = useRef(0)
+    const sliderTimers = useRef(new Map())
     const writable = status === 'ready' && !busy
     useEffect(() => {
       let active = true
@@ -36,9 +71,14 @@ window.__ModuleLoader__.load({ id: 'dsh-dafeiyu', factory: (require) => {
         })
         .then((next) => { if (active) { setValue(next); setStatus('ready') } })
         .catch(() => { if (active) setStatus('unavailable') })
-      return () => { active = false }
+      return () => {
+        active = false
+        for (const timer of sliderTimers.current.values()) clearTimeout(timer)
+        sliderTimers.current.clear()
+      }
     }, [])
     const write = async (field, next) => {
+      const seq = ++patchSeq.current
       setBusy(true)
       try {
         const response = await fetch(CONFIG_ENDPOINT, {
@@ -47,13 +87,31 @@ window.__ModuleLoader__.load({ id: 'dsh-dafeiyu', factory: (require) => {
           body: JSON.stringify({ [field]: next }),
         })
         if (!response.ok) throw new Error(`settings write failed: ${response.status}`)
-        setValue(await response.json())
-        setStatus('ready')
+        const updated = await response.json()
+        if (seq === patchSeq.current) {
+          setValue(updated)
+          setStatus('ready')
+        }
       } catch {
-        setStatus('unavailable')
+        if (seq === patchSeq.current) setStatus('unavailable')
       } finally {
-        setBusy(false)
+        if (seq === patchSeq.current) setBusy(false)
       }
+    }
+    const writeSlider = (field, next) => {
+      // Keep the slider responsive while dragging: update the local value
+      // immediately and send a single debounced PATCH once the user pauses.
+      setValue((prev) => ({ ...prev, [field]: next }))
+      // Invalidate any in-flight write so a stale response cannot overwrite
+      // the optimistic slider value while the user keeps dragging.
+      patchSeq.current += 1
+      const pending = sliderTimers.current.get(field)
+      if (pending) clearTimeout(pending)
+      const timer = setTimeout(() => {
+        sliderTimers.current.delete(field)
+        void write(field, next)
+      }, 250)
+      sliderTimers.current.set(field, timer)
     }
     return React.createElement('li', { style: cardStyle, 'data-testid': 'dsh-dafeiyu-settings' },
       React.createElement('div', null,
@@ -73,8 +131,9 @@ window.__ModuleLoader__.load({ id: 'dsh-dafeiyu', factory: (require) => {
           ),
           React.createElement(Field, { label: '角色大小', hint: `${Math.round((value.scale ?? 1) * 100)}%` },
             React.createElement('input', {
-              type: 'range', min: 0.7, max: 1.4, step: 0.05, value: value.scale ?? 1, disabled: !writable,
-              onChange: (event) => void write('scale', Number(event.target.value)),
+              type: 'range', min: 0.55, max: 1.4, step: 0.05, value: value.scale ?? 1,
+              disabled: status !== 'ready',
+              onChange: (event) => void writeSlider('scale', Number(event.target.value)),
             }),
           ),
           React.createElement(Field, { label: '活跃程度', hint: '控制空闲时微动作的出现频率。' },
@@ -92,6 +151,39 @@ window.__ModuleLoader__.load({ id: 'dsh-dafeiyu', factory: (require) => {
               onChange: (event) => void write('reducedMotion', event.target.checked),
             }),
           ),
+          React.createElement(Field, { label: '提示音', hint: '任务完成或出错时播放大肥鱼提示音。' },
+            React.createElement('input', {
+              type: 'checkbox', checked: value.soundEnabled !== false, disabled: !writable,
+              onChange: (event) => void write('soundEnabled', event.target.checked),
+            }),
+          ),
+          React.createElement(Field, { label: '气泡显示', hint: '常驻显示、完全隐藏，或自定义哪些状态显示气泡。' },
+            React.createElement('select', {
+              value: value.bubbleMode ?? 'always', disabled: !writable, style: selectStyle,
+              onChange: (event) => void write('bubbleMode', event.target.value),
+            },
+            React.createElement('option', { value: 'always' }, '常驻显示'),
+            React.createElement('option', { value: 'hidden' }, '完全隐藏'),
+            React.createElement('option', { value: 'custom' }, '自定义显示状态')),
+          ),
+          (value.bubbleMode ?? 'always') !== 'hidden'
+            ? React.createElement(Field, { label: '气泡大小', hint: `${Math.round((value.bubbleScale ?? 1) * 100)}%` },
+                React.createElement('input', {
+                  type: 'range', min: 0.8, max: 1.2, step: 0.05, value: value.bubbleScale ?? 1,
+                  disabled: status !== 'ready',
+                  onChange: (event) => void writeSlider('bubbleScale', Number(event.target.value)),
+                }),
+              )
+            : null,
+          (value.bubbleMode ?? 'always') === 'custom'
+            ? React.createElement(Field, { label: '自定义显示状态', hint: '勾选后，只有这些状态出现时才会显示气泡。' },
+                React.createElement(BubbleStatePicker, {
+                  value: value.bubbleStates ?? ['SUCCESS', 'ERROR', 'WAITING'],
+                  disabled: !writable,
+                  onChange: (next) => void write('bubbleStates', next),
+                }),
+              )
+            : null,
           React.createElement(Field, { label: '响应子 Agent', hint: '默认只跟随顶层任务，避免状态过度跳动。' },
             React.createElement('input', {
               type: 'checkbox', checked: value.includeSubagents === true, disabled: !writable,
@@ -104,10 +196,30 @@ window.__ModuleLoader__.load({ id: 'dsh-dafeiyu', factory: (require) => {
   }
 
   function apply(ctx) {
-    ctx.slots.inject('settings.plugin.item', () => ctx.slots.register({
-      name: 'settings.plugin.item', id: 'dsh-dafeiyu', key: 'dsh-dafeiyu', order: 30,
-      inject: () => ({}),
-    }, BigFishCard))
+    // The pet card is purely decorative: if DSH ever changes the slot
+    // contract again, fail this card quietly instead of failing the whole
+    // WebUI load (that regressed before as 'other plugins stop working').
+    // The guard must live INSIDE the inject callback because DSH may invoke
+    // it asynchronously, outside any try around the inject() call itself.
+    const registerCard = () => {
+      try {
+        ctx.slots.register({
+          name: 'settings.plugin.item', key: 'dsh-dafeiyu', id: 'dsh-dafeiyu', order: 30,
+          inject: () => ({}),
+        }, BigFishCard)
+      } catch (error) {
+        if (typeof console !== 'undefined' && console.error) {
+          console.error('[dsh-dafeiyu] failed to register settings card:', error)
+        }
+      }
+    }
+    try {
+      ctx.slots.inject('settings.plugin.item', registerCard)
+    } catch (error) {
+      if (typeof console !== 'undefined' && console.error) {
+        console.error('[dsh-dafeiyu] failed to inject settings slot:', error)
+      }
+    }
   }
 
   module.exports = {

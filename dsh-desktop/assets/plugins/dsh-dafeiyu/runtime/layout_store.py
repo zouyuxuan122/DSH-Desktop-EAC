@@ -13,9 +13,13 @@ DEFAULT_LAYOUT: dict[str, Any] = {
     "version": 1,
     "x": None,
     "y": None,
+    "petX": None,
+    "petY": None,
     "scale": 1.0,
+    "bubbleScale": 1.0,
     "reducedMotion": False,
-    "pinTopmost": True,
+    "bubbleMode": "always",
+    "bubbleStates": ["SUCCESS", "ERROR", "WAITING"],
 }
 
 
@@ -29,6 +33,9 @@ def default_layout_path() -> Path:
     local_app_data = os.environ.get("LOCALAPPDATA")
     if local_app_data:
         return Path(local_app_data) / "DSH" / "dsh-dafeiyu" / "layout.json"
+    xdg_config = os.environ.get("XDG_CONFIG_HOME")
+    if xdg_config:
+        return Path(xdg_config) / "dsh" / "dsh-dafeiyu" / "layout.json"
     return Path.home() / ".dsh" / "dsh-dafeiyu" / "layout.json"
 
 
@@ -36,17 +43,22 @@ def normalise_layout(value: Any) -> dict[str, Any]:
     layout = dict(DEFAULT_LAYOUT)
     if not isinstance(value, dict):
         return layout
-    for key in ("x", "y"):
+    for key in ("x", "y", "petX", "petY"):
         coordinate = value.get(key)
         if isinstance(coordinate, int) and not isinstance(coordinate, bool):
             layout[key] = coordinate
     scale = value.get("scale")
     if isinstance(scale, (int, float)) and not isinstance(scale, bool):
-        layout["scale"] = min(1.4, max(0.7, float(scale)))
+        layout["scale"] = min(1.4, max(0.55, float(scale)))
+    bubble_scale = value.get("bubbleScale")
+    if isinstance(bubble_scale, (int, float)) and not isinstance(bubble_scale, bool):
+        layout["bubbleScale"] = min(1.2, max(0.8, float(bubble_scale)))
     if isinstance(value.get("reducedMotion"), bool):
         layout["reducedMotion"] = value["reducedMotion"]
-    if isinstance(value.get("pinTopmost"), bool):
-        layout["pinTopmost"] = value["pinTopmost"]
+    if value.get("bubbleMode") in {"always", "hidden", "custom"}:
+        layout["bubbleMode"] = value["bubbleMode"]
+    if isinstance(value.get("bubbleStates"), list):
+        layout["bubbleStates"] = [str(state) for state in value["bubbleStates"] if isinstance(state, str)]
     return layout
 
 

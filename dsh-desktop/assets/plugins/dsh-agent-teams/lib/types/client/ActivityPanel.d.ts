@@ -16,6 +16,7 @@
  * always-available monitor.
  * @module dsh-agent-teams/client/activity
  */
+import type { ModelDirectoryResolver } from '@deepseek-ai/dsh-client-ui-model-selection/client';
 import type { PropsLocale } from '@deepseek-ai/dsh-client-ui-slots';
 import type { SessionId } from '@deepseek-ai/dsh-session/types';
 import type { ObservableSnapshot, SessionListState } from '@deepseek-ai/dsh-client-runtime/client';
@@ -24,6 +25,7 @@ import type { ObservableSnapshot, SessionListState } from '@deepseek-ai/dsh-clie
  * session is the one currently open. */
 export type ActivityPanelProps = {
     readonly sessionsList: ObservableSnapshot<SessionListState>;
+    readonly modelDirectories: ModelDirectoryResolver;
     readonly openMember: (parentId: SessionId, childId: SessionId) => void;
 } & PropsLocale<'agentTeams'>;
-export declare function ActivityPanel({ sessionsList, openMember, t }: ActivityPanelProps): import("react").JSX.Element | null;
+export declare function ActivityPanel({ sessionsList, modelDirectories, openMember, t }: ActivityPanelProps): import("react").JSX.Element | null;

@@ -16,6 +16,9 @@ import { createHash, randomUUID } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import { mkdir, readFile, readdir, rename, rm, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
+import { TERMINAL_TASK_STATUSES } from "./types.js";
+import { hasValidQualityTaskFields, isReviewPolicy } from "./quality-gates.js";
+export { buildCoverageMatrix, canDeclareDelivery, classifyChangedPath, collectChangedPaths, defaultQualityDeliveryGraph, describeQualityLoop, evaluateQualityCompletion, hasValidQualityTaskFields, isQualityKind, pathMatchesScope, planQualityFollowUp, qualityPlanningPrompt, resumeTeamState, sanitizeReviewAcceptance, sanitizeReviewObjective, taskKindOf, validateCreateTask, } from "./quality-gates.js";
 /** Mailbox key of the captain. */
 export const CAPTAIN_KEY = 'captain';
 /** A crashed live-delivery attempt becomes retryable after this interval. */
@@ -137,6 +140,18 @@ export function beginTaskAttempt(task, assignee) {
  * Revoke the current worker immediately. Clearing its capability makes old
  * updates stale; a separate handoff generation serializes async quiescence.
  */
+/** Cancel one unfinished task without returning it to the ready pool. */
+export function cancelUnfinishedTask(task, output) {
+    if (TERMINAL_TASK_STATUSES.includes(task.status))
+        return;
+    task.status = 'cancelled';
+    task.attemptId = undefined;
+    task.handoffId = undefined;
+    task.reassigning = false;
+    if (output !== undefined)
+        task.output = output;
+    task.updatedAt = Date.now();
+}
 export function invalidateTaskAttempt(task, nextAssignee, reassigning = false) {
     task.attemptId = undefined;
     task.handoffId = randomUUID();
@@ -165,10 +180,11 @@ export async function readTeam(stateRoot, teamId) {
     try {
         const raw = await readFile(join(stateRoot, teamId, 'team.json'), 'utf8');
         const value = JSON.parse(stripLeadingBom(raw));
-        if (!isTeamState(value, teamId)) {
+        const team = coerceTeamState(value, teamId);
+        if (team === undefined) {
             throw new Error(`invalid AgentTeams state in team "${teamId}"`);
         }
-        return value;
+        return team;
     }
     catch (error) {
         if (error instanceof Error && 'code' in error && error.code === 'ENOENT') {
@@ -190,10 +206,11 @@ export function readTeamSync(stateRoot, teamId) {
     try {
         const raw = readFileSync(join(stateRoot, teamId, 'team.json'), 'utf8');
         const value = JSON.parse(stripLeadingBom(raw));
-        if (!isTeamState(value, teamId)) {
+        const team = coerceTeamState(value, teamId);
+        if (team === undefined) {
             throw new Error(`invalid AgentTeams state in team "${teamId}"`);
         }
-        return value;
+        return team;
     }
     catch (error) {
         if (error instanceof Error && 'code' in error && error.code === 'ENOENT') {
@@ -549,14 +566,82 @@ function isTeamMember(value) {
         && isOptionalString(value['provider'])
         && isOptionalString(value['model'])
         && isOptionalString(value['reasoningEffort'])
+        && isOptionalString(value['activeProvider'])
+        && isOptionalString(value['activeModel'])
+        && (value['executionPrompt'] === undefined || typeof value['executionPrompt'] === 'string')
+        && (value['fallback'] === undefined || (isRecord(value['fallback']) && typeof value['fallback']['provider'] === 'string' && typeof value['fallback']['model'] === 'string'))
+        && (value['fallbackActive'] === undefined || typeof value['fallbackActive'] === 'boolean')
         && isFiniteNumber(value['joinedAt'])
         && (value['status'] === 'idle' || value['status'] === 'working' || value['status'] === 'removed');
 }
 /** Validate one task record at the durable JSON boundary. */
-function isTeamTask(value) {
+function isTeamProfileSnapshot(value) {
+    return isRecord(value)
+        && typeof value['name'] === 'string'
+        && value['name'].trim() !== ''
+        && isOptionalString(value['description'])
+        && isOptionalString(value['protocol'])
+        && (value['executionPrompt'] === undefined || typeof value['executionPrompt'] === 'string')
+        && (value['fallback'] === undefined || (isRecord(value['fallback']) && typeof value['fallback']['provider'] === 'string' && typeof value['fallback']['model'] === 'string'))
+        && (value['taskPlanning'] === undefined || value['taskPlanning'] === 'captain' || value['taskPlanning'] === 'seed')
+        && (value['reviewPolicy'] === undefined || isReviewPolicy(value['reviewPolicy']));
+}
+function coerceProfileSnapshot(value) {
+    if (typeof value === 'string') {
+        const name = value.trim();
+        return name === '' ? undefined : { name };
+    }
+    if (!isRecord(value))
+        return undefined;
+    if (!isTeamProfileSnapshot(value))
+        return undefined;
+    return {
+        name: value.name.trim(),
+        ...value.description === undefined ? {} : { description: value.description },
+        ...value.protocol === undefined ? {} : { protocol: value.protocol },
+        ...value.taskPlanning === undefined ? {} : { taskPlanning: value.taskPlanning },
+    };
+}
+function coerceTeamState(value, expectedId) {
+    if (!isRecord(value))
+        return undefined;
+    if (value['profile'] !== undefined && !isTeamProfileSnapshot(value['profile']) && typeof value['profile'] !== 'string') {
+        const next = { ...value };
+        delete next['profile'];
+        value = next;
+    }
+    else if (typeof value['profile'] === 'string') {
+        const upgraded = coerceProfileSnapshot(value['profile']);
+        value = upgraded === undefined
+            ? (() => {
+                const next = { ...value };
+                delete next['profile'];
+                return next;
+            })()
+            : { ...value, profile: upgraded };
+    }
+    if (!isRecord(value) || !Array.isArray(value['tasks'])) {
+        return isTeamState(value, expectedId) ? value : undefined;
+    }
+    const tasks = value['tasks'].map((task) => {
+        if (!isRecord(task))
+            return task;
+        if (task['profileSeedId'] !== undefined && (typeof task['profileSeedId'] !== 'string' || task['profileSeedId'].trim() === '')) {
+            const next = { ...task };
+            delete next['profileSeedId'];
+            return next;
+        }
+        return task;
+    });
+    const coerced = { ...value, tasks };
+    return isTeamState(coerced, expectedId) ? coerced : undefined;
+}
+export function isTeamTask(value) {
     if (!isRecord(value))
         return false;
     return typeof value['id'] === 'string'
+        && isOptionalString(value['profileSeedId'])
+        && (value['profileSeedId'] === undefined || value['profileSeedId'].trim() !== '')
         && typeof value['subject'] === 'string'
         && isOptionalString(value['description'])
         && (value['status'] === 'pending'
@@ -575,7 +660,8 @@ function isTeamTask(value) {
         && isOptionalString(value['handoffId'])
         && (value['reassigning'] === undefined || typeof value['reassigning'] === 'boolean')
         && isFiniteNumber(value['createdAt'])
-        && isFiniteNumber(value['updatedAt']);
+        && isFiniteNumber(value['updatedAt'])
+        && hasValidQualityTaskFields(value);
 }
 /** Validate the full team record before it can participate in authorization. */
 function isTeamState(value, expectedId) {
@@ -585,6 +671,7 @@ function isTeamState(value, expectedId) {
         && typeof value['name'] === 'string'
         && value['name'].trim() !== ''
         && isOptionalString(value['description'])
+        && (value['profile'] === undefined || isTeamProfileSnapshot(value['profile']))
         && typeof value['captainSessionId'] === 'string'
         && value['captainSessionId'] !== ''
         && isFiniteNumber(value['createdAt'])
@@ -593,18 +680,32 @@ function isTeamState(value, expectedId) {
         && Array.isArray(value['tasks'])
         && value['tasks'].every(isTeamTask)
         && Number.isSafeInteger(value['taskSeq'])
-        && value['taskSeq'] >= 0;
+        && value['taskSeq'] >= 0
+        && (value['phase'] === undefined || value['phase'] === 'staged' || value['phase'] === 'running')
+        && (value['planReviewState'] === undefined
+            || value['planReviewState'] === 'awaiting_review'
+            || value['planReviewState'] === 'awaiting_feedback')
+        && (value['approvedAt'] === undefined || isFiniteNumber(value['approvedAt']))
+        && (value['halted'] === undefined || typeof value['halted'] === 'boolean')
+        && (value['haltedAt'] === undefined || isFiniteNumber(value['haltedAt']))
+        && (value['reviewPolicy'] === undefined || isReviewPolicy(value['reviewPolicy']))
+        && (value['escalated'] === undefined || typeof value['escalated'] === 'boolean');
     if (!validShape)
         return false;
     const members = value['members'];
     const tasks = value['tasks'];
     const memberIds = new Set();
     const memberKeys = new Set();
+    const staged = value['phase'] === 'staged';
     for (const member of members) {
         const key = sanitizeKey(member.name);
-        if (member.id === '' || key === CAPTAIN_KEY || memberIds.has(member.id) || memberKeys.has(key))
+        if ((!staged && member.id === '') || key === CAPTAIN_KEY || memberKeys.has(key))
             return false;
-        memberIds.add(member.id);
+        if (member.id !== '') {
+            if (memberIds.has(member.id))
+                return false;
+            memberIds.add(member.id);
+        }
         memberKeys.add(key);
     }
     const taskIds = new Set();
@@ -739,11 +840,16 @@ export async function listArchivedTeamIds(stateRoot) {
 }
 /**
  * The visual state of one task: `running` while in_progress, `completed`
- * when done, `blocked` while any dependency is unfinished, else `open`.
+ * when done, `failed`/`cancelled` when terminal without success, `blocked`
+ * while any dependency is unfinished, else `open`.
  */
 export function taskVisualState(status, dependencies, tasks) {
     if (status === 'completed')
         return 'completed';
+    if (status === 'failed')
+        return 'failed';
+    if (status === 'cancelled')
+        return 'cancelled';
     if (status === 'in_progress')
         return 'running';
     const byId = new Map(tasks.map((task) => [task.id, task]));

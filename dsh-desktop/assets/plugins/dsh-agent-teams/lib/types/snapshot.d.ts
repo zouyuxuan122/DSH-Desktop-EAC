@@ -10,12 +10,16 @@
 import type { Context } from '@deepseek-ai/cordis';
 import type { MemberStatus, TeamState } from './types.ts';
 /** Visual task state for the activity panel. */
-export type VisualTaskState = 'blocked' | 'open' | 'running' | 'completed';
+export type VisualTaskState = 'blocked' | 'open' | 'running' | 'completed' | 'failed' | 'cancelled';
 /** One member row of the activity snapshot. */
 export interface TeamActivityMember {
     readonly id: string;
     readonly name: string;
     readonly role: string;
+    readonly provider: string;
+    readonly model: string;
+    readonly reasoningEffort: string;
+    readonly executionPrompt: string;
     readonly status: MemberStatus;
     readonly activity: 'working' | 'idle' | 'unknown';
     readonly progress: number;
@@ -28,11 +32,16 @@ export interface TeamActivityMember {
 export interface TeamActivityTask {
     readonly id: string;
     readonly subject: string;
+    readonly description: string;
     readonly status: string;
     readonly state: VisualTaskState;
     readonly assignee: string;
+    readonly model: string;
     readonly dependencies: readonly string[];
     readonly depth: number;
+    readonly kind?: string;
+    readonly round?: number;
+    readonly verdict?: string;
 }
 /** One captain-inbox preview row. */
 export interface TeamActivityMessage {
@@ -46,6 +55,9 @@ export interface TeamActivitySnapshot {
     readonly name: string;
     readonly description?: string;
     readonly captainSessionId: string;
+    readonly phase: 'staged' | 'running';
+    readonly planReviewState?: 'awaiting_review' | 'awaiting_feedback';
+    readonly halted?: boolean;
     readonly members: readonly TeamActivityMember[];
     readonly tasks: readonly TeamActivityTask[];
     readonly messageCount: number;
@@ -58,6 +70,11 @@ export interface TeamSnapshotOptions {
     /** Archived teams have no meaningful live activity after their sessions stop. */
     readonly historic?: boolean;
 }
+/** Compact `provider/model` route for the activity panel, or just the model. */
+export declare function memberModelRoute(member: {
+    provider?: string;
+    model?: string;
+} | undefined): string;
 /**
  * Assemble one team snapshot from its durable files plus live activity.
  * @param ctx - the plugin context (injects `subagents`, used for activity).

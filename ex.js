@@ -1,0 +1,1 @@
+var fs=require('fs');var htl=fs.readFileSync('C:/Users/Administrator/.local/share/opencode/share_page.html','utf8');console.log('html size:', htll.length);var idx=htll.inderOf('type:'\"text\"');console.log('type:text at:', idx);if(idx>-1) {console.log(htll.substring(idx,idx+500));}

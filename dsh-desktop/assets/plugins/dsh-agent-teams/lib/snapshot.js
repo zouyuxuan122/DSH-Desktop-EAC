@@ -19,6 +19,16 @@ function currentTaskOf(memberName, tasks) {
     }
     return '';
 }
+/** Compact `provider/model` route for the activity panel, or just the model. */
+export function memberModelRoute(member) {
+    if (member === undefined)
+        return '';
+    const provider = member.provider?.trim() ?? '';
+    const model = member.model?.trim() ?? '';
+    if (provider !== '' && model !== '')
+        return `${provider}/${model}`;
+    return model;
+}
 /**
  * Assemble one team snapshot from its durable files plus live activity.
  * @param ctx - the plugin context (injects `subagents`, used for activity).
@@ -53,6 +63,10 @@ export async function assembleTeamSnapshot(ctx, stateRoot, workspace, state, opt
             id: member.id,
             name: member.name,
             role: member.role ?? '',
+            provider: member.provider?.trim() ?? '',
+            model: member.model?.trim() ?? '',
+            reasoningEffort: member.reasoningEffort?.trim() ?? '',
+            executionPrompt: member.executionPrompt ?? '',
             status: member.status,
             activity: options.historic === true
                 ? 'idle'
@@ -62,7 +76,7 @@ export async function assembleTeamSnapshot(ctx, stateRoot, workspace, state, opt
                         : activity.get(member.id) === 'idle' || activity.get(member.id) === 'ready'
                             ? 'idle'
                             : 'unknown')
-                    : 'unknown',
+                    : state.phase === 'staged' ? 'idle' : 'unknown',
             progress: owned.length === 0 ? 0 : Math.round((done / owned.length) * 100),
             done,
             total: owned.length,
@@ -77,15 +91,25 @@ export async function assembleTeamSnapshot(ctx, stateRoot, workspace, state, opt
         name: state.name,
         ...state.description !== undefined ? { description: state.description } : {},
         captainSessionId: state.captainSessionId,
+        phase: state.phase ?? 'running',
+        ...state.phase === 'staged'
+            ? { planReviewState: state.planReviewState ?? 'awaiting_review' }
+            : {},
+        ...state.halted === true ? { halted: true } : {},
         members,
         tasks: tasks.map((task) => ({
             id: task.id,
             subject: task.subject,
+            description: task.description ?? '',
             status: task.status,
             state: taskVisualState(task.status, task.dependencies, tasks),
             assignee: task.assignee ?? '',
+            model: memberModelRoute(roster.find((member) => member.name === task.assignee)),
             dependencies: task.dependencies,
             depth: depths.get(task.id) ?? 0,
+            ...task.kind === undefined ? {} : { kind: task.kind },
+            ...task.round === undefined ? {} : { round: task.round },
+            ...task.verdict === undefined ? {} : { verdict: task.verdict },
         })),
         messageCount: captainInbox.length
             + members.reduce((count, member) => count + member.unread, 0),

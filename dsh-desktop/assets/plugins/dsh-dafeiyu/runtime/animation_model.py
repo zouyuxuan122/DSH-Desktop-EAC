@@ -12,6 +12,27 @@ from typing import Any
 
 
 STATES = {"IDLE", "THINKING", "WORKING", "WAITING", "SUCCESS", "ERROR", "DISCONNECTED"}
+NON_CROSSFADE_CLIPS = {
+    "blink",
+    "glance",
+    "dragging",
+    "dragging_release",
+    "dragging_dizzy",
+    "dragging_protest",
+}
+
+
+def crossfade_duration(previous_clip: str, current_clip: str) -> float | None:
+    """Return a safe fade duration for an already-observed frame transition.
+
+    Expression frames stay crisp, while dragging must switch atomically. A
+    delayed drag fade can reintroduce the old pose after the new pose has
+    already been painted by a mouse event, which appears as layered-window
+    flicker on Windows.
+    """
+    if previous_clip in NON_CROSSFADE_CLIPS or current_clip in NON_CROSSFADE_CLIPS:
+        return None
+    return 0.10 if previous_clip != current_clip else 0.045
 
 
 @dataclass(frozen=True)

@@ -1,0 +1,5 @@
+# 单包工程：pnpm v11 settings 家用配置文件
+# overrides 强制全依赖树（含 tsdown 嵌套）统一使用与 tsdown 0.8.0 兼容的 rolldown
+packages: []
+overrides:
+  rolldown: 1.0.0-beta.7

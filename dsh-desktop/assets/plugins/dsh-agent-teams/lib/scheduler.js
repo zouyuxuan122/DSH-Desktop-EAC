@@ -13,7 +13,81 @@
  */
 import { join } from 'node:path';
 import { deliverToMember } from "./members.js";
-import { acknowledgeMailbox, beginTaskAttempt, claimMailboxDelivery, findTeamByParticipant, readTeam, readUnreadMailbox, releaseMailboxDelivery, unsatisfiedDependencies, withTeamLock, writeTeam, } from "./state.js";
+import { acknowledgeMailbox, beginTaskAttempt, CAPTAIN_KEY, claimMailboxDelivery, findTeamByParticipant, invalidateTaskAttempt, readTeam, readUnreadMailbox, releaseMailboxDelivery, unsatisfiedDependencies, withTeamLock, writeTeam, } from "./state.js";
+/** Per-dependency output cap in the assignment prompt. */
+export const DEPENDENCY_OUTPUT_MAX_CHARS = 2_000;
+/** Combined dependency-output budget in the assignment prompt. */
+export const DEPENDENCY_OUTPUTS_TOTAL_MAX_CHARS = 12_000;
+function taskProfileSeedId(task) {
+    const seed = task.profileSeedId?.trim();
+    return seed === undefined || seed === '' ? undefined : seed;
+}
+function teamProfileProtocol(team) {
+    return team.profile?.protocol;
+}
+/**
+ * Recursively collect `status=completed` ancestors of `taskId` in topological
+ * order (dependencies before dependents). Cycles stop that branch only.
+ */
+export function collectCompletedDependencyOutputs(tasks, taskId, warn) {
+    const byId = new Map(tasks.map(task => [task.id, task]));
+    const visiting = new Set();
+    const visited = new Set();
+    const ordered = [];
+    const walk = (id) => {
+        if (visiting.has(id)) {
+            warn?.(`agent-teams: dependency cycle involving "${id}" while collecting outputs; stopping this branch`);
+            return;
+        }
+        if (visited.has(id))
+            return;
+        visiting.add(id);
+        const task = byId.get(id);
+        if (task !== undefined) {
+            for (const dependency of task.dependencies)
+                walk(dependency);
+            if (id !== taskId)
+                ordered.push(task);
+        }
+        visiting.delete(id);
+        visited.add(id);
+    };
+    walk(taskId);
+    return ordered
+        .filter(task => task.status === 'completed')
+        .map((task) => {
+        const profileSeedId = taskProfileSeedId(task);
+        return {
+            id: task.id,
+            subject: task.subject,
+            ...profileSeedId === undefined ? {} : { profileSeedId },
+            ...task.output === undefined ? {} : { output: task.output },
+        };
+    });
+}
+/** Format completed-dependency outputs with per-item and total truncation. */
+export function formatDependencyOutputs(items) {
+    if (items.length === 0)
+        return '(none)';
+    const formatted = items.map((item) => {
+        const seed = item.profileSeedId === undefined ? '' : ` [${item.profileSeedId}]`;
+        const raw = item.output === undefined || item.output === ''
+            ? '(no output recorded)'
+            : item.output;
+        const truncated = raw.length > DEPENDENCY_OUTPUT_MAX_CHARS;
+        const body = truncated ? `${raw.slice(0, DEPENDENCY_OUTPUT_MAX_CHARS)} [truncated]` : raw;
+        return `- ${item.id}${seed} ${item.subject}:\n  ${body}`;
+    });
+    let selected = formatted;
+    while (selected.length > 1 && selected.join('\n').length > DEPENDENCY_OUTPUTS_TOTAL_MAX_CHARS) {
+        selected = selected.slice(1);
+    }
+    const last = selected[0];
+    if (selected.length === 1 && last !== undefined && last.length > DEPENDENCY_OUTPUTS_TOTAL_MAX_CHARS) {
+        selected = [`${last.slice(0, DEPENDENCY_OUTPUTS_TOTAL_MAX_CHARS)} [truncated]`];
+    }
+    return selected.join('\n');
+}
 function stateRootOf(workspace, config) {
     return join(workspace, config.stateDir);
 }
@@ -43,15 +117,54 @@ function nextReadyTask(tasks, memberName) {
     return ready.find(task => task.assignee === memberName)
         ?? ready.find(task => task.assignee === undefined);
 }
-function assignmentPrompt(ticket, stateDir, teamId) {
+export function assignmentPrompt(ticket, stateDir, teamId) {
     const description = ticket.description === undefined ? '' : `\n\n${ticket.description}`;
+    const seed = ticket.profileSeedId === undefined ? '' : ` [${ticket.profileSeedId}]`;
+    const goal = ticket.teamDescription?.trim() || '(not provided)';
+    const protocol = ticket.profileProtocol?.trim() || '(none)';
+    const executionPrompt = ticket.executionPrompt?.trim();
+    const kind = ticket.kind?.trim() || 'work';
+    const contract = [
+        `Kind: ${kind}${ticket.round === undefined ? '' : ` (round ${ticket.round})`}`,
+        ticket.objective === undefined || ticket.objective === '' ? '' : `Objective: ${ticket.objective}`,
+        ticket.inScope === undefined || ticket.inScope.length === 0 ? '' : `In scope: ${ticket.inScope.join(', ')}`,
+        ticket.outOfScope === undefined || ticket.outOfScope.length === 0 ? '' : `Out of scope: ${ticket.outOfScope.join(', ')}`,
+        ticket.acceptance === undefined || ticket.acceptance.length === 0 ? '' : `Acceptance: ${ticket.acceptance.join('; ')}`,
+        ticket.verify === undefined || ticket.verify.length === 0 ? '' : `Verify: ${ticket.verify.join('; ')}`,
+        ticket.reviewedTaskId === undefined ? '' : `Reviewed task: ${ticket.reviewedTaskId}`,
+    ].filter((line) => line !== '').join('\n');
+    const structuredCompletion = ['implementation', 'repair', 'verification', 'integration'].includes(kind)
+        ? `
+Structured completion payload (keep these arrays in contract order):
+acceptanceResults: ${JSON.stringify((ticket.acceptance ?? []).map((criterion) => ({ criterion, status: 'passed', evidence: '<what proved it>' })))}
+commandsRun: ${JSON.stringify((ticket.verify ?? []).map((command) => ({ command, status: 'passed', exitCode: 0, evidence: '<observed result>' })))}
+${kind === 'implementation' || kind === 'repair' ? 'changedPaths: list the actual workspace-relative POSIX paths you changed.\n' : ''}`
+        : '';
     return `AgentTeams automatic task assignment from the shared task list.
 
-Task: ${ticket.taskId} — ${ticket.subject}${description}
+You are executing as configured member "${ticket.memberName}".
+Do not start a teammate's assigned task.
+
+Team goal:
+${goal}
+
+Profile protocol:
+${protocol}
+${executionPrompt === undefined || executionPrompt === '' ? '' : `
+Execution guidance:
+${executionPrompt}
+`}
+Completed dependency results:
+${formatDependencyOutputs(ticket.dependencyOutputs)}
+
+Task: ${ticket.taskId}${seed} — ${ticket.subject}${description}
+${contract === '' ? '' : `\nContract:\n${contract}\n`}
+${structuredCompletion}
 Attempt: ${ticket.attempt}
 Attempt id: ${ticket.attemptId}
 
-Call agent_teams_claim_task for ${ticket.taskId}; it will return this same attempt_id. Include attempt_id=${ticket.attemptId} in every agent_teams_update_task call. If it is rejected as stale, stop work because the task was reassigned. Work only this task in this turn, report the result to the captain, then become idle so the scheduler can select your next ready task.
+Call agent_teams_claim_task for ${ticket.taskId}; it will return this same attempt_id. Include attempt_id=${ticket.attemptId} in every agent_teams_update_task call. If it is rejected as stale, stop work because the task was reassigned. claimed cannot jump to completed. Mark in_progress first, then completed or failed. Include attempt_id on every update. Then send_message to captain and become idle.
+When finishing: use status=completed only when the task's success criteria are satisfied; use status=failed when blocking findings or validation failures mean downstream work must not proceed; include a concise output in either case. Quality kinds must submit structured fields: review/requirements need verdict=pass to complete (needs_revision/reject must fail with findings); implementation/repair/verification/integration need acceptanceResults and commandsRun, while implementation/repair also need in-scope changedPaths. Use status values "passed" or "failed" inside those arrays. After the work and verification finish, call agent_teams_update_task immediately; do not wait for captain confirmation and do not continue exploring. Do not approve your own implementation. Mail is not a formal next review. Treat the dependency results above as source material. Do not ignore them. Work only this task and only its in-scope paths in this turn.
 
 State policy: ${stateDir}/${teamId}/ is read-only diagnostics; mutate team state only through agent_teams_* tools.`;
 }
@@ -92,7 +205,7 @@ export function installTeamScheduler(ctx, config) {
         async kickTeam(workspace, teamId, suppliedCaptain) {
             const stateRoot = stateRootOf(workspace, config);
             const team = await readTeam(stateRoot, teamId);
-            if (team === undefined)
+            if (team === undefined || team.halted === true || team.phase === 'staged')
                 return;
             const captain = liveCaptain(ctx, team.captainSessionId, suppliedCaptain);
             if (captain === undefined)
@@ -108,7 +221,7 @@ export function installTeamScheduler(ctx, config) {
             const queueKey = memberQueueKey(stateRoot, teamId, memberName);
             await serializeMember(queueKey, async () => {
                 let team = await readTeam(stateRoot, teamId);
-                if (team === undefined)
+                if (team === undefined || team.halted === true || team.phase === 'staged')
                     return;
                 const captain = liveCaptain(ctx, team.captainSessionId, suppliedCaptain);
                 if (captain === undefined)
@@ -132,7 +245,7 @@ export function installTeamScheduler(ctx, config) {
                 }
                 const ticket = await withTeamLock(teamLockKey(stateRoot, team.id), async () => {
                     const fresh = await readTeam(stateRoot, team.id);
-                    if (fresh === undefined)
+                    if (fresh === undefined || fresh.halted === true || fresh.phase === 'staged')
                         return undefined;
                     const currentMember = fresh.members.find(candidate => candidate.name === memberName && candidate.status !== 'removed');
                     if (currentMember === undefined || currentMember.id === '' || !isMemberAvailable(ctx, currentMember))
@@ -163,6 +276,8 @@ export function installTeamScheduler(ctx, config) {
                     parkedAttempts.delete(currentMember.id);
                     currentMember.status = 'working';
                     await writeTeam(stateRoot, fresh);
+                    const profileSeedId = taskProfileSeedId(task);
+                    const protocol = teamProfileProtocol(fresh);
                     return {
                         taskId: task.id,
                         memberName: currentMember.name,
@@ -172,6 +287,21 @@ export function installTeamScheduler(ctx, config) {
                         previousAssignee,
                         subject: task.subject,
                         description: task.description,
+                        teamDescription: fresh.description,
+                        ...protocol === undefined ? {} : { profileProtocol: protocol },
+                        ...profileSeedId === undefined ? {} : { profileSeedId },
+                        ...fresh.profile?.executionPrompt === undefined && config.executionPrompt === undefined
+                            ? {}
+                            : { executionPrompt: fresh.profile?.executionPrompt ?? config.executionPrompt },
+                        kind: task.kind ?? 'work',
+                        ...task.round === undefined ? {} : { round: task.round },
+                        ...task.objective === undefined ? {} : { objective: task.objective },
+                        ...task.inScope === undefined ? {} : { inScope: task.inScope },
+                        ...task.outOfScope === undefined ? {} : { outOfScope: task.outOfScope },
+                        ...task.acceptance === undefined ? {} : { acceptance: task.acceptance },
+                        ...task.verify === undefined ? {} : { verify: task.verify },
+                        ...task.reviewedTaskId === undefined ? {} : { reviewedTaskId: task.reviewedTaskId },
+                        dependencyOutputs: collectCompletedDependencyOutputs(fresh.tasks, task.id, (message) => ctx.logger.warn(message)),
                     };
                 });
                 if (ticket === undefined)
@@ -210,8 +340,37 @@ export function installTeamScheduler(ctx, config) {
             parkedAttempts.delete(agent.id);
             return;
         }
-        if (located.captainSessionId === agent.id)
+        if (located.captainSessionId === agent.id) {
+            // Captain takeover is scoped to the captain's current turn. Unlike a
+            // durable member, the captain has no scheduler lane that can resume an
+            // abandoned attempt later. Returning unfinished captain-owned work to
+            // the shared pool on the idle edge prevents it from becoming a
+            // permanently parked `claimed` task after the captain answers, is
+            // interrupted, or the user switches conversations.
+            if (status === 'running')
+                return;
+            let requeued = false;
+            await withTeamLock(teamLockKey(stateRoot, located.id), async () => {
+                const fresh = await readTeam(stateRoot, located.id);
+                if (fresh === undefined || fresh.captainSessionId !== agent.id)
+                    return;
+                for (const task of fresh.tasks) {
+                    if (task.assignee !== CAPTAIN_KEY
+                        || task.status === 'completed'
+                        || task.status === 'failed'
+                        || task.status === 'cancelled')
+                        continue;
+                    invalidateTaskAttempt(task);
+                    task.reassigning = false;
+                    requeued = true;
+                }
+                if (requeued)
+                    await writeTeam(stateRoot, fresh);
+            });
+            if (requeued)
+                await runtime.kickTeam(workspace, located.id, agent);
             return;
+        }
         const member = located.members.find(candidate => candidate.id === agent.id && candidate.status !== 'removed');
         if (member === undefined) {
             parkedAttempts.delete(agent.id);

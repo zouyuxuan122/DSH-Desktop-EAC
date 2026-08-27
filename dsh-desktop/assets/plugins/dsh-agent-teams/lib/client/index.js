@@ -5,7 +5,7 @@ import { agentTeamsCardDefinition } from "./agent-teams-card-definition.js";
 import { AGENT_TEAMS_LOCALE_NAMESPACE, en, zh, } from "./locales.js";
 import { openAgentTeamMember } from "./session-navigation.js";
 /** Required services: conversation nodes, slots, sessions navigation, and locale. */
-export const inject = ['conversationEvents', 'slots', 'sessions', 'locale'];
+export const inject = ['conversationEvents', 'slots', 'sessions', 'locale', 'modelDirectories'];
 /** The replayed user message is the canonical transcript entry. */
 function HiddenAgentTeamsCommand() {
     return null;
@@ -22,7 +22,7 @@ export function apply(ctx) {
             console.warn(`agent-teams: failed to open member transcript ${childId}: ${String(error)}`);
         });
     };
-    const Panel = ({ t }) => (_jsx(ActivityPanel, { sessionsList: ctx.sessions.list, openMember: openMember, t: t }));
+    const Panel = ({ t }) => (_jsx(ActivityPanel, { sessionsList: ctx.sessions.list, modelDirectories: ctx.modelDirectories, openMember: openMember, t: t }));
     ctx.slots.inject('shell.overlay', () => ctx.slots.register({
         name: 'shell.overlay',
         id: 'agent-teams-activity',

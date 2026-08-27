@@ -108,6 +108,7 @@ export const ACTIVITY_POLL_MS = 1000;
 export const ACTIVITY_PROBE_MS = 5000;
 /** Host route serving live and archived team snapshots. */
 export const ACTIVITY_STATE_URL = '/plugins/dsh-agent-teams/state';
+export const ACTIVITY_HALT_URL = '/plugins/dsh-agent-teams/halt';
 /**
  * Start the single polling loop for the current session's requested targets.
  *

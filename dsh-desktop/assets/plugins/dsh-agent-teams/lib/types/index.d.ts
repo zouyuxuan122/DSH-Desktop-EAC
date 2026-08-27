@@ -18,6 +18,7 @@
  */
 import type { Context } from '@deepseek-ai/cordis';
 import z from '@deepseek-ai/schemastery';
+import { type TeamProfileConfig } from './profiles.ts';
 export declare const name = "agent-teams";
 export declare const inject: string[];
 /** Plugin configuration. */
@@ -31,10 +32,16 @@ export interface Config {
     memberProvider?: string;
     /** Optional model override applied to every member. */
     memberModel?: string;
+    /** Prompt injected into member personas and automatic task assignments. */
+    executionPrompt?: string;
+    /** Plugin-wide fallback route for unavailable member models. */
+    fallback?: import('./profiles.ts').TeamModelFallbackConfig;
     /** Member delegation depth cap (default `1`; `0` forbids delegation entirely). */
     memberMaxDepth?: number;
     /** Team size cap in members (default `8`). */
     maxMembers?: number;
+    /** Named multi-role team profiles. */
+    profiles?: Record<string, TeamProfileConfig>;
     /** Prompt-section order for the usage policy (default `117`, after delegation policy). */
     promptSectionOrder?: number;
     /**
@@ -45,4 +52,6 @@ export interface Config {
     slashCommand?: boolean;
 }
 export declare const Config: z<Config>;
+/** The model-facing usage policy: when and how to drive AgentTeams. */
+export declare function usageSectionText(toolNames: string, profilesText?: string): string;
 export declare function apply(ctx: Context, config: Config): void;

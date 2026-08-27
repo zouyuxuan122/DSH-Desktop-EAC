@@ -12,7 +12,8 @@
  * `fs` service offers no directory deletion.
  * @module dsh-agent-teams/state
  */
-import type { TaskStatus, TeamMessage, TeamState, TeamTask } from './types.ts';
+import { type TaskStatus, type TeamMessage, type TeamState, type TeamTask } from './types.ts';
+export { buildCoverageMatrix, canDeclareDelivery, classifyChangedPath, collectChangedPaths, defaultQualityDeliveryGraph, describeQualityLoop, evaluateQualityCompletion, hasValidQualityTaskFields, isQualityKind, pathMatchesScope, planQualityFollowUp, qualityPlanningPrompt, resumeTeamState, sanitizeReviewAcceptance, sanitizeReviewObjective, taskKindOf, validateCreateTask, } from './quality-gates.ts';
 /** Mailbox key of the captain. */
 export declare const CAPTAIN_KEY = "captain";
 /**
@@ -69,6 +70,8 @@ export declare function beginTaskAttempt(task: TeamTask, assignee: string): stri
  * Revoke the current worker immediately. Clearing its capability makes old
  * updates stale; a separate handoff generation serializes async quiescence.
  */
+/** Cancel one unfinished task without returning it to the ready pool. */
+export declare function cancelUnfinishedTask(task: TeamTask, output?: string): void;
 export declare function invalidateTaskAttempt(task: TeamTask, nextAssignee?: string, reassigning?: boolean): void;
 /**
  * Create the team directory structure and the initial team record.
@@ -178,6 +181,7 @@ export interface AtomicReplaceOptions {
  * @returns nothing once the file has been replaced by one of the two paths.
  */
 export declare function replaceFileAtomicOrDirect(temporary: string, file: string, content: string, primitives: AtomicReplacePrimitives, options?: AtomicReplaceOptions): Promise<void>;
+export declare function isTeamTask(value: unknown): value is TeamTask;
 /**
  * Remove a team's whole directory (members should be interrupted first).
  * @param stateRoot - resolved absolute state root directory.
@@ -208,10 +212,11 @@ export declare function readArchivedTeam(stateRoot: string, teamId: string): Pro
  */
 export declare function listArchivedTeamIds(stateRoot: string): Promise<string[]>;
 /** Visual task state for the activity panel. */
-export type VisualTaskState = 'blocked' | 'open' | 'running' | 'completed';
+export type VisualTaskState = 'blocked' | 'open' | 'running' | 'completed' | 'failed' | 'cancelled';
 /**
  * The visual state of one task: `running` while in_progress, `completed`
- * when done, `blocked` while any dependency is unfinished, else `open`.
+ * when done, `failed`/`cancelled` when terminal without success, `blocked`
+ * while any dependency is unfinished, else `open`.
  */
 export declare function taskVisualState(status: string, dependencies: readonly string[], tasks: readonly TeamTask[]): VisualTaskState;
 /**

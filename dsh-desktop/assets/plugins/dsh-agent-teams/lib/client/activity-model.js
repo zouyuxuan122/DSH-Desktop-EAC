@@ -4,6 +4,66 @@ export const COMPACT_DAG_NODE_WIDTH = 92;
 export const COMPACT_DAG_NODE_HEIGHT = 30;
 export const COMPACT_DAG_COLUMN_GAP = 26;
 export const COMPACT_DAG_ROW_GAP = 8;
+/** Compact `provider/model` route, or just the model when the provider is absent. */
+export function memberRouteLabel(member) {
+    if (member === undefined)
+        return '';
+    const provider = member.provider?.trim() ?? '';
+    const model = member.model?.trim() ?? '';
+    if (provider !== '' && model !== '')
+        return `${provider}/${model}`;
+    return model;
+}
+/**
+ * Compact route shown on a running task. Prefer the task's own snapshot
+ * field; fall back to the assignee member when older hosts omit it.
+ */
+export function taskModelLabel(task, members) {
+    const direct = task.model?.trim() ?? '';
+    if (direct !== '')
+        return direct;
+    return memberRouteLabel(members.find((candidate) => candidate.name === task.assignee));
+}
+/** Short model id for tight DAG/chip surfaces (`openai/gpt-5.6-sol` → `gpt-5.6-sol`). */
+export function compactModelLabel(route) {
+    const trimmed = route.trim();
+    if (trimmed === '')
+        return '';
+    const slash = trimmed.lastIndexOf('/');
+    return slash === -1 ? trimmed : trimmed.slice(slash + 1);
+}
+/** A live team the current captain still owns and has not halted. */
+export function liveCaptainTeam(teams, sessionId) {
+    const owner = sessionId?.trim() ?? '';
+    if (owner === '')
+        return undefined;
+    return teams.find((team) => team.captainSessionId === owner && team.halted !== true);
+}
+/** Whether the captain chat should keep showing the in-progress banner. */
+export function teamIsActive(team) {
+    if (team.halted === true || team.phase === 'staged')
+        return false;
+    if (team.members.some((member) => member.activity === 'working' || member.status === 'working'))
+        return true;
+    if (team.tasks.some((task) => task.status === 'pending' || task.status === 'claimed' || task.status === 'in_progress'))
+        return true;
+    return team.members.length > 0 && team.tasks.length === 0;
+}
+/** Compact banner copy: running members, otherwise the current planning state. */
+export function teamProgressSummary(team, separator) {
+    const workingMembers = team.members.filter((member) => member.activity === 'working' || member.status === 'working');
+    const runningTasks = team.tasks.filter((task) => task.status === 'claimed' || task.status === 'in_progress');
+    const labels = runningTasks.map((task) => task.subject.trim() || task.id).filter((label) => label !== '');
+    if (workingMembers.length > 0 || labels.length > 0) {
+        return {
+            working: Math.max(workingMembers.length, labels.length),
+            detail: labels.slice(0, 2).join(separator),
+        };
+    }
+    if (team.tasks.length === 0)
+        return { working: 0, detail: '' };
+    return { working: 0, detail: '' };
+}
 /** Use a fill-width grid when the task graph has no real dependency edges. */
 export function usesParallelTaskGrid(tasks) {
     if (tasks.length === 0)
@@ -21,6 +81,17 @@ export function usesParallelTaskGrid(tasks) {
  */
 export function activityPanelExpandedForSession(open, owner, current) {
     return open && owner !== undefined && owner === current;
+}
+/**
+ * Auto-expand only for live teams that appear after the current session's
+ * initial restore pass. Replayed cards, archived teams, and live teams restored
+ * while reopening a conversation must remain behind the collapsed badge.
+ */
+export function activityPanelShouldAutoExpand({ alreadyAutoOpened, pageSettled, restoreComplete, previousLiveTeamIds, currentLiveTeamIds, }) {
+    return !alreadyAutoOpened
+        && pageSettled
+        && restoreComplete
+        && currentLiveTeamIds.some((teamId) => !previousLiveTeamIds.has(teamId));
 }
 /**
  * Resolve the task whose dependency chain should be highlighted.

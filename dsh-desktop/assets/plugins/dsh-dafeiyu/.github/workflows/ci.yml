@@ -1,0 +1,146 @@
+name: Test pull requests
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: Test (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os:
+          - windows-latest
+          - ubuntu-latest
+
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v7
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: "24"
+          package-manager-cache: false
+
+      - name: Install pnpm
+        run: npm install --global pnpm@11.21.0
+
+      - name: Install JavaScript dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Set up Python
+        uses: actions/setup-python@v7
+        with:
+          python-version: "3.11"
+
+      - name: Run JavaScript tests
+        run: npm test
+
+      - name: Run Python tests
+        run: python -m unittest discover -s runtime/tests -t .
+
+  linux-helper:
+    name: Build and smoke-test Linux x64 Helper
+    runs-on: ubuntu-22.04
+
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v7
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: "24"
+          package-manager-cache: false
+
+      - name: Install bundled runtime dependencies
+        run: npm install --ignore-scripts --no-package-lock --omit=dev
+
+      - name: Set up Python
+        uses: actions/setup-python@v7
+        with:
+          python-version: "3.11"
+
+      - name: Install Linux display libraries
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes \
+            xvfb libdbus-1-3 libegl1 libgl1 \
+            libxcb-cursor0 libxcb-icccm4 libxcb-image0 libxcb-keysyms1 \
+            libxcb-randr0 libxcb-render-util0 libxcb-shape0 libxcb-xfixes0 \
+            libxcb-xinerama0 libxcb-xkb1 libxkbcommon-x11-0
+
+      - name: Install Helper build dependencies
+        run: python -m pip install --disable-pip-version-check -r requirements.txt pyinstaller
+
+      - name: Build and visually smoke-test Linux Helper
+        env:
+          DSH_DAFEIYU_BUILD_PYTHON: ${{ env.pythonLocation }}/bin/python
+        run: xvfb-run --auto-servernum npm run build:helper:linux
+
+      - name: Verify Linux Helper survives npm packaging
+        run: |
+          archive=$(npm pack --silent)
+          mkdir -p .build/package-check
+          tar -xzf "$archive" -C .build/package-check
+          test -x .build/package-check/package/runtime/bin/linux-x64/dsh-dafeiyu-helper
+          node scripts/test-linked-package.mjs .build/package-check/package
+          xvfb-run --auto-servernum node scripts/test-packaged-helper.mjs \
+            --executable .build/package-check/package/runtime/bin/linux-x64/dsh-dafeiyu-helper
+
+  macos-helper:
+    name: Build and smoke-test macOS universal Helper
+    runs-on: macos-15
+
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v7
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: "24"
+          package-manager-cache: false
+
+      - name: Install JavaScript dependencies
+        run: npm install --ignore-scripts --no-package-lock
+
+      - name: Run JavaScript tests
+        run: npm test
+
+      - name: Run Python tests
+        run: python3 -m unittest discover -s runtime/tests -t .
+
+      - name: Build and visually smoke-test macOS Helper
+        run: |
+          npm run build:helper:darwin
+          node scripts/test-packaged-helper.mjs
+
+      - name: Verify universal architecture and ad-hoc signature
+        run: |
+          app=runtime/bin/darwin/dsh-dafeiyu-helper.app
+          binary="$app/Contents/MacOS/dsh-dafeiyu-helper"
+          lipo "$binary" -verify_arch arm64 x86_64
+          codesign --verify --deep --strict --verbose=2 "$app"
+          test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$app/Contents/Info.plist")" = "$(node -p "require('./package.json').version")"
+
+      - name: Verify macOS Helper survives npm packaging
+        run: |
+          archive=$(npm pack --silent)
+          mkdir -p .build/package-check
+          tar -xzf "$archive" -C .build/package-check
+          app=.build/package-check/package/runtime/bin/darwin/dsh-dafeiyu-helper.app
+          binary="$app/Contents/MacOS/dsh-dafeiyu-helper"
+          test -x "$binary"
+          lipo "$binary" -verify_arch arm64 x86_64
+          codesign --verify --deep --strict --verbose=2 "$app"
+          node scripts/test-linked-package.mjs .build/package-check/package
+          node scripts/test-packaged-helper.mjs --executable "$binary"
