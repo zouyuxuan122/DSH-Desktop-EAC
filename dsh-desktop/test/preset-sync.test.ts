@@ -239,7 +239,7 @@ test('内置 preset 仅携带 Windows shell 配置', () => {
   }
 });
 
-test('electron-builder files 包含 preset-sync.js（否则新模块不进安装包）', () => {
-  const yml = readFileSync(join(root, 'electron-builder.yml'), 'utf8');
-  assert.match(yml, /- preset-sync\.js/);
+test('stage-resources ROOT_FILES 包含 preset-sync.js（否则新模块不进安装包）', () => {
+  const stage = readFileSync(join(root, '..', 'tauri-shell', 'stage-resources.mjs'), 'utf8');
+  assert.match(stage, /'preset-sync\.js'/);
 });

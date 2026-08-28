@@ -1,11 +1,12 @@
-// preload.js ↔ tauri-shell/sidecar/bridge.ts 键集一致性契约。
+// bridge.ts（Tauri WebView2 桥）单侧表面契约。
 //
-// 背景（HANDOVER-2026-08-23 §5 P2-4）：Tauri 桥按 preload.js 逐字节重建
-// window.dshDesktop。任何一侧新增/改名/删除方法而另一侧没跟上，都会让某个
-// 配套插件在另一壳里静默拿不到 API（与 Bug #58「注册行丢失」同类的事故面）。
-// 本测试把两侧的命名空间/方法树锁成同一个形状，CI 直接红。
+// 背景：双壳时代 preload.js ↔ bridge.ts 键集一致性由本测试锁定（Bug #58 防
+// 事故）；Electron 冻结壳已退役（批次 C），preload.ts 删除后窗口桥只剩
+// bridge.ts——配套插件（dsh-better-sidebar 等）在此拿 window.dshDesktop。
+// 本测试保留「防解析器写歪致空树假绿」的锚点断言，并把 dshDesktop 顶层表面
+// 锁成必需清单，防止未来无意删掉配套插件依赖的方法。
 //
-// 允许的桥侧额外键：_call/_send/_onNotify/_onReady（桥内省，非 preload 面）。
+// 允许的桥侧额外键：_call/_send/_onNotify/_onReady（桥内省，非 dshDesktop 面）。
 
 import test from 'node:test';
 import assert from 'node:assert/strict';
@@ -14,7 +15,6 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
-const preload = readFileSync(join(root, 'preload.js'), 'utf8');
 const bridge = readFileSync(join(root, '..', 'tauri-shell', 'sidecar', 'bridge.ts'), 'utf8');
 
 // 从「赋值起点」做花括号配对，收集相对深度 1（顶层键）与 2（命名空间内键）。
@@ -85,36 +85,19 @@ function extractKeyTree(src, marker) {
   return tree;
 }
 
-const preloadTree = extractKeyTree(preload, 'const dshDesktop =');
 const bridgeTree = extractKeyTree(bridge, '(window as any).dshDesktop =');
 
-test('preload dshDesktop exposes the expected namespaces', () => {
-  // 基线锚点：防止解析器写歪导致两侧都解析出空树「假绿」。
-  const tops = Object.keys(preloadTree).filter((k) => !k.startsWith('_'));
+test('bridge dshDesktop exposes the required namespaces（preload 退役后的单侧契约）', () => {
+  // 基线锚点：防止解析器写歪导致解析出空树「假绿」。
+  const tops = Object.keys(bridgeTree).filter((k) => !k.startsWith('_'));
   for (const need of ['appVersion', 'windowControls', 'menu', 'getInfo', 'refreshBalance',
     'restartService', 'floatWindow', 'guard', 'pluginWizard', 'pluginManager', 'pluginUpdates',
     'imagePaste', 'balancePrices', 'balanceModels', 'revertFiles', 'openPath', 'openExternal',
     'copyText', 'getPathForFile', 'recovery', 'rescue']) {
-    assert.ok(tops.includes(need), `preload missing ${need}`);
+    assert.ok(tops.includes(need), `bridge missing ${need}`);
   }
-  assert.ok(preloadTree.windowControls.length >= 5, 'windowControls subkeys parsed');
-  assert.ok(preloadTree.rescue.length >= 7, 'rescue subkeys parsed');
-});
-
-test('bridge dshDesktop key tree matches preload exactly', () => {
-  const preloadTops = Object.keys(preloadTree).sort();
-  const bridgeTops = Object.keys(bridgeTree)
-    .filter((k) => !k.startsWith('_')) // _call/_send/_onNotify/_onReady = 桥内省额外面
-    .sort();
-  assert.deepEqual(bridgeTops, preloadTops, '顶层键集不一致（一侧新增/改名/漏了方法）');
-  for (const ns of preloadTops) {
-    if (preloadTree[ns].length === 0 && bridgeTree[ns].length === 0) continue; // 叶子字段
-    assert.deepEqual(
-      [...bridgeTree[ns]].sort(),
-      [...preloadTree[ns]].sort(),
-      `命名空间 ${ns} 的方法集不一致`,
-    );
-  }
+  assert.ok(bridgeTree.windowControls.length >= 5, 'windowControls subkeys parsed');
+  assert.ok(bridgeTree.rescue.length >= 7, 'rescue subkeys parsed');
 });
 
 test('bridge keeps the introspection escape hatch for shell pages', () => {

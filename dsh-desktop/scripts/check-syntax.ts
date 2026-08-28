@@ -1,11 +1,11 @@
 'use strict';
 
-// 构建前语法预检（prepack / predist 自动执行）。
+// 构建前语法预检。
 // v0.3.8 事故（上游）：main.js 中 `async` 关键字与 function 声明被注释拆开，
 // 打包出启动即抛 ReferenceError: async is not defined 的安装包。
 // 该类问题 node --check 查不出来（孤立 async 是合法的表达式语句，
 // 错误发生在运行时），因此本脚本额外做模式扫描。
-// 检查范围与 electron-builder.yml 的 files 清单保持一致（入口 js）。
+// 检查范围与 Tauri stage-resources 装配的 dsh-desktop 根模块保持一致（入口 js）。
 
 import fs = require('node:fs');
 import path = require('node:path');
@@ -13,19 +13,13 @@ import cp = require('node:child_process');
 
 const root = path.resolve(__dirname, '..');
 const entryFiles = [
-  'main.js',
-  'preload.js',
   'updater.js',
   'client-updater.js',
   'balance.js',
   'session-watcher.js',
-  'session-encoding-heal.js',
-  'renderer-recovery.js',
-  'watchdog.js',
   'shortcut-maintenance.js',
   'stable-port.js',
   'stream-write-guard.js',
-  'koffi-preflight.js',
   'profile-module-heal.js',
   'patch-row-heal.js',
   'plugin-guard.js',

@@ -1,0 +1,11 @@
+node_modules/
+tests/fixtures-out/
+.paddlex-cache/
+.codex_tmp/
+*.log
+*.tgz
+.eac-copy-stamp.json
+docs/
+.DS_Store
+__pycache__/
+*.pyc

@@ -30,6 +30,15 @@ const DSH_DESKTOP_ROOT = process.env.DSH_RESOURCE_ROOT
   ? path.join(process.env.DSH_RESOURCE_ROOT, 'dsh-desktop')
   : path.resolve(__dirname, '..', '..', 'dsh-desktop');
 const rescueAgent: Record<string, unknown> = require(path.join(DSH_DESKTOP_ROOT, 'rescue-agent.js')) as Record<string, unknown>;
+const atomicJson = require(path.join(DSH_DESKTOP_ROOT, 'lib', 'atomic-json.js')) as {
+  writeJsonAtomic(file: string, value: unknown): void;
+};
+// 安全模式唯一实现（vnext 收编）：与 rc.action 共用 lib/recovery-center/register.js。
+const recoveryCenter = require(path.join(DSH_DESKTOP_ROOT, 'lib', 'recovery-center', 'register.js')) as {
+  safeModeEnable(opts?: { requestRelaunch?: boolean; logTag?: string }): Record<string, unknown>;
+  safeModeDisable(logTag?: string): Record<string, unknown>;
+  safeModeStatus(): Record<string, unknown> | null;
+};
 const RA_OPTS = rescueAgent.DEFAULT_OPTS as unknown as { BOOT_FAILURE_THRESHOLD: number; MODEL: string; AI_TIMEOUT_MS: number };
 
 export function initRescue(host: RescueHost): void {
@@ -38,7 +47,6 @@ export function initRescue(host: RescueHost): void {
 
 function guardDirPath(): string { return path.join(H.dshHome, 'guard'); }
 function rescueStateFile(): string { return path.join(guardDirPath(), 'rescue-state.json'); }
-function safeModeStateFile(): string { return path.join(guardDirPath(), 'safe-mode.json'); }
 
 function readJsonLocal<T>(file: string, def: T): T {
   try { return JSON.parse(fs.readFileSync(file, 'utf8')) as T; } catch { return def; }
@@ -46,13 +54,7 @@ function readJsonLocal<T>(file: string, def: T): T {
 
 function writeJsonSafe(file: string, value: unknown): void {
   try {
-    fs.mkdirSync(path.dirname(file), { recursive: true });
-    const tmp = file + '.tmp-' + Date.now();
-    fs.writeFileSync(tmp, JSON.stringify(value, null, 2) + '\n');
-    try { fs.renameSync(tmp, file); } catch {
-      fs.rmSync(file, { force: true, maxRetries: 3 });
-      fs.renameSync(tmp, file);
-    }
+    atomicJson.writeJsonAtomic(file, value);
   } catch (err) {
     H.log('rescue', '写状态文件失败: ' + String(((err as Error).message) || err));
   }
@@ -80,47 +82,15 @@ function guardInst(): Record<string, (...a: unknown[]) => unknown> {
 }
 
 export function safeModeStatus(): Record<string, unknown> | null {
-  const st = readJsonLocal<Record<string, unknown> | null>(safeModeStateFile(), null);
-  return st && st.active === true ? st : null;
+  return recoveryCenter.safeModeStatus();
 }
 
+// safe-mode 开关（救援页/壳层安全模式入口；开启不经 rc.action 的 relaunch
+// 语义，由调用方决定何时重启，与 register.safeModeEnable({requestRelaunch:false})
+// 对齐旧实现行为）。
 export function safeModeSet(on: boolean): Record<string, unknown> {
-  const running = ((H.mods.boot!.state as () => { running: boolean })()).running;
-  if (running) {
-    return { ok: false, error: 'service-running', hint: '请先停止 Web 服务（或从救援页进入安全模式）' };
-  }
-  if (on) {
-    if (safeModeStatus()) return { ok: false, error: 'already-on', hint: '安全模式已在启用状态' };
-    const g = guardInst();
-    const snap = (g.snapshot as (r: string) => { id: string } | null)('safe-mode-before');
-    if (!snap) return { ok: false, error: '安全模式备份失败（无法创建 guard 快照）' };
-    const patchFile = path.join(H.desktopProfileDir(), 'cordis.patch.yml');
-    let text = '';
-    try { text = fs.readFileSync(patchFile, 'utf8'); } catch { /* 无 patch 文件按空处理 */ }
-    const rows = (() => { try { return (H.mods.pluginOps!.pluginManagerCollect as () => Array<{ core?: boolean; id: string }>)(); } catch { return []; } })();
-    const coreIds = rows.filter((r) => r.core).map((r) => r.id);
-    const { patch, removed } = (ra().safeModePatch as (t: string, ids: string[]) => { patch: string; removed: unknown[] })(text, coreIds);
-    try {
-      if (patch !== text) fs.writeFileSync(patchFile, patch, 'utf8');
-    } catch (err) {
-      return { ok: false, error: '写入安全模式配置失败: ' + String(((err as Error).message) || err) };
-    }
-    writeJsonSafe(safeModeStateFile(), {
-      active: true,
-      enteredAt: new Date().toISOString(),
-      snapshotId: snap.id,
-      removed: removed.length,
-    });
-    H.log('rescue', '安全模式已开启（核心 ' + coreIds.length + ' 个，移除 ' + removed.length + ' 个插件行）');
-    return { ok: true, restartRequired: true, removed: removed.length, core: coreIds.length };
-  }
-  const st = safeModeStatus();
-  if (!st) return { ok: false, error: 'not-on', hint: '安全模式未启用' };
-  const res = (guardInst().restore as (id: unknown) => Record<string, unknown>)(st.snapshotId);
-  if (!res.ok) return res;
-  try { fs.rmSync(safeModeStateFile(), { force: true }); } catch { /* 已不存在 */ }
-  H.log('rescue', '安全模式已退出（恢复快照 ' + String(st.snapshotId) + '）');
-  return { ok: true, restartRequired: true };
+  if (on) return recoveryCenter.safeModeEnable({ requestRelaunch: false, logTag: 'rescue' });
+  return recoveryCenter.safeModeDisable('rescue');
 }
 
 // 诊断上下文收集（单项失败按空处理，绝不抛）。

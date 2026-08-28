@@ -167,16 +167,67 @@ window.__ModuleLoader__.load({
       );
     }
 
-    function apply(ctx) {
-      ctx.slots.inject("settings.section", function () {
-        return ctx.slots.register({
-          name: "settings.section",
-          id: "dsh-feature-toggles",
-          order: 7,
-          label: function () { return "增强功能"; },
-        }, FeaturesSection);
-      });
-    }
+/**
+ * 设置侧边栏独立分区：「余额」——余额小鲸鱼挂件开关 + 用法说明。
+ * 与「增强功能」分区复用同一张 ToggleCard（同一写入语义）。
+ */
+function BleSection() {
+  return h("div", { style: { display: "grid", gap: 12, alignItems: "start" } },
+    h("ul", { style: { listStyle: "none", margin: 0, padding: 0, display: "grid", gap: 12 } },
+      h(ToggleCard, {
+        id: "dsh-whale-widget",
+        title: "余额小鲸鱼",
+        desc: "DSH 界面右下角的 DeepSeek 余额挂件：余额 / 今日已用 / 每轮对话消耗统计（依赖 DEEPSEEK_API_KEY 凭据）。",
+      }),
+    ),
+    h("p", { style: { margin: 0, opacity: 0.72, lineHeight: 1.6, fontSize: 12 } },
+      "开启并重启后，小鲸鱼余额挂件固定显示在会话页面右下角（图标+余额/今日已用）；随时可回本分区或「插件 → 管理」停用。"),
+  );
+}
+
+/**
+ * 设置侧边栏独立分区：「多智能体协作团队」——AgentTeams 开关 + 用法说明。
+ */
+function TeamsSection() {
+  return h("div", { style: { display: "grid", gap: 12, alignItems: "start" } },
+    h("ul", { style: { listStyle: "none", margin: 0, padding: 0, display: "grid", gap: 12 } },
+      h(ToggleCard, {
+        id: "agent-teams",
+        title: "AgentTeams 多智能体团队",
+        desc: "把一个会话变成「队长 + 子代理成员 + 依赖感知任务 DAG + 成员直发消息」的协作团队；启用后在对话里使用 /agent-teams。",
+      }),
+    ),
+    h("p", { style: { margin: 0, opacity: 0.72, lineHeight: 1.6, fontSize: 12 } },
+      "启用并重启后，在对话输入框输入 /agent-teams 打开团队面板：安排子代理成员、分配依赖感知的任务 DAG、成员之间直发消息；不需要时同样可以在此停用。"),
+  );
+}
+
+function apply(ctx) {
+  ctx.slots.inject("settings.section", function () {
+    return ctx.slots.register({
+      name: "settings.section",
+      id: "dsh-feature-toggles",
+      order: 7,
+      label: function () { return "增强功能"; },
+    }, FeaturesSection);
+  });
+  ctx.slots.inject("settings.section", function () {
+    return ctx.slots.register({
+      name: "settings.section",
+      id: "dsh-balance",
+      order: 7.1,
+      label: function () { return "余额"; },
+    }, BleSection);
+  });
+  ctx.slots.inject("settings.section", function () {
+    return ctx.slots.register({
+      name: "settings.section",
+      id: "dsh-agent-teams",
+      order: 7.2,
+      label: function () { return "多智能体协作团队"; },
+    }, TeamsSection);
+  });
+}
 
     exports.apply = apply;
     exports.inject = ["slots"];

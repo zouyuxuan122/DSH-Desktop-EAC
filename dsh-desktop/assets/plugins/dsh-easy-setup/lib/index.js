@@ -194,6 +194,26 @@ class EasySetupGateway extends TypertRemoteService {
 	}
 }
 
+/**
+ * Make sure the persona file exists before dsh-soul-md activates. The
+ * kernel plugin binds its fs.watch hot-reload exactly once at startup and
+ * swallows the failure when the file is absent — a first-ever persona save
+ * (a bare file write, not a settings change) then stays invisible to every
+ * conversation until the app restarts. Seeding an empty file lets the bind
+ * succeed; empty content registers no section, so nothing changes until the
+ * user actually writes a card. Runs before ctx.plugin(...) because the
+ * companion row order puts easy-setup ahead of soul-md.
+ */
+function ensurePersonaFileBootstrap() {
+	try {
+		const path = personaPath();
+		if (existsSync(path)) return;
+		mkdirSync(dirname(path), { recursive: true });
+		writeFileSync(path, "", "utf8");
+	} catch { /* best-effort bootstrap; writePersona re-reports errors */ }
+}
+
 export function apply(ctx) {
+	ensurePersonaFileBootstrap();
 	ctx.plugin(EasySetupGateway);
 }

@@ -27,6 +27,7 @@ import type {
   SdkEventParams,
 } from '../../../shared/protocol.js';
 import type { HostInitParams } from '../../../shared/protocol.js';
+import { writeJsonAtomic } from '../../atomic-json.js';
 
 /** SDK 与 host-bootstrap 之间的 IO 通道（宿主注入，便于单测）。 */
 export interface SdkIo {
@@ -136,10 +137,7 @@ function createSettings(dataDir: string): SettingsStore {
     set(key: string, value: unknown): void {
       const all = read();
       all[key] = value;
-      fs.mkdirSync(dataDir, { recursive: true });
-      const tmp = file + '.tmp-' + Date.now();
-      fs.writeFileSync(tmp, JSON.stringify(all, null, 2) + '\n');
-      fs.renameSync(tmp, file);
+      writeJsonAtomic(file, all);
     },
     all(): Record<string, unknown> {
       return read();

@@ -13,79 +13,33 @@
 // win.start-dragging（WebView2 无 -webkit-app-region），5s 心跳，页面异常上报。
 // 拖入文件路径（getPathForFile）返回 ''，与浏览器打开 WebUI 时一致，插件自带降级。
 
-interface BridgeFrame { jsonrpc: string; id?: number; method: string; params?: unknown }
-type BridgePending = { resolve: (v: any) => void; reject: (e: any) => void };
-
 (function () {
-  var WS_URL = (window as any).__DSH_BRIDGE_WS__ || 'ws://127.0.0.1:19873/ws';
   var BAR_ID = '__dsh_desktop_chrome__';
   var BAR_HEIGHT = 36;
   var FLOAT_BAR_ID = '__dsh_desktop_floatbar__';
   var FLOAT_BAR_HEIGHT = 24;
 
-  var seq = 0;
-  var pending: { [id: number]: BridgePending } = {};
-  var ws: WebSocket | null = null;
-  var wsReady = false;
+  // 回环 WS JSON-RPC 客户端（单源：assets/ws-jsonrpc-client.js，Rust 壳在
+  // initialization_script 序列中先注入本桥）。connect/queue/call/重连逻辑
+  // 只存在于单源文件；这里只做钩子接线与语义别名。
   var notifyHooks: ((method: string, params: any) => void)[] = [];
   var readyHooks: ((info: any) => void)[] = [];
-  var queue: BridgeFrame[] = [];
-
-  function rawSend(obj: BridgeFrame): void {
-    try { if (ws) ws.send(JSON.stringify(obj)); } catch (e) { /* 断线由重连兜底 */ }
-  }
-
-  // fire-and-forget（Electron ipcRenderer.send 语义）：不等回复，断了就丢。
-  function send(method: string, params?: unknown): void {
-    if (wsReady) rawSend({ jsonrpc: '2.0', method: method, params: params || {} });
-  }
-
-  // invoke 语义（ipcRenderer.invoke）：Promise + 超时。
-  function call(method: string, params?: unknown, timeoutMs?: number): Promise<any> {
-    return new Promise(function (resolve, reject) {
-      var id = ++seq;
-      pending[id] = { resolve: resolve, reject: reject };
-      if (!wsReady) { queue.push({ jsonrpc: '2.0', id: id, method: method, params: params || {} }); }
-      else rawSend({ jsonrpc: '2.0', id: id, method: method, params: params || {} });
-      setTimeout(function () {
-        if (pending[id]) {
-          delete pending[id];
-          reject(new Error('bridge call timeout: ' + method));
-        }
-      }, timeoutMs || 30000);
-    });
-  }
-
-  function connect(): void {
-    ws = new WebSocket(WS_URL);
-    ws.onopen = function () {
-      wsReady = true;
-      while (queue.length) rawSend(queue.shift() as BridgeFrame);
+  var rpc = (window as any).__DSH_WS_RPC__({
+    onOpen: function () {
       call('chrome.init', {}).then(function (info) {
         try { readyHooks.forEach(function (h) { h(info); }); } catch (e) { /* 页面回调异常不断桥 */ }
       }).catch(function () { /* chrome.init 不可用不致命 */ });
-    };
-    ws.onmessage = function (ev: MessageEvent) {
-      var msg: any; try { msg = JSON.parse(ev.data); } catch (e) { return; }
-      if (msg.id != null && pending[msg.id]) {
-        var r = pending[msg.id]!; delete pending[msg.id];
-        if (msg.error) r.reject(new Error(msg.error.message || 'rpc error'));
-        else r.resolve(msg.result);
-      } else if (msg.method) {
-        // 通知帧：win.maximized / dsh.balance / boot.web-ready …
-        try { notifyHooks.forEach(function (h) { h(msg.method, msg.params); }); } catch (e) { /* 同上 */ }
-      }
-    };
-    ws.onclose = function () {
-      wsReady = false;
-      setTimeout(connect, 1500);
-    };
-    ws.onerror = function () { try { if (ws) ws.close(); } catch (e) { /* 重连由 onclose 驱动 */ } };
-  }
+    },
+  });
+  rpc.onNotify(function (method: string, params: any): void {
+    try { notifyHooks.forEach(function (h) { h(method, params); }); } catch (e) { /* 同上 */ }
+  });
 
+  // fire-and-forget（ipcRenderer.send 语义）：不等回复，断了就丢。
+  function send(method: string, params?: unknown): void { rpc.send(method, params); }
+  // invoke 语义（ipcRenderer.invoke）：Promise + 超时。
+  function call(method: string, params?: unknown, timeoutMs?: number): Promise<any> { return rpc.call(method, params, timeoutMs); }
   function onNotify(fn: (method: string, params: any) => void): void { notifyHooks.push(fn); }
-
-  window.addEventListener('DOMContentLoaded', function () { connect(); });
 
   // ---------------------------------------------------------------------------
   // window.dshDesktop（键集与 preload.js:26-127 一致；契约测试锁定）
@@ -401,6 +355,10 @@ type BridgePending = { resolve: (v: any) => void; reject: (e: any) => void };
   //     flex-start + 子项 margin-block:auto：放得下时居中、放不下时从顶排布可滚。
   //  c) 模型选择弹层遮挡 —— 菜单 absolute 向上展开且 z 只有 20，顶部会捅出滚动
   //     容器/视口并被高 z 覆盖物盖住；抬到内容层之上并支持「翻转向下」救援。
+  //  d) 悬停浮层横向溢出 —— 提示词优化面板与「/」命令菜单等 absolute 浮层向上展开
+  //     时会把 hero 输入区滚动容器撑出横向溢出（hero 态只设 overflow-y，x 轴未
+  //     裁剪），出现横贯窗口的横向滚动条；且面板常驻挂载（仅隐身），移出后溢出
+  //     依旧。在输入区滚动体与 body 层把 x 轴溢出钉死，横向滚动条不再出现。
   // ---------------------------------------------------------------------------
   function injectUiPatchCss(): void {
     if (document.getElementById('dsh-ui-patch')) return;
@@ -413,7 +371,9 @@ type BridgePending = { resolve: (v: any) => void; reject: (e: any) => void };
   html[data-dsh-title-bar-height] .wSkVaW_root[data-phase=hero] .wSkVaW_scrollBody > *{margin-block:auto!important}\
   html[data-dsh-title-bar-height] ._7KE1Ra_menu{z-index:5100!important}\
   html[data-dsh-title-bar-height] ._7KE1Ra_menu.dsh-popup-flip{top:calc(100% + 8px)!important;bottom:auto!important}\
-  html[data-dsh-title-bar-height] .wSkVaW_composerStack:has(._7KE1Ra_menu){overflow:visible!important}';
+  html[data-dsh-title-bar-height] .wSkVaW_composerStack:has(._7KE1Ra_menu){overflow:visible!important}\
+  html[data-dsh-title-bar-height] .wSkVaW_root[data-phase=hero] .wSkVaW_scrollBody{overflow-x:hidden!important}\
+  html[data-dsh-title-bar-height] body{overflow-x:hidden!important}';
     document.head.appendChild(tag);
   }
 

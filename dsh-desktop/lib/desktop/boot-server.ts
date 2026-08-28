@@ -61,8 +61,6 @@ let webUrl = '';
 
 export function getServerProc(): ChildProcess | null { return serverProc; }
 export function getWebUrl(): string { return webUrl; }
-export function setWebUrl(url: string): void { webUrl = url; }
-export function isRestarting(): boolean { return restartingServer; }
 export function setIsRestarting(v: boolean): void { restartingServer = v; }
 
 function logsDir(): string { return path.join(ctx.getUserDataDir(), 'logs'); }

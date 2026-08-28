@@ -61,16 +61,16 @@ test('desktop profile initialization resolves the DSH home before linking schema
 // issue #14 / zcode 报告：app 层声明不足以让 fallback 闭包（BFS 起点是
 // 捆绑的 dsh 包 package.json）包含 schemastery → 全新安装后
 // profiles/node_modules 永远缺 junction → dsh web 启动即崩（退出码 1）。
-// after-pack 必须把闭包外依赖注入 dsh 包声明，BFS 才能在每次启动时
-// 幂等维护 junction。
-test('after-pack injects closure-unreachable deps into the bundled dsh package', () => {
-  const afterPack = readFileSync(join(ROOT, 'scripts', 'after-pack.js'), 'utf8');
-  assert.match(afterPack, /injectDshClosureExtras/,
-    'afterPack must call injectDshClosureExtras');
-  assert.match(afterPack, /injectDshClosureExtras\(appOutDir\)/,
-    'injectDshClosureExtras must run in the afterPack hook');
-  assert.match(afterPack, /'schemastery'/,
-    'schemastery must be in the injection list');
+// Electron 时代由 after-pack 的 injectDshClosureExtras 注入闭包外依赖；
+// after-pack 已随壳退役（批次 C），Tauri 链的无争议等价保证 = 声明即实装：
+// schemastery 声明在 dependencies 且已解析进 node_modules，stage npm ci 会把
+// 整个闭包（含 schemastery）装进安装包，fallback junction BFS 每次启动幂等维护。
+test('schemastery 在运行时闭包中可解析（声明 + node_modules 实装）', () => {
+  const pkg = JSON.parse(readFileSync(join(ROOT, 'package.json'), 'utf8'));
+  assert.ok(pkg.dependencies && pkg.dependencies.schemastery,
+    'schemastery must be in dependencies for fallback junction resolution');
+  assert.ok(existsSync(join(ROOT, 'node_modules', 'schemastery', 'package.json')),
+    'schemastery 未实装进 node_modules（stage npm ci 将据此进安装包）');
 });
 
 test('COMPANION_PLUGINS registers dsh-better-sidebar', () => {

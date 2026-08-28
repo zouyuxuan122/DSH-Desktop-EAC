@@ -1,7 +1,8 @@
-// TDD wiring tests: the rescue agent must actually be wired into the desktop
-// shell. main.js is an Electron entry (untestable under node:test directly),
-// so we pin the wiring points at the source level — each assertion corresponds
-// to a required integration point of the crash-rescue system.
+// TDD wiring tests: 救援链必须真正接到桌面壳上。Electron era 版本锁定
+// main.js/preload.js 对接点；两文件已随壳退役（批次 C），本测试接管为
+// Tauri 侧等价对接点：sidecar rescue-integration.ts（崩溃计数/安全模式/
+// 救援分发）+ 恢复中心动作表（lib/recovery-center/register.ts）+ rc 桥
+// （recovery-center-preload.js）+ recovery.html 页面。
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
@@ -10,82 +11,51 @@ import { fileURLToPath } from 'node:url';
 import { join } from 'node:path';
 
 const ROOT = join(fileURLToPath(import.meta.url), '..', '..');
-const mainSrc = readFileSync(join(ROOT, 'main.js'), 'utf8');
-const preloadSrc = readFileSync(join(ROOT, 'preload.js'), 'utf8');
+const rescue = readFileSync(join(ROOT, '..', 'tauri-shell', 'sidecar', 'rescue-integration.ts'), 'utf8');
+const server = readFileSync(join(ROOT, '..', 'tauri-shell', 'sidecar', 'server.ts'), 'utf8');
+const register = readFileSync(join(ROOT, 'lib', 'recovery-center', 'register.ts'), 'utf8');
+const rcPreload = readFileSync(join(ROOT, 'assets', 'recovery-center-preload.js'), 'utf8');
 
-test('main.js requires the rescue-agent module', () => {
-  assert.ok(/require\('\.\/rescue-agent'\)/.test(mainSrc), "main.js must require('./rescue-agent')");
+test('sidecar 必须加载 rescue-agent 模块', () => {
+  assert.match(rescue, /rescue-agent\.js/, "rescue-integration.ts 必须 require('rescue-agent')");
 });
 
-test('main.js wires the crash-loop counter: record on failure, clear on healthy boot', () => {
-  assert.ok(/function recordBootFailureNow\(/.test(mainSrc), 'recordBootFailureNow() missing');
-  assert.ok(/function clearRescueState\(/.test(mainSrc), 'clearRescueState() missing');
-  assert.ok(/clearRescueState\(\)/.test(mainSrc), 'clearRescueState() must run on healthy boot');
-  assert.ok(/recordBootFailureNow\(/.test(mainSrc), 'recordBootFailureNow() must run in handleBootFailure');
-  assert.ok(/shouldEnterRescueNow\(/.test(mainSrc), 'crash-loop threshold must route to the rescue page');
+test('sidecar 接线崩溃循环计数：失败记录 / 健康启动清除 / 阈值判定', () => {
+  for (const fn of ['recordBootFailureNow', 'clearRescueState', 'shouldEnterRescueNow']) {
+    assert.ok(new RegExp(`export function ${fn}\\(`).test(rescue), `${fn}() 缺失`);
+  }
+  assert.ok(server.includes('clearRescueState'), ' 服务端健康启动路径必须调用 clearRescueState');
 });
 
-test('main.js registers every rescue IPC endpoint', () => {
-  for (const ch of ['rescue:state', 'rescue:confirm', 'rescue:diagnose', 'rescue:apply', 'rescue:retry', 'safe-mode:set']) {
-    assert.ok(mainSrc.includes(`'${ch}'`), `IPC handler ${ch} missing`);
+test('rc.action 动作面覆盖救援动作（status/enable/retry-boot/safe-mode/export-logs）', () => {
+  for (const act of ['status', 'enable', 'retry-boot', 'safe-mode', 'export-logs']) {
+    assert.ok(register.includes(`case '${act}'`), `rc.action 缺 ${act}`);
   }
 });
 
-test('main.js wires the one-click AI auto-repair IPC', () => {
-  assert.ok(mainSrc.includes("'rescue:auto-repair'"), "IPC handler rescue:auto-repair missing");
-  assert.ok(/rescueAgent\.runAutoRepair\(/.test(mainSrc), 'main.js must call rescueAgent.runAutoRepair()');
+test('rc 桥只暴露白名单动作面（action/close），不透出底层 socket', () => {
+  assert.match(rcPreload, /window\.rc\s*=\s*\{/, 'window.rc 定义缺失');
+  assert.match(rcPreload, /\baction:\s*function/, 'rc.action 缺失');
+  assert.match(rcPreload, /\bclose:\s*function/, 'rc.close 缺失');
 });
 
-test('main.js executes edit-file and resync in the whitelist dispatcher', () => {
-  assert.ok(/case 'edit-file'/.test(mainSrc), "rescueExecuteSuggestion edit-file case missing");
-  assert.ok(/case 'resync'/.test(mainSrc), "rescueExecuteSuggestion resync case missing");
-  assert.ok(/applyProfileEdit\(/.test(mainSrc), 'edit-file must go through applyProfileEdit()');
-  assert.ok(/snapshot\('ai-edit-before'\)/.test(mainSrc), 'edit-file must snapshot before writing');
-});
-
-test('main.js offers 进入救援模式 from the boot-failure dialog', () => {
-  assert.ok(mainSrc.includes("'进入救援模式'"), 'rescue-mode button missing from handleBootFailure');
-  assert.ok(/function showRescuePage\(/.test(mainSrc), 'showRescuePage() missing');
-});
-
-test('main.js wires the shell-level safe mode (snapshot backup + core-only patch)', () => {
-  assert.ok(/function safeModeSet\(/.test(mainSrc), 'safeModeSet() missing');
-  assert.ok(/safeModePatch\(/.test(mainSrc), 'safeModePatch() must be applied by safeModeSet');
-  assert.ok(/snapshot\('safe-mode-before'\)/.test(mainSrc), 'safe mode must back up via guard snapshot');
-});
-
-test('main.js executes rescue suggestions through the whitelist dispatcher', () => {
-  assert.ok(/function rescueExecuteSuggestion\(/.test(mainSrc), 'rescueExecuteSuggestion() missing');
-  assert.ok(/applySuggestion\(/.test(mainSrc), 'applySuggestion() must gate every rescue action');
-});
-
-test('preload exposes the rescue bridge', () => {
-  assert.ok(preloadSrc.includes('rescue:'), 'preload rescue bridge missing');
-  for (const ch of ['rescue:state', 'rescue:confirm', 'rescue:diagnose', 'rescue:apply', 'rescue:retry', 'safe-mode:set']) {
-    assert.ok(preloadSrc.includes(`'${ch}'`), `preload bridge for ${ch} missing`);
+test('sidecar 接线安全模式：快照备份 + 状态查询 + 开关', () => {
+  for (const fn of ['safeModeSet', 'safeModeStatus']) {
+    assert.ok(new RegExp(`export function ${fn}\\(`).test(rescue), `${fn}() 缺失`);
   }
+  assert.ok(/safe-mode-before/.test(register), '安全模式必须经 guard 快照备份（safe-mode-before）——见 register.safeModeEnable');
 });
 
-test('preload exposes the auto-repair bridge', () => {
-  assert.ok(preloadSrc.includes("'rescue:auto-repair'"), 'preload auto-repair bridge missing');
-  assert.ok(/autoRepair:/.test(preloadSrc), 'preload rescue.autoRepair() missing');
-});
-
-test('rescue page offers the one-click AI auto repair', () => {
-  const page = join(ROOT, 'assets', 'recovery.html');
-  const html = readFileSync(page, 'utf8');
-  assert.ok(html.includes('AI 自动修复'), 'recovery.html must offer the AI auto-repair button');
-  assert.ok(/btn-autorepair/.test(html), 'recovery.html btn-autorepair missing');
-  assert.ok(/auto-progress/.test(html), 'recovery.html auto-repair progress area missing');
-});
-
-test('rescue page exists and references the rescue bridge', () => {
+test('rescue 页面提供 AI 自动修复与救援模式 UI', () => {
   const page = join(ROOT, 'assets', 'recovery.html');
   assert.ok(existsSync(page), 'assets/recovery.html missing');
   const html = readFileSync(page, 'utf8');
-  assert.ok(html.includes('救援模式'), 'recovery.html must present the rescue mode');
-  assert.ok(html.includes('bridge.rescue'), 'recovery.html must use the rescue bridge');
-  assert.ok(html.includes('btn-safemode'), 'safe-mode button missing');
-  assert.ok(html.includes('btn-diagnose'), 'AI diagnose button missing');
-  assert.ok(html.includes('manifest'), 'send-manifest confirmation UI missing');
+  assert.ok(html.includes('AI 自动修复'), 'recovery.html 必须提供 AI 自动修复');
+  assert.ok(/btn-autorepair/.test(html), 'recovery.html btn-autorepair 缺失');
+  assert.ok(/auto-progress/.test(html), 'recovery.html auto-repair 进度区缺失');
+  assert.ok(html.includes('救援模式'), 'recovery.html 必须呈现救援模式');
+  assert.ok(html.includes('bridge.rescue'), 'recovery.html 必须使用 rescue 桥');
+  assert.ok(html.includes('btn-safemode'), 'safe-mode 按钮缺失');
+  assert.ok(html.includes('btn-diagnose'), 'AI 诊断按钮缺失');
+  assert.ok(html.includes('manifest'), 'send-manifest 确认 UI 缺失');
 });

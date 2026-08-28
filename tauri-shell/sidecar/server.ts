@@ -4,7 +4,7 @@
 // 职责：
 //   1. stdio 行分隔 JSON-RPC 分发器（协议与 ping.js 一致，Rust L1 唯一对话面）
 //   2. 挂载 dsh-desktop/lib/desktop/* 全部 13 个模块（ctx 注入按宿主语义提供）
-//   3. 白名单方法注册表 + mod.call 通用逃生舱（白名单模块内具名导出直调）
+//   3. 白名单方法注册表
 //
 // 纪律：stdout 只走协议帧；一切日志/兜底输出走 stderr。
 
@@ -293,11 +293,17 @@ function handlePhoneMethod(method: string, p: RpcParams): RpcResult | Promise<Rp
 }
 
 const settingsFile = path.join(userDataDir, 'settings.json');
+const { readJsonFile } = require(path.join(DSH_DESKTOP_ROOT, 'lib', 'plugin-copy.js')) as {
+  readJsonFile(file: string): Record<string, unknown> | null;
+};
+const { writeJsonAtomic } = require(path.join(DSH_DESKTOP_ROOT, 'lib', 'atomic-json.js')) as {
+  writeJsonAtomic(file: string, value: unknown): void;
+};
 function loadSettings(): Record<string, unknown> {
-  try { return JSON.parse(fs.readFileSync(settingsFile, 'utf8')) as Record<string, unknown>; } catch { return {}; }
+  return readJsonFile(settingsFile) ?? {};
 }
 function saveSettings(s: Record<string, unknown>): void {
-  try { fs.writeFileSync(settingsFile, JSON.stringify(s, null, 2) + '\n'); } catch (e) { say('保存 settings 失败: ' + String(e)); }
+  try { writeJsonAtomic(settingsFile, s); } catch (e) { say('保存 settings 失败: ' + String(e)); }
 }
 
 /** 无 id 的 JSON-RPC 通知帧（Rust 侧经 WS 广播给页面，并自行订阅壳层事件）。 */
@@ -388,22 +394,6 @@ recoveryCenter.init({
 interface RpcReq { id: number | null; method: string; params?: Record<string, unknown> }
 type RpcResult = Record<string, unknown>;
 type RpcParams = Record<string, unknown> | undefined;
-
-const MODULES_BY_NAME: Record<string, Mod> = {
-  profile: profileMod,
-  'runtime-paths': pathsMod,
-  proc: procMod,
-  'file-roots': fileRootsMod,
-  'guard-box': guardBoxMod,
-  'runtime-patches': runtimePatchesMod,
-  'companion-sync': companionSyncMod,
-  'plugin-ops': pluginOpsMod,
-  market: marketMod,
-};
-
-// 逃生舱白名单：只放纯计算/纯文件类模块；带进程副作用的
-// （shortcuts/junction-patrol/client-update/static-preview）必须走显式方法。
-const CALLABLE = new Set(Object.keys(MODULES_BY_NAME));
 
 const methods: Record<string, (p: RpcParams) => unknown> = {
   'shell.info': (): RpcResult => ({
@@ -530,9 +520,8 @@ const methods: Record<string, (p: RpcParams) => unknown> = {
       staticPort: 0,
     };
   },
-  // 原地重启（= main.js restartWebServiceCore）：无锁窗口内消费市场排队 →
-  // 原地重启（= main.js restartWebServiceCore）：无锁窗口内消费市场排队 →
-  // 同步配套插件 → 修复模块遮蔽 → 恢复保留产物 → 重新拉起。
+  // 原地重启 Web 服务核心：无锁窗口内消费市场排队 → 同步配套插件 →
+  // 修复模块遮蔽 → 恢复保留产物 → 重新拉起。
   'boot.restart': async (): Promise<RpcResult> => restartWebServiceCore(),
   // ---- 恢复中心（vnext-absorb Phase 2）：Rust 壳创建的恢复中心窗口经专用
   // preload（WS JSON-RPC）调用这两个方法；动作分发在 lib/recovery-center。----
@@ -543,14 +532,7 @@ const methods: Record<string, (p: RpcParams) => unknown> = {
   'rc.close': (): RpcResult => ({ ok: true }),
 };
 
-// P3 渐进收编：尚未在 sidecar 落地的桥方法返回 null（桥/插件侧按「无数据」
-// 降级，与桥断开时行为一致，不炸页面）。每收编一个真实现就从这里删除。
-const PENDING_BRIDGE_METHODS: string[] = [];
-for (const m of PENDING_BRIDGE_METHODS) {
-  methods[m] = (): null => null;
-}
-
-// ---- 真实现面（P3：对齐 main.js 各 ipcMain.handle 语义，去 GUI 化） --------
+// ---- 真实现面（P3：对齐原 Electron 主链路各 ipcMain.handle 语义，去 GUI 化） --------
 const balance = require(path.join(DSH_DESKTOP_ROOT, 'balance.js')) as {
   queryBalance(home: string): Promise<Record<string, unknown> & { prices?: Record<string, unknown> }>;
   readActiveModel(home: string): string;
@@ -1152,13 +1134,6 @@ function respond(msg: Record<string, unknown>): void {
   process.stdout.write(JSON.stringify(msg) + '\n');
 }
 
-function modCall(name: string, fn: string, args: unknown[]): unknown {
-  if (!CALLABLE.has(name)) throw new Error('module not callable: ' + name);
-  const f = MODULES_BY_NAME[name]![fn];
-  if (typeof f !== 'function') throw new Error('no export: ' + name + '.' + fn);
-  return (f as (...a: unknown[]) => unknown)(...(Array.isArray(args) ? args : []));
-}
-
 const rl = readline.createInterface({ input: process.stdin });
 rl.on('line', (line: string) => { void handleLine(line); });
 rl.on('close', () => { void gracefulExit(); });
@@ -1194,11 +1169,6 @@ async function handleLine(line: string): Promise<void> {
     if (fixed) {
       const result = await fixed(params);
       return respond({ jsonrpc: '2.0', id, result: result === undefined ? null : result });
-    }
-    if (method === 'mod.call') {
-      const args = Array.isArray(params && params.args) ? (params!.args as unknown[]) : [];
-      const value = modCall(String(params && params.name), String(params && params.fn), args);
-      return respond({ jsonrpc: '2.0', id, result: { ok: true, value: value === undefined ? null : value } });
     }
     respond({ jsonrpc: '2.0', id, error: { code: -32601, message: 'method not found: ' + method } });
   } catch (e) {

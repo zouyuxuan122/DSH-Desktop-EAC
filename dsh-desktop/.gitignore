@@ -92,3 +92,4 @@ build/*
 /shared/protocol.js
 /lib/plugin-copy.js
 /scripts/build-native.js
+/lib/atomic-json.js

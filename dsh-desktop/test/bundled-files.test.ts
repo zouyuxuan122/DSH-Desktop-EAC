@@ -1,79 +1,72 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
-import path from 'node:path';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
+const stageRoot = join(root, '..', 'tauri-shell');
 
-// 防呆（v3.0.0 事故）：main.js 顶层 require 的本地模块（如 ./bundle-integrity）
-// 若未列进 electron-builder.yml 的 files，打包产物启动即抛
-// "Cannot find module" 并闪退。本测试静态比对两边清单。
-//
-// 约定：main.js 顶层的 require('./xxx') / require('./xxx.js') 都必须是
-// files 清单里的一个条目（相对根目录的文件名）。运行时动态 require 的
-// （dshBin 的 @deepseek-ai/dsh 走 node_modules，由默认规则打包）不受影响。
+// 防呆（v3.0.0 事故的 Tauri 版）：sidecar 顶层 require/mount 的本地模块若未
+// 列进 stage-resources 的装配清单，打包产物启动即抛 "Cannot find module"
+// 并闪退。本测试静态比对两边（原 bundled-files 契约针对 main.js +
+// electron-builder.yml，两者已随 Electron 壳退役，接管为 sidecar ↔ 装配清单）。
 
-const mainSrc = fs.readFileSync(join(root, 'main.js'), 'utf8');
-
-function localRequiresOf(src) {
-  const out = new Set();
-  const re = /require\(\s*['"]\.\/([^'"]+)['"]\s*\)/g;
-  let m;
-  while ((m = re.exec(src)) !== null) {
-    let name = m[1];
-    if (!name.endsWith('.js')) name = name + '.js';
-    out.add(name);
+function stageLists() {
+  const src = fs.readFileSync(join(stageRoot, 'stage-resources.mjs'), 'utf8');
+  const out = {};
+  for (const name of ['ROOT_FILES', 'LIB_DESKTOP', 'LIB_VNEXT', 'SCRIPTS']) {
+    const m = src.match(new RegExp(`const ${name} = \\[([\\s\\S]*?)\\]`));
+    assert.ok(m, `${name} 清单解析失败`);
+    out[name] = [...m[1].matchAll(/'([^']+)'/g)].map((x) => x[1]);
   }
   return out;
 }
 
-function bundledFilesPatterns() {
-  const yml = fs.readFileSync(join(root, 'electron-builder.yml'), 'utf8');
-  const lines = yml.split(/\r?\n/);
-  const patterns = [];
-  let inFiles = false;
-  for (const line of lines) {
-    if (/^files:/.test(line)) { inFiles = true; continue; }
-    if (inFiles) {
-      const m = line.match(/^\s{2}-\s+(?:'([^']+)'|"([^"]+)"|(\S+))\s*$/);
-      if (m) patterns.push(m[1] || m[2] || m[3]);
-      else if (line.trim() && !line.trim().startsWith('#')) inFiles = false;
-    }
+function sidecarLocalRefs() {
+  const src = [
+    fs.readFileSync(join(stageRoot, 'sidecar', 'server.ts'), 'utf8'),
+    fs.readFileSync(join(stageRoot, 'sidecar', 'rescue-integration.ts'), 'utf8'),
+  ].join('\n');
+  const refs = [];
+  // mount('<name>') → lib/desktop/<name>.js
+  for (const m of src.matchAll(/mount<[^>]*>\(['"]([\w-]+)['"]\)|mount\(['"]([\w-]+)['"]\)/g)) {
+    refs.push('desktop/' + (m[1] || m[2]) + '.js');
   }
-  return patterns;
+  // require(path.join(DSH_DESKTOP_ROOT, '<file>.js')) → 根模块
+  for (const m of src.matchAll(/require\(path\.join\(DSH_DESKTOP_ROOT,\s*'([\w.-]+\.js)'\)\)/g)) {
+    refs.push(m[1]);
+  }
+  // require(path.join(DSH_DESKTOP_ROOT, 'lib', ['desktop',|<dir>]?, '<file>.js'))
+  for (const m of src.matchAll(/require\(path\.join\(DSH_DESKTOP_ROOT,\s*'lib',\s*(?:'([\w-]+)',\s*)?'([\w-]+\.js)'\)\)/g)) {
+    refs.push((m[1] ? m[1] + '/' : '') + m[2]);
+  }
+  return [...new Set(refs)];
 }
 
-test('main.js 顶层 require 的每个本地模块都在 electron-builder files 清单中', () => {
-  const requires = localRequiresOf(mainSrc);
-  assert.ok(requires.size >= 10, '应至少识别出 10 个本地依赖，实际: ' + [...requires].join(', '));
-  const patterns = bundledFilesPatterns();
-  assert.ok(patterns.length > 0, 'files 清单解析失败');
-  const missing = [...requires].filter((name) => !patterns.includes(name));
+test('sidecar 引用/挂载的每个本地模块都在 stage-resources 装配清单中', () => {
+  const lists = stageLists();
+  const inList = (ref) => lists.ROOT_FILES.includes(ref)
+    || lists.LIB_DESKTOP.includes(ref.replace(/^desktop\//, ''))
+    || lists.LIB_VNEXT.includes(ref)
+    || lists.SCRIPTS.includes(ref.replace(/^desktop\//, ''));
+  const missing = sidecarLocalRefs().filter((r) => !inList(r));
   assert.deepEqual(missing, [],
-    '以下模块被 main.js require 但未打包，会导致启动即闪退: ' + missing.join(', '));
+    '以下模块被 sidecar 引用但未装配，会导致启动即闪退: ' + missing.join(', '));
 });
 
-test('main.js 通过 __dirname 直接引用的运行时脚本也必须打包', () => {
-  // spawn/读取型引用：path.join(__dirname, 'xxx.js') 形式
-  const refs = new Set();
-  const re = /__dirname\s*,\s*['"]([^'"]+\.js)['"]/g;
-  let m;
-  while ((m = re.exec(mainSrc)) !== null) refs.add(m[1]);
-  const patterns = bundledFilesPatterns();
-  const missing = [...refs].filter((name) => !patterns.includes(name));
-  assert.deepEqual(missing, [],
-    '以下脚本被运行时引用但未打包: ' + missing.join(', '));
-});
-
-test('preload.js 必须在打包清单中（窗口上下文桥）', () => {
-  const patterns = bundledFilesPatterns();
-  assert.ok(patterns.includes('preload.js'));
+test('装配清单不再携带 Electron 冻结壳独享模块', () => {
+  const lists = stageLists();
+  for (const dead of ['error-detail.js', 'koffi-preflight.js', 'renderer-recovery.js',
+    'watchdog.js', 'session-encoding-heal.js']) {
+    assert.ok(!lists.ROOT_FILES.includes(dead), `${dead} 仍待在 ROOT_FILES（已随 Electron 壳退役）`);
+  }
+  assert.ok(!lists.SCRIPTS.includes('koffi-preflight.cjs'), 'koffi-preflight.cjs 仍待在 SCRIPTS');
+  assert.ok(!lists.SCRIPTS.includes('make-release-hashes.js'), 'make-release-hashes.js 仍待在 SCRIPTS');
 });
 
 test('Tauri 资源装配不再携带 WSL 后端', () => {
-  const stageScript = fs.readFileSync(join(root, '..', 'tauri-shell', 'stage-resources.mjs'), 'utf8');
+  const stageScript = fs.readFileSync(join(stageRoot, 'stage-resources.mjs'), 'utf8');
   assert.doesNotMatch(stageScript, /wsl-backend/i);
   assert.ok(!fs.existsSync(join(root, 'wsl-backend.ts')));
 });

@@ -1,23 +1,16 @@
 {
   "name": "dsh-desktop",
   "productName": "Deepseek Harness EAC",
-  "version": "5.1.0",
+  "version": "5.2.0",
   "description": "DeepSeek Harness (dsh) 开箱即用的 Windows 桌面客户端：内置 dsh CLI 与 Node 运行时，一键启动 Web UI",
-  "main": "main.js",
   "author": "DSH Desktop",
   "license": "MIT",
   "private": true,
   "scripts": {
-    "start": "electron .",
     "fetch-node": "npm run build && node scripts/fetch-node.js",
-    "predist": "npm run build && node scripts/check-syntax.js && node scripts/build-native.js copy && node scripts/build-native.js copy snapshot",
-    "prepack": "npm run build && node scripts/check-syntax.js && node scripts/build-native.js copy && node scripts/build-native.js copy snapshot",
-    "pack": "node scripts/patch-portable-template.js && node scripts/patch-deps.js && electron-builder --dir",
-    "dist": "node scripts/patch-portable-template.js && node scripts/patch-deps.js && electron-builder --win && node scripts/make-release-hashes.js",
     "postinstall": "npm run build && node scripts/patch-deps.js || exit 0",
     "fetch-npm": "npm run build && node scripts/fetch-npm.js",
     "fetch-runtime": "npm run build && node scripts/fetch-node.js && node scripts/fetch-npm.js",
-    "electron:fetch": "node node_modules/electron/install.js",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "build": "tsc -p tsconfig.json",
     "build:native": "node scripts/build-native.js build",
@@ -54,12 +47,10 @@
     "pino": "~8.21.0",
     "schemastery": "^3.18.0",
     "unzipper": "^0.12.3",
-    "zstddec": "0.2.0"
+    "web-push": "^3.6.7"
   },
   "devDependencies": {
     "@types/node": "24.13.3",
-    "electron": "^43.4.0",
-    "electron-builder": "^26.15.3",
     "typescript": "^7.0.2"
   }
 }

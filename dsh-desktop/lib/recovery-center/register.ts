@@ -24,6 +24,7 @@ import logger = require('../../logger');
 import rescue = require('../../rescue-agent');
 import { state } from '../state.js';
 import { log } from '../log.js';
+import { writeJsonAtomic } from '../atomic-json.js';
 import { ensureGuard } from '../desktop/guard-box.js';
 import {
   pluginManagerCollect, pluginManagerSetEnabled, pluginManagerSetRemoved,
@@ -58,7 +59,7 @@ function safeModeStateFile(): string {
   return path.join(state.dshHome, 'guard', 'safe-mode.json');
 }
 
-function safeModeStatus(): { active: boolean; enteredAt?: string; snapshotId?: string } | null {
+export function safeModeStatus(): { active: boolean; enteredAt?: string; snapshotId?: string } | null {
   try {
     const st = JSON.parse(fs.readFileSync(safeModeStateFile(), 'utf8')) as { active?: boolean };
     return st && st.active === true ? (st as { active: boolean; enteredAt?: string; snapshotId?: string }) : null;
@@ -69,16 +70,60 @@ function safeModeStatus(): { active: boolean; enteredAt?: string; snapshotId?: s
 
 function writeSafeModeJson(value: { active: boolean; enteredAt: string; snapshotId: string; removed: number }): void {
   try {
-    fs.mkdirSync(path.dirname(safeModeStateFile()), { recursive: true });
-    const tmp = safeModeStateFile() + '.tmp-' + Date.now();
-    fs.writeFileSync(tmp, JSON.stringify(value, null, 2) + '\n');
-    try { fs.renameSync(tmp, safeModeStateFile()); } catch {
-      fs.rmSync(safeModeStateFile(), { force: true, maxRetries: 3 });
-      fs.renameSync(tmp, safeModeStateFile());
-    }
+    writeJsonAtomic(safeModeStateFile(), value);
   } catch (err) {
     log('recovery-center', '写 safe-mode.json 失败: ' + String((err as Error).message));
   }
+}
+
+/** 进入安全模式（Tauri 侧唯一实现；rc.action 与 sidecar rescue.safe-mode 共用）。 */
+export function safeModeEnable(opts?: { requestRelaunch?: boolean; logTag?: string }): Record<string, unknown> {
+  const requestRelaunch = !opts || opts.requestRelaunch !== false;
+  const logTag = (opts && opts.logTag) || 'recovery-center';
+  if (bootState().running && !state.restartingServer) {
+    return { ok: false, error: 'service-running', hint: '请先停止 Web 服务（或从救援页进入安全模式）' };
+  }
+  const st = safeModeStatus();
+  if (st) return { ok: false, error: 'already-on', hint: '安全模式已在启用状态' };
+  const g = ensureGuard();
+  const snap = g.snapshot('safe-mode-before');
+  if (!snap) return { ok: false, error: '安全模式备份失败（无法创建 guard 快照）' };
+  const patchFile = path.join(desktopProfileDir(), 'cordis.patch.yml');
+  let text = '';
+  try { text = fs.readFileSync(patchFile, 'utf8'); } catch { /* 无 patch 文件按空处理 */ }
+  const rows = (() => { try { return pluginManagerCollect(); } catch { return []; } })();
+  const coreIds = rows.filter((r) => (r as { core?: boolean }).core).map((r) => (r as { id: string }).id);
+  const { patch, removed } = rescue.safeModePatch(text, coreIds);
+  try {
+    if (patch !== text) fs.writeFileSync(patchFile, patch, 'utf8');
+  } catch (err) {
+    return { ok: false, error: '写入安全模式配置失败: ' + String((err as Error).message) };
+  }
+  writeSafeModeJson({
+    active: true,
+    enteredAt: new Date().toISOString(),
+    snapshotId: snap.id,
+    removed: removed.length,
+  });
+  if (requestRelaunch) {
+    state.quitting = true;
+    state.forceQuit = true;
+    if (ctx) ctx.requestSafeModeRelaunch();
+  }
+  log(logTag, '安全模式已开启（核心 ' + coreIds.length + ' 个，移除 ' + removed.length + ' 个插件行）');
+  return { ok: true, restartRequired: true, removed: removed.length, core: coreIds.length };
+}
+
+/** 退出安全模式：恢复 guard 快照并清除状态文件。 */
+export function safeModeDisable(logTag = 'recovery-center'): Record<string, unknown> {
+  const st = safeModeStatus();
+  if (!st) return { ok: false, error: 'not-on', hint: '安全模式未启用' };
+  const g = ensureGuard();
+  const res = g.restore(st.snapshotId as string);
+  if (!res.ok) return res;
+  try { fs.rmSync(safeModeStateFile(), { force: true }); } catch { /* 已不存在 */ }
+  log(logTag, '安全模式已退出（恢复快照 ' + String(st.snapshotId) + '）');
+  return { ok: true, restartRequired: true };
 }
 
 /** 恢复中心动作分发（sidecar `rc.action` 方法）。未知动作/异常 → { ok:false }。 */
@@ -129,40 +174,11 @@ export async function handleRcAction(action: string, value?: unknown): Promise<R
         return r.ok ? { ok: true, url: r.url } : { ok: false, error: r.error };
       }
       case 'safe-mode': {
-        // 安全模式（对齐 main.js safeModeSet(true) 语义，Tauri 版）：
-        // guard 快照 → patch 只留核心插件行 → 落 safe-mode.json →
-        // 请求壳层 relaunch（重启后 companion-sync 的安全模式守卫不回写
-        // 配套插件行，核心插件保持可用）。
-        if (bootState().running && !state.restartingServer) {
-          return { ok: false, error: 'service-running', hint: '请先停止 Web 服务（或从救援页进入安全模式）' };
-        }
-        const st = safeModeStatus();
-        if (st) return { ok: false, error: 'already-on', hint: '安全模式已在启用状态' };
-        const g = ensureGuard();
-        const snap = g.snapshot('safe-mode-before');
-        if (!snap) return { ok: false, error: '安全模式备份失败（无法创建 guard 快照）' };
-        const patchFile = path.join(desktopProfileDir(), 'cordis.patch.yml');
-        let text = '';
-        try { text = fs.readFileSync(patchFile, 'utf8'); } catch {}
-        const rows = (() => { try { return pluginManagerCollect(); } catch { return []; } })();
-        const coreIds = rows.filter((r) => (r as { core?: boolean }).core).map((r) => (r as { id: string }).id);
-        const { patch, removed } = rescue.safeModePatch(text, coreIds);
-        try {
-          if (patch !== text) fs.writeFileSync(patchFile, patch, 'utf8');
-        } catch (err) {
-          return { ok: false, error: '写入安全模式配置失败: ' + String((err as Error).message) };
-        }
-        writeSafeModeJson({
-          active: true,
-          enteredAt: new Date().toISOString(),
-          snapshotId: snap.id,
-          removed: removed.length,
-        });
-        state.quitting = true;
-        state.forceQuit = true;
-        if (ctx) ctx.requestSafeModeRelaunch();
-        log('recovery-center', '安全模式已开启（核心 ' + coreIds.length + ' 个，移除 ' + removed.length + ' 个插件行）');
-        return { ok: true, restartRequired: true, removed: removed.length, core: coreIds.length };
+        // 安全模式（与 sidecar rescue.safe-mode 共用 safeModeEnable 唯一实现）：
+        // guard 快照 → patch 只留核心插件行 → 落 safe-mode.json → 请求壳层
+        // relaunch（重启后 companion-sync 的安全模式守卫不回写配套插件行，
+        // 核心插件保持可用）。
+        return safeModeEnable({ requestRelaunch: true });
       }
       case 'snapshot': {
         const s = ensureGuard().snapshot('recovery-center');

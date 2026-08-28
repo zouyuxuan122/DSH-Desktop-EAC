@@ -96,8 +96,8 @@ export function createVisionAnalyzeTool(ctx) {
         },
         ocr_engine: {
           type: 'string',
-          enum: ['windows', 'paddle', 'rapid'],
-          description: 'OCR engine: windows (default), paddle or rapid (see image_ocr for details).'
+          enum: ['windows', 'paddle', 'rapid', 'macos'],
+          description: 'OCR engine: default follows the plugin setting (windows when unset); macos = macOS Apple Vision OCR (see image_ocr for details).'
         },
         include_vlm: {
           type: 'boolean',
@@ -221,7 +221,8 @@ export function createVisionAnalyzeTool(ctx) {
       }
 
       if (includeOcr) {
-        const engine = args.ocr_engine ?? 'windows';
+        // Engine default follows the plugin setting; explicit args.ocr_engine wins.
+        const engine = args.ocr_engine ?? getRuntimeConfig().ocr?.engine ?? 'windows';
         const ocr = await core.ocrImage(buf, ext, { engine });
         ocrText = core.renderOcr({
           path: target.displayPath,

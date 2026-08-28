@@ -21,7 +21,7 @@ function initObject(source: string, call: string): string {
   throw new Error(`${call} init object is not balanced`);
 }
 
-for (const relative of ['main.js', '../tauri-shell/sidecar/server.ts']) {
+for (const relative of ['../tauri-shell/sidecar/server.ts']) {
   test(`${relative} injects platform handoff into client update only`, () => {
     const source = readFileSync(join(root, relative), 'utf8');
     const clientUpdate = initObject(source, 'clientUpdateMod.init');

@@ -1,7 +1,11 @@
-// TDD wiring tests: the recovery/watchdog modules must actually be wired
-// into the desktop shell. main.js is an Electron entry (untestable under
-// node:test directly), so we pin the wiring points at the source level —
-// each assertion corresponds to a required integration point.
+// TDD wiring tests: 恢复/心跳能力必须真正接到桌面壳上。Electron era 版本锁定
+// main.js/preload.js 的对接点；两文件已随壳退役（批次 C），本测试接管为
+// Tauri 侧等价对接点：
+//   - 窗口桥（tauri-shell/sidecar/bridge.ts）暴露 recovery.* 与渲染进程心跳
+//     （WebView2 → sidecar 的 log.renderer-heartbeat）；
+//   - 恢复中心窗口桥（assets/recovery-center-preload.js）暴露 rc.action/rc.close；
+//   - 恢复中心动作分发（lib/recovery-center/register.ts）覆盖导出诊断日志等；
+//   - 恢复中心页面（assets/recovery.html）必须存在。
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
@@ -10,37 +14,37 @@ import { fileURLToPath } from 'node:url';
 import { join } from 'node:path';
 
 const ROOT = join(fileURLToPath(import.meta.url), '..', '..');
-const mainSrc = readFileSync(join(ROOT, 'main.js'), 'utf8');
-const preloadSrc = readFileSync(join(ROOT, 'preload.js'), 'utf8');
+const bridgeSrc = readFileSync(join(ROOT, '..', 'tauri-shell', 'sidecar', 'bridge.ts'), 'utf8');
+const rcPreload = readFileSync(join(ROOT, 'assets', 'recovery-center-preload.js'), 'utf8');
+const registerSrc = readFileSync(join(ROOT, 'lib', 'recovery-center', 'register.ts'), 'utf8');
 
-test('main.js requires the renderer-recovery module', () => {
-  assert.ok(/require\('\.\/renderer-recovery'\)/.test(mainSrc), "main.js must require('./renderer-recovery')");
+test('bridge 暴露 recovery.* 恢复能力（getState/reload/restart/exportLogs）', () => {
+  for (const [key, method] of [
+    ['getState', 'recovery.state'],
+    ['reload', 'recovery.reload'],
+    ['restart', 'recovery.restart'],
+    ['exportLogs', 'recovery.export-logs'],
+  ]) {
+    assert.ok(bridgeSrc.includes(`'${method}'`), `bridge recovery.${key} → ${method} 缺失`);
+  }
 });
 
-test('main.js builds the recovery state machine and attaches the main window', () => {
-  assert.ok(/function initRendererRecovery\(\)/.test(mainSrc), 'initRendererRecovery() missing');
-  assert.ok(/recovery\.attach\(mainWindow,\s*'main'\)/.test(mainSrc), 'main window attach missing');
+test('bridge 向 sidecar 发送渲染进程心跳（renderer-heartbeat）', () => {
+  assert.ok(bridgeSrc.includes("send('log.renderer-heartbeat'"), 'bridge 心跳发送缺失');
 });
 
-test('main.js runs the watchdog lifecycle: run-state write, spawn, clean-exit mark', () => {
-  assert.ok(/function writeRunState\(/.test(mainSrc), 'writeRunState() missing');
-  assert.ok(/function markCleanExit\(/.test(mainSrc), 'markCleanExit() missing');
-  assert.ok(/function startWatchdog\(\)/.test(mainSrc), 'startWatchdog() missing');
-  assert.ok(/startWatchdog\(\);/.test(mainSrc), 'startWatchdog() is never called');
+test('recovery-center preload 暴露 rc 桥（action/close 白名单）', () => {
+  assert.match(rcPreload, /window\.rc\s*=\s*\{/, 'window.rc 定义缺失');
+  assert.match(rcPreload, /\baction:\s*function/, 'rc.action 缺失');
+  assert.match(rcPreload, /\bclose:\s*function/, 'rc.close 缺失');
+  assert.ok(rcPreload.includes("'rc.action'"), 'rc.action 应为转发动作名');
 });
 
-test('main.js detects the previous run before replacing run-state.json', () => {
-  const detect = mainSrc.indexOf('const uncleanPrev = detectUncleanPreviousRun();');
-  const write = mainSrc.indexOf('writeRunState();', detect);
-  const watchdog = mainSrc.indexOf('startWatchdog();', write);
-  assert.ok(detect >= 0, 'previous-run detection missing');
-  assert.ok(write > detect, 'current run-state must be written after previous-run detection');
-  assert.ok(watchdog > write, 'watchdog must start after current run-state is written');
-  assert.ok(mainSrc.indexOf('autoRollbackClientIfCrashed(uncleanPrev);', detect) > watchdog);
-  assert.ok(mainSrc.indexOf('if (uncleanPrev) notifyUncleanRestart(uncleanPrev);', detect) > watchdog);
+test('rc.action 分发覆盖导出诊断日志（export-logs）', () => {
+  assert.ok(registerSrc.includes("case 'export-logs'"), "rc.action export-logs 处理缺失");
 });
 
-test('unclean previous-run predicate respects clean exit and PID boundaries', () => {
+test('unclean previous-run 判定尊重 clean-exit 与 PID 边界（保留原纯逻辑契约）', () => {
   const predicate = (prev, currentPid) => Boolean(
     prev && prev.cleanExit !== true && prev.pid && Number(prev.pid) !== currentPid,
   );
@@ -50,26 +54,6 @@ test('unclean previous-run predicate respects clean exit and PID boundaries', ()
   assert.equal(predicate({ pid: 0, cleanExit: false }, 42), false);
 });
 
-test('main.js registers the heartbeat IPC and polls heartbeats', () => {
-  assert.ok(mainSrc.includes("'dsh:renderer-heartbeat'"), 'heartbeat IPC channel missing');
-  assert.ok(/checkHeartbeats\(\)/.test(mainSrc), 'checkHeartbeats() loop missing');
-});
-
-test('main.js serves the local recovery page IPC endpoints', () => {
-  for (const ch of ['chrome:recovery-state', 'chrome:recovery-reload', 'chrome:recovery-restart', 'chrome:export-logs']) {
-    assert.ok(mainSrc.includes(`'${ch}'`), `IPC handler ${ch} missing`);
-  }
+test('恢复中心页面存在', () => {
   assert.ok(existsSync(join(ROOT, 'assets', 'recovery.html')), 'assets/recovery.html missing');
-});
-
-test('every quit path marks a clean exit for the watchdog', () => {
-  const marks = mainSrc.match(/markCleanExit\(\)/g) || [];
-  assert.ok(marks.length >= 3, `expected markCleanExit() on before-quit + restart + app.exit paths, found ${marks.length}`);
-});
-
-test('preload sends renderer heartbeats and exposes the recovery bridge', () => {
-  assert.ok(preloadSrc.includes("'dsh:renderer-heartbeat'"), 'preload heartbeat sender missing');
-  for (const ch of ['chrome:recovery-state', 'chrome:recovery-reload', 'chrome:recovery-restart', 'chrome:export-logs']) {
-    assert.ok(preloadSrc.includes(`'${ch}'`), `preload bridge for ${ch} missing`);
-  }
 });

@@ -23,6 +23,7 @@ window.__ModuleLoader__.load({
 			trigger: "webui-po-trigger",
 			busy: "webui-po-busy",
 			panel: "webui-po-panel",
+			panelOpen: "webui-po-panel-open",
 			panelTitle: "webui-po-panel-title",
 			caption: "webui-po-caption",
 			status: "webui-po-status",
@@ -60,10 +61,17 @@ window.__ModuleLoader__.load({
 .webui-po-trigger:disabled{opacity:.5;cursor:default}
 .webui-po-busy{animation:webui-po-spin 1s linear infinite}
 @keyframes webui-po-spin{to{transform:rotate(360deg)}}
-.webui-po-panel{position:absolute;right:0;bottom:calc(100% + 10px);z-index:5000;width:max-content;min-width:236px;max-width:320px;padding:14px 16px;border:1px solid var(--dsw-alias-border-inverted);border-radius:14px;background:var(--dsw-specific-menu);box-shadow:var(--dsw-shadow-lv3);color:var(--dsw-alias-label-primary);animation:webui-po-slide-in 160ms cubic-bezier(.2,.8,.2,1)}
+/* 面板常驻渲染（不随 hover 卸载重挂）：hover 抖动根治 —— 挂载即播动画会让
+ * 面板与 ::before 桥接区位移，鼠标在缝隙处反复 enter/leave → 80ms 定时器反复
+ * 挂载/卸载 → 动画再重播的循环抽搐。改为 opacity/visibility 过渡显隐。
+ * 定位用 fixed：absolute 向上展开会伸出 composer 滚动容器（overflow:auto），
+ * 被裁成一条并诱发出滚动条（模型菜单同款病灶，见 bridge 垫片 initPopupRescue）；
+ * fixed 相对视口定位，天然不受任何祖先 overflow 裁剪。坐标由 JS 按触发钮
+ * 位置写入 CSS 变量（--po-left/--po-bottom），打开时计算一次。 */
+.webui-po-panel{position:fixed;left:var(--po-left,auto);top:var(--po-top,auto);bottom:auto;right:auto;z-index:5000;width:max-content;min-width:236px;max-width:320px;padding:14px 16px;border:1px solid var(--dsw-alias-border-inverted);border-radius:14px;background:var(--dsw-specific-menu);box-shadow:var(--dsw-shadow-lv3);color:var(--dsw-alias-label-primary);opacity:0;visibility:hidden;transform:translateY(6px) scale(.98);transition:opacity 140ms cubic-bezier(.2,.8,.2,1),transform 140ms cubic-bezier(.2,.8,.2,1),visibility 0s linear 140ms;pointer-events:none}
+.webui-po-panel-open{opacity:1;visibility:visible;transform:none;transition:opacity 140ms cubic-bezier(.2,.8,.2,1),transform 140ms cubic-bezier(.2,.8,.2,1);pointer-events:auto}
 /* 透明桥接：覆盖卡片与图标之间的间隙，鼠标移动时命中卡片不中断 hover。 */
 .webui-po-panel::before{content:'';position:absolute;left:0;right:0;bottom:-10px;height:10px}
-@keyframes webui-po-slide-in{from{opacity:0;transform:translateY(6px) scale(.98)}to{opacity:1;transform:none}}
 .webui-po-panel-title{font-size:14px;font-weight:600;line-height:20px;margin-bottom:4px}
 .webui-po-caption{font-size:12px;line-height:18px;color:var(--dsw-alias-label-secondary);margin-bottom:10px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .webui-po-options{display:flex;flex-direction:column;gap:10px;margin-top:12px;padding-top:12px;border-top:1px solid var(--dsw-alias-border-l2)}
@@ -184,11 +192,22 @@ window.__ModuleLoader__.load({
 			const sourceRef = (0, react.useRef)("");
 			const lastWrittenRef = (0, react.useRef)("");
 			const roundRef = (0, react.useRef)(1);
+			const rootRef = (0, react.useRef)(null);
+			const panelRef = (0, react.useRef)(null);
 			const busy = phase === "optimizing";
 			(0, react.useEffect)(() => () => {
 				if (closeTimer.current !== null) window.clearTimeout(closeTimer.current);
 				if (hoverLeaveTimer.current !== null) window.clearTimeout(hoverLeaveTimer.current);
 			}, []);
+			// fixed 面板坐标跟随：内容变化（状态行文字增减）与窗口缩放都会改变几何，
+			// phase 非 idle 的常驻态也要重算（hover 打开路径已在 showPanel 里算过）。
+			(0, react.useEffect)(() => {
+				if (phase === "idle" && !hovered) return;
+				placePanel();
+				const onResize = () => placePanel();
+				window.addEventListener("resize", onResize, { passive: true });
+				return () => window.removeEventListener("resize", onResize);
+			});
 			if (!available) return null;
 			const cancelHoverHide = () => {
 				if (hoverLeaveTimer.current !== null) {
@@ -198,6 +217,7 @@ window.__ModuleLoader__.load({
 			};
 			const showPanel = () => {
 				cancelHoverHide();
+				placePanel();
 				setHovered(true);
 			};
 			const scheduleHide = () => {
@@ -207,6 +227,22 @@ window.__ModuleLoader__.load({
 					hoverLeaveTimer.current = null;
 					setHovered(false);
 				}, 80);
+			};
+			/** fixed 定位坐标：面板底缘贴触发钮顶缘上方 10px，右缘对齐按钮右缘，两端 clamp 进视口。 */
+			const placePanel = () => {
+				const rootEl = rootRef.current;
+				const panelEl = panelRef.current;
+				if (!rootEl || !panelEl) return;
+				const r = rootEl.getBoundingClientRect();
+				const pr = panelEl.getBoundingClientRect();
+				const margin = 8;
+				let left = r.right - pr.width;
+				if (left < margin) left = margin;
+				if (left + pr.width > window.innerWidth - margin) left = window.innerWidth - margin - pr.width;
+				let top = r.top - pr.height - 10;
+				if (top < margin) top = Math.min(r.bottom + 10, window.innerHeight - margin - pr.height);
+				panelEl.style.setProperty("--po-left", String(Math.round(left)) + "px");
+				panelEl.style.setProperty("--po-top", String(Math.round(top)) + "px");
 			};
 			const finish = (next, text) => {
 				setPhase(next);
@@ -480,6 +516,7 @@ window.__ModuleLoader__.load({
 			const statusClass = phase === "optimizing" ? css.statusOptimizing : phase === "done" ? css.statusDone : phase === "error" ? css.statusError : void 0;
 			return /* @__PURE__ */ (0, react_jsx_runtime.jsxs)("div", {
 				className: css.root,
+				ref: rootRef,
 				onMouseEnter: showPanel,
 				onMouseLeave: scheduleHide,
 				children: [
@@ -494,10 +531,12 @@ window.__ModuleLoader__.load({
 						},
 						children: busy ? /* @__PURE__ */ (0, react_jsx_runtime.jsx)(_deepseek_ai_dsh_client_ui_primitives.IconLoadingOutline16, { className: css.busy }) : /* @__PURE__ */ (0, react_jsx_runtime.jsx)(_deepseek_ai_dsh_client_ui_primitives.IconSparkle16, {})
 					}),
-					panelVisible && phase !== "multi" && /* @__PURE__ */ (0, react_jsx_runtime.jsxs)("div", {
-						className: `${css.panel} dsh-glass-anim-in`,
+					phase !== "multi" && /* @__PURE__ */ (0, react_jsx_runtime.jsxs)("div", {
+						className: panelVisible ? `${css.panel} ${css.panelOpen}` : css.panel,
+						ref: panelRef,
 						role: "group",
 						"aria-label": "提示词优化面板",
+						"aria-hidden": panelVisible ? void 0 : "true",
 						onMouseEnter: showPanel,
 						onMouseLeave: scheduleHide,
 						children: [

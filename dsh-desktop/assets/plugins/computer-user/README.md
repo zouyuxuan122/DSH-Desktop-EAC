@@ -81,6 +81,11 @@ computer_screenshot → image_compare           # verify
 
 ## Settings card
 
+The settings card (「电脑操作 / Computer Use」) uses the DSH settings-panel design
+language — bordered card groups, capsule buttons, 32px inputs, chevron selects,
+rotating-chevron disclosure — and guards `scope.load()` for hosts without a load
+surface (EAC desktop shells).
+
 - **Mode dropdown** at the top of the card:
   - `disabled` — every `computer_*` tool refuses.
   - `readonly` — only screenshot / cursor-read / wait are allowed.
@@ -113,7 +118,8 @@ Turn it off in Advanced when you intentionally want code snippets in replies.
 
 ## Verification & known limits
 
-- `node --test` unit suite: 16/16 green (tool registration, gates, arg validation).
+- `node --test` unit suite: 39/39 green (tool registration, gates, arg validation,
+  output guard).
 - Real-machine safe-window smoke (throwaway window + cmd.exe, never the user's apps):
   screenshot PNG correct; cursor read/move round-trip exact; typing `hello 中文 123!`
   read back verbatim; keypress Home/End navigation + insert verified (`HEADzzzTAIL`);

@@ -101,7 +101,7 @@ test('dsh-compact integration: composite agent starts engine, command and pruner
 })
 
 test('dsh-compact integration: migration helper is included in packaged app', () => {
-  const builder = readFileSync(join(root, 'electron-builder.yml'), 'utf8')
-  assert.match(builder, /- compact-preset-migrate\.js/)
-  assert.match(builder, /- assets\/\*\*\/\*/)
+  const stage = readFileSync(join(root, '..', 'tauri-shell', 'stage-resources.mjs'), 'utf8')
+  assert.match(stage, /'compact-preset-migrate\.js'/, 'ROOT_FILES 应含 compact-preset-migrate.js')
+  assert.match(stage, /cpSync\(path\.join\(dd, 'assets'\)/, 'stage 应整体装配 assets/ 目录')
 })

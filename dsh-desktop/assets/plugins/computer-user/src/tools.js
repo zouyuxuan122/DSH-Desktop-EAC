@@ -36,73 +36,28 @@ const MODES = ['disabled', 'readonly', 'manual', 'auto'];
  * Mode gate: decide whether a tool call is allowed based on the current mode
  * and the session's approval state.
  *
- * 手动批准模式优先走官方「批准问答」（ctx.approval → 对话内弹出 允许/拒绝
- * 卡片）：用户点「允许」本次放行，点「拒绝」抛错并给出 /computer 重试提示。
- * 批准服务不可用（未编排 / answerer 缺失 / 非轮次内）或信号已取消时回落到
- * 原来的 awaitingApproval 路径（提示发送 /computer 批准）。
- *
- * Resolves (no throw) if allowed; otherwise throws with a machine-readable
- * marker property so callers / downstream UI can distinguish rejections.
- *
- * @param {{runPs:(script:string,payload:object,opts?:object)=>Promise<object>, getConfig:()=>object, approvedSessions?:Set<string>, sessionId?:string, requestApproval?:(req:object)=>Promise<string>}} deps
+ * Returns void if allowed, or throws with `awaitingApproval=true` if
+ * the user needs to approve via /computer first.
  */
-async function modeGate(cfg, toolName, deps, exec) {
-  const { approvedSessions, requestApproval } = deps
-  const mode = cfg.mode ?? 'manual'
+function modeGate(cfg, toolName, approvedSessions, sessionId) {
+  const mode = cfg.mode ?? 'manual';
   if (mode === 'disabled') {
-    throw new Error('computer-user 已禁用：请在「设置 → 电脑操作」切换模式后再使用')
+    throw new Error('computer-user 已禁用：请在「设置 → 电脑操作」切换模式后再使用');
   }
   if (mode === 'readonly' && !READONLY_TOOLS.has(toolName)) {
-    throw new Error(`computer-user 只读模式：${toolName} 不允许执行，仅截图/读光标/等待可用`)
+    throw new Error(`computer-user 只读模式：${toolName} 不允许执行，仅截图/读光标/等待可用`);
   }
   if (mode === 'manual' && !READONLY_TOOLS.has(toolName)) {
-    const sid = exec?.agent?.session?.header?.sessionId ?? exec?.sessionId ?? ''
-    const approved = sid && approvedSessions && approvedSessions.has(sid)
+    const approved = sessionId && approvedSessions && approvedSessions.has(sessionId);
     if (!approved) {
-      if (typeof requestApproval === 'function') {
-        let outcome
-        try {
-          outcome = await requestApproval({
-            agent: exec?.agent,
-            toolName,
-            callId: exec?.callId,
-            reason: summarizeArgs(toolName, exec?.arguments),
-            signal: exec?.signal,
-          })
-        } catch {
-          outcome = 'unavailable'
-        }
-        if (outcome === 'allowed-once') return
-        if (outcome === 'rejected') {
-          const e = new Error('已拒绝：computer-use 操作未获批准。需要时可在对话发送 /computer 批准 后让模型重试。')
-          e.approvalRejected = true
-          throw e
-        }
-        if (outcome === 'cancelled') {
-          const e = new Error('computer-use 批准请求已取消。如需放行，请点击批准卡的「允许」，或在对话发送 /computer 批准 后让模型重试。')
-          e.approvalCancelled = true
-          throw e
-        }
-        // unavailable：批准服务不可用 → 落回 /computer 指令路径。
-      }
       const e = new Error(
-        '需要批准：当前为手动批准模式。请在聊天输入框发送 /computer 批准（没有弹出批准卡时，命令本身即批准；批准幂等，重复发送不会误撤销）。批准后本轮及后续轮次均可使用；如需取消发送 /computer 撤销。'
-      )
-      e.awaitingApproval = true
-      throw e
+        '需要批准：当前为手动批准模式。请在对话框输入 /computer 批准后重试（批准后本轮及后续轮次均可使用）。'
+      );
+      e.awaitingApproval = true;
+      throw e;
     }
   }
   // mode === 'auto' or readonly tool or approved manual → allow
-}
-
-/** 工具参数摘要（批准卡 reason 展示，截断防刷屏）。 */
-function summarizeArgs(toolName, args) {
-  try {
-    const text = JSON.stringify(args ?? {})
-    return text.length > 200 ? `${toolName}(${text.slice(0, 200)}…)` : `${toolName}(${text})`
-  } catch {
-    return toolName
-  }
 }
 
 /**
@@ -136,11 +91,11 @@ function textOut(schema, prefixLines) {
   };
 }
 
-export function createComputerTools({ runPs, getConfig, approvedSessions, sessionId: _ignored, setMode, requestApproval }) {
+export function createComputerTools({ runPs, getConfig, approvedSessions, sessionId, setMode }) {
   if (typeof runPs !== 'function') throw new Error('computer-user: runPs is required');
   if (typeof getConfig !== 'function') throw new Error('computer-user: getConfig is required');
 
-  const gate = (toolName, exec) => modeGate(getConfig(), toolName, { approvedSessions, requestApproval }, exec);
+  const gate = (toolName) => modeGate(getConfig(), toolName, approvedSessions, sessionId);
 
   // -- computer_screenshot ---------------------------------------------------
   const computerScreenshot = {
@@ -167,7 +122,7 @@ export function createComputerTools({ runPs, getConfig, approvedSessions, sessio
     }, ['screenshot saved (feed path to picturereader image_scan / image_ocr)']),
     isConcurrencySafe: () => false,
     async execute(args, exec) {
-      await gate('computer_screenshot', exec);
+      gate('computer_screenshot');
       if (exec?.signal?.aborted) throw new Error('computer_screenshot: cancelled');
       const cfg = getConfig();
       const cwd = exec?.agent?.session?.header?.cwd ?? process.cwd();
@@ -199,7 +154,7 @@ export function createComputerTools({ runPs, getConfig, approvedSessions, sessio
     output: textOut({ required: ['clicked'] }),
     isConcurrencySafe: () => false,
     async execute(args, exec) {
-      await gate('computer_click', exec);
+      gate('computer_click');
       const res = await runPs('input.ps1', { action: 'click', coordinate: args.coordinate, action2: args.action ?? 'click' }, { signal: exec?.signal });
       return { clicked: res.cursor };
     },
@@ -216,7 +171,7 @@ export function createComputerTools({ runPs, getConfig, approvedSessions, sessio
     output: textOut({ required: ['chars'] }),
     isConcurrencySafe: () => false,
     async execute(args, exec) {
-      await gate('computer_type', exec);
+      gate('computer_type');
       const cfg = getConfig();
       const res = await runPs('input.ps1', {
         action: 'type', text: String(args.text), sendEnter: !!args.send_enter,
@@ -237,7 +192,7 @@ export function createComputerTools({ runPs, getConfig, approvedSessions, sessio
     output: textOut({ required: ['keys'] }),
     isConcurrencySafe: () => false,
     async execute(args, exec) {
-      await gate('computer_keypress', exec);
+      gate('computer_keypress');
       const res = await runPs('input.ps1', { action: 'keypress', keys: args.keys }, { signal: exec?.signal });
       return { keys: res.keys };
     },
@@ -258,7 +213,7 @@ export function createComputerTools({ runPs, getConfig, approvedSessions, sessio
     output: textOut({ required: ['scrolled'] }),
     isConcurrencySafe: () => false,
     async execute(args, exec) {
-      await gate('computer_scroll', exec);
+      gate('computer_scroll');
       const cfg = getConfig();
       const clicks = typeof args.clicks === 'number' && args.clicks > 0 ? args.clicks : (cfg.scroll_units || 1);
       await runPs('input.ps1', { action: 'scroll', coordinate: args.coordinate, direction: args.direction ?? 'down', clicks }, { signal: exec?.signal });
@@ -281,7 +236,7 @@ export function createComputerTools({ runPs, getConfig, approvedSessions, sessio
     output: textOut({ required: ['from', 'to'] }),
     isConcurrencySafe: () => false,
     async execute(args, exec) {
-      await gate('computer_drag', exec);
+      gate('computer_drag');
       const res = await runPs('input.ps1', { action: 'drag', from: args.start_coordinate, to: args.end_coordinate, holdKeys: args.hold_keys ?? [] }, { signal: exec?.signal });
       return { from: res.from, to: res.to };
     },
@@ -298,7 +253,7 @@ export function createComputerTools({ runPs, getConfig, approvedSessions, sessio
     output: textOut({ required: ['moved_to'] }),
     isConcurrencySafe: () => false,
     async execute(args, exec) {
-      await gate('computer_move_mouse', exec);
+      gate('computer_move_mouse');
       const res = await runPs('input.ps1', { action: 'move', coordinate: args.coordinate }, { signal: exec?.signal });
       return { moved_to: res.cursor };
     },
@@ -311,7 +266,7 @@ export function createComputerTools({ runPs, getConfig, approvedSessions, sessio
     output: textOut({ required: ['waited'] }),
     isConcurrencySafe: () => false,
     async execute(args, exec) {
-      await gate('computer_wait', exec);
+      gate('computer_wait');
       const ms = Math.max(0, Number(args.ms) || 0);
       await new Promise((resolve, reject) => {
         const timer = setTimeout(resolve, ms);
@@ -328,7 +283,7 @@ export function createComputerTools({ runPs, getConfig, approvedSessions, sessio
     output: textOut({ required: ['x', 'y'] }),
     isConcurrencySafe: () => false,
     async execute(_args, exec) {
-      await gate('computer_get_cursor_position', exec);
+      gate('computer_get_cursor_position');
       const res = await runPs('input.ps1', { action: 'getpos' }, { signal: exec?.signal });
       return { x: res.cursor[0], y: res.cursor[1] };
     },
@@ -359,7 +314,7 @@ export function createComputerTools({ runPs, getConfig, approvedSessions, sessio
         throw new Error('computer-user 已禁用：无法在禁用模式下修改运行模式（需用户在设置中先解除禁用）');
       }
       if (cfg.ai_can_change_mode !== true) {
-        throw new Error('computer_set_mode: 当前未允许 AI 修改运行模式。请在「设置 → 电脑操作」勾选「AI 可自行修改运行模式」后再让 AI 切换；或由你自己在下拉框选择模式。');
+        throw new Error('computer_set_mode: 当前未允许 AI 修改运行模式（设置「AI 可自行修改运行模式」未开启）');
       }
       const mode = validateMode(args.mode);
       await setMode(mode);

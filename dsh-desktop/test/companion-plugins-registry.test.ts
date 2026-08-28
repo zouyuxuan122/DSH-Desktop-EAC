@@ -9,11 +9,11 @@
 // 两者的包目录与功能代码都随包分发，唯独缺一行注册 —— 无任何报错，只能
 // 靠用户感知。本测试让这类丢失在 CI 直接红。
 //
-// V4.6 架构现状：settings-groups 仍是活插件（V4.6.1 起只负责常规页页内
-// 折叠，侧边栏归 nav-custom 单一写者），必须保持注册；plugin-marketplace
-// 则已被 dsh-unified-market 取代并列入 RETIRED_BUILTIN_PLUGINS（启动时清
-// 理残留）—— 守卫方向相反：它绝不能回到 COMPANION_PLUGINS，否则与统一市
-// 场重复注册 /api/dsh-market，dsh web 直接以退出码 1 崩溃。
+// V4.6 架构现状：settings-groups 仍是活插件（5.1.1 起只负责常规页页内
+// 折叠，侧边栏回归官方原生平铺），必须保持注册；plugin-marketplace 则已被
+// dsh-unified-market 取代并列入 RETIRED_BUILTIN_PLUGINS（启动时清理残留）
+// —— 守卫方向相反：它绝不能回到 COMPANION_PLUGINS，否则与统一市场重复注
+// 册 /api/dsh-market，dsh web 直接以退出码 1 崩溃。
 //
 // 注意：匹配只看 COMPANION_PLUGINS 数组切片；RETIRED_BUILTIN_PLUGINS 等
 // 其他清单里的同名行不算数（那正是 auto-compact 该待的地方）。
@@ -39,9 +39,7 @@ function companionSlice() {
 // 有 package.json 但明确不随 COMPANION_PLUGINS 分发的目录（退役等）。
 const EXCEPTIONS = new Set([
   'dsh-auto-compact', // 已退役，见 RETIRED_BUILTIN_PLUGINS
-]);
-
-test('every vendored plugin dir is registered in COMPANION_PLUGINS', () => {
+]);test('every vendored plugin dir is registered in COMPANION_PLUGINS', () => {
   const pluginsDir = join(root, 'assets', 'plugins');
   const dirs = readdirSync(pluginsDir).sort();
   const withoutManifest = dirs.filter((d) => !existsSync(join(pluginsDir, d, 'package.json')));
@@ -68,13 +66,17 @@ test('every registration row with dir points at a real vendored package', () => 
   assert.deepEqual(bad, [], '注册行指向不存在的插件目录');
 });
 
-test('regression: settings-groups stays registered, retired marketplace never returns', () => {
+test('regression: settings-groups stays registered, retired plugins never return', () => {
   const slice = companionSlice();
   assert.doesNotMatch(slice, /dsh-tdai-memory|tdai-memory/, '已退役的 tdai-memory 不得重新进入内置插件清单');
-  assert.match(slice, /id:\s*'settings-groups'/, '侧边栏普通/高级分组（Bug #58）—— V4.6.1 起负责常规页页内折叠');
+  assert.match(slice, /id:\s*'settings-groups'/, '常规页页内折叠（Bug #58）—— 5.1.1 起唯一存活的设置类辅助插件');
   const retiredStart = main.indexOf('const RETIRED_BUILTIN_PLUGINS');
   assert.ok(retiredStart >= 0, 'RETIRED_BUILTIN_PLUGINS must exist in lib/desktop/companion-sync.ts');
   const retiredSlice = main.slice(retiredStart, main.indexOf('];', retiredStart));
   assert.match(retiredSlice, /id:\s*'plugin-marketplace'/,
     '旧插件市场必须保持退役 —— 复活会与 dsh-unified-market 重复注册 /api/dsh-market（dsh web 退出码 1）');
+  assert.match(retiredSlice, /id:\s*'tool-vision'/,
+    'dsh-tool-vision 自 4.5.0 被 picturereader 取代，必须保持退役 —— 残留行会渲染空白「视觉模型」卡');
+  assert.match(retiredSlice, /id:\s*'settings-nav-custom'/,
+    'nav-custom 必须保持退役 —— 用户裁定移除普通/高级分栏，复活会再次接管侧边栏');
 });

@@ -227,6 +227,95 @@ async function waitForAppReady(client, timeoutMs) {
     check('C3 菜单顶角像素命中菜单自身（未被遮挡）', menu && menu.hitIsMenu === true);
     await client.shot('g3-model-menu-flip.png');
 
+    // ---- D) 悬停浮层横向溢出（提示词优化按钮 hover / 「/」命令菜单同款病灶） ----
+    // hero 态滚动体内核只设 overflow-y、x 轴未裁剪，absolute 弹出面板向上展开即把
+    // 页面撑出横向滚动条，且面板常驻挂载、移出后不恢复。5.1.2 垫片把 hero 滚动体与
+    // body 的 x 轴钉死 + 插件面板改 fixed 定位。D 组用真实鼠标移动 hover 触发钮、
+    // 再注入 320px 绝对定位浮层，断言四个时刻都无横向溢出且输入卡完整可见。
+    await client.evalJs(`(() => {
+      window.__dshOverflowProbe = function (label) {
+        const scrollBody = document.querySelector('.wSkVaW_scrollBody');
+        const de = document.documentElement;
+        const sw = Math.max(document.body.scrollWidth, de.scrollWidth);
+        const card = document.querySelector('.uV2eYG_card');
+        const cr = card ? card.getBoundingClientRect() : null;
+        const panelEl = document.querySelector('.webui-po-panel');
+        return {
+          label,
+          overflowX: sw - de.clientWidth,
+          bodyScrollW: document.body.scrollWidth,
+          docScrollW: de.scrollWidth,
+          clientW: de.clientWidth,
+          scrollBodyOX: scrollBody ? getComputedStyle(scrollBody).overflowX : null,
+          panelOpen: !!panelEl && panelEl.classList.contains('webui-po-panel-open'),
+          card: cr ? { top: Math.round(cr.top), bottom: Math.round(cr.bottom), inView: cr.top >= 0 && cr.bottom <= innerHeight } : null,
+          trigger: (() => { const t = document.querySelector('.webui-po-trigger'); if (!t) return null; const r = t.getBoundingClientRect(); return { x: Math.round(r.left + r.width / 2), y: Math.round(r.top + r.height / 2) }; })(),
+        };
+      };
+      return true;
+    })()`);
+    const base = await client.evalJs(`window.__dshOverflowProbe('base')`);
+    check('D1 hero 基线无横向溢出', base && base.overflowX <= 1, JSON.stringify(base));
+    // 真实触发钮只在活跃会话输入行才挂载（hero 布局不渲染 conversation.input.right
+    // slot）；找不到时注入「修复前的旧版几何」模拟面板（absolute 向上展开 320px），
+    // 等价验证同一回归：旧布局 hover 后绝不能再撑出横向溢出。
+    let hoverPoint = base && base.trigger;
+    let realHover = !!hoverPoint;
+    if (!hoverPoint) {
+      const injected = await client.evalJs(`(() => {
+        const trailing = document.querySelector('.uV2eYG_trailing'); if (!trailing) return false;
+        const btn = document.createElement('button');
+        btn.id = 'g3-fake-po-trigger';
+        btn.style.cssText = 'width:28px;height:28px;';
+        const panel = document.createElement('div');
+        panel.className = 'webui-po-panel webui-po-panel-open';
+        panel.style.cssText = 'position:absolute;bottom:calc(100% + 10px);right:0;width:320px;height:200px;background:#1b2438;border:1px solid rgba(255,255,255,.35);border-radius:12px;';
+        trailing.appendChild(btn);
+        trailing.appendChild(panel);
+        return true;
+      })()`);
+      if (injected) {
+        const p = await client.evalJs(`(() => {
+          const t = document.getElementById('g3-fake-po-trigger'); if (!t) return null;
+          const r = t.getBoundingClientRect();
+          return { x: Math.round(r.left + r.width / 2), y: Math.round(r.top + r.height / 2) };
+        })()`);
+        hoverPoint = p;
+        await client.call('Input.dispatchMouseEvent', { type: 'mouseMoved', x: p.x, y: p.y, button: 'none' });
+        await sleep(400);
+      }
+    } else {
+      await client.call('Input.dispatchMouseEvent', { type: 'mouseMoved', x: hoverPoint.x, y: hoverPoint.y, button: 'none' });
+      await sleep(700);
+    }
+    const during = await client.evalJs(`window.__dshOverflowProbe('during')`);
+    check('D2 悬停提示词优化（面板打开）无横向溢出', during && during.overflowX <= 1 && during.panelOpen === true, JSON.stringify({ realHover, ...during }));
+    // 注入式绝对定位浮层（「/」命令菜单同款）：320px 宽向上展开。
+    await client.evalJs(`(() => {
+      const trailing = document.querySelector('.uV2eYG_trailing');
+      if (!trailing) return false;
+      const fake = document.createElement('div');
+      fake.id = 'g3-fake-slash-menu';
+      fake.style.cssText = 'position:absolute;bottom:calc(100% + 10px);right:0;width:320px;height:240px;background:#1b2438;border-radius:12px;z-index:80;';
+      trailing.appendChild(fake);
+      return true;
+    })()`);
+    await sleep(300);
+    const withFake = await client.evalJs(`window.__dshOverflowProbe('withFake')`);
+    check('D4 绝对定位浮层（/ 命令菜单同款）无横向溢出', withFake && withFake.overflowX <= 1, JSON.stringify(withFake));
+    await client.evalJs(`(() => { const f = document.getElementById('g3-fake-slash-menu'); if (f) f.remove(); return true; })()`);
+    if (hoverPoint) {
+      await client.call('Input.dispatchMouseEvent', { type: 'mouseMoved', x: 30, y: 300, button: 'none' });
+      await sleep(600);
+    }
+    const after = await client.evalJs(`window.__dshOverflowProbe('after')`);
+    check('D3 移出鼠标后仍无横向溢出（面板已收起）', after && after.overflowX <= 1 && (realHover ? after.panelOpen === false : true), JSON.stringify({ realHover, ...after }));
+    check('D5 hero 输入卡全程完整可见', base && during && withFake && after &&
+      base.card && during.card && withFake.card && after.card &&
+      [base.card, during.card, withFake.card, after.card].every((c) => c.inView === true),
+      JSON.stringify({ base: base && base.card, during: during && during.card, after: after && after.card }));
+    await client.shot('g3-hover-overflow.png');
+
     console.log(failures === 0 ? '\n[ui-verify] PASS' : `\n[ui-verify] FAIL (${failures})`);
     client.close();
     // 退出前保留现场 3s 截图基线？不必；直接收尾。

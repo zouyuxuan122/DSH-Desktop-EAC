@@ -24,16 +24,16 @@
 4. 检查是否需要通知事件。
 5. 增加契约测试和最小运行时验证。
 
-## Electron parity
+## Electron parity（已解除）
 
-虽然 Electron 壳已冻结，`bridge-preload-parity.test.ts` 仍锁定 Tauri bridge 与 Electron preload 的公开方法树。
+Electron preload 已随壳退役（瘦身批次 C），`bridge-preload-parity.test.ts` 改为
+锁定 bridge.ts 单侧表面契约（必需命名空间清单）；WS 回环客户端单源
+`dsh-desktop/assets/ws-jsonrpc-client.js`，主窗 bridge.ts 与恢复中心窗共用
+（build.rs 拼装注入，见 `ws-rpc-single-source.test.ts`）。
 
-新增 `window.dshDesktop` API 时必须二选一并明确记录：
-
-1. **保持 parity**：同步更新 `bridge.ts`、`preload.js`，必要时在 `main.js` 增加最小对等实现。
-2. **正式解除 parity**：先形成架构决策并调整契约测试，不能只让测试变宽或静默忽略新方法。
-
-默认选择保持 parity。Electron 同步修改仅用于契约兼容，不承载新的业务实现。
+新增 `window.dshDesktop` API 时：同步更新 `bridge.ts` 顶层键（契约测试锁定
+必需清单）；客户端协议逻辑只允许改单源 `ws-jsonrpc-client.js`，两份桥胶水
+不得各自内联连接实现。
 
 ## 禁止
 

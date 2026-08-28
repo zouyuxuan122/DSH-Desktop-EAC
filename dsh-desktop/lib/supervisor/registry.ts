@@ -15,6 +15,7 @@ import os = require('node:os');
 import type { ExtensionRegistry, ExtensionRecord, ExtensionRuntimeState } from '../../shared/protocol.js';
 import { state } from '../state.js';
 import { log } from '../log.js';
+import { writeJsonAtomic } from '../atomic-json.js';
 
 /** 注册表 schema 版本（结构变更时 +1 并写迁移）。 */
 const SCHEMA_VERSION = 1;
@@ -41,11 +42,7 @@ export function readRegistry(): ExtensionRegistry {
 /** 原子写注册表（tmp + rename；失败记日志不抛出）。 */
 export function writeRegistry(reg: ExtensionRegistry): boolean {
   try {
-    const file = registryPath();
-    fs.mkdirSync(path.dirname(file), { recursive: true });
-    const tmp = file + '.tmp-' + Date.now();
-    fs.writeFileSync(tmp, JSON.stringify(reg, null, 2) + '\n');
-    fs.renameSync(tmp, file);
+    writeJsonAtomic(registryPath(), reg);
     return true;
   } catch (err) {
     log('registry', '注册表写入失败: ' + String((err as Error).message));

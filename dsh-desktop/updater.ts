@@ -36,6 +36,13 @@ const NPM_STALL_MS = 300 * 1000;
 
 let activeProc: cp.ChildProcess | null = null;
 
+const { readJsonFile } = require('./lib/plugin-copy') as {
+  readJsonFile(file: string): Record<string, unknown> | null;
+};
+const { writeJsonAtomic } = require('./lib/atomic-json') as {
+  writeJsonAtomic(file: string, value: unknown): void;
+};
+
 // --- settings -------------------------------------------------------------
 
 interface UpdaterCtx {
@@ -48,12 +55,11 @@ interface UpdaterCtx {
 function settingsPath(ctx: UpdaterCtx): string { return path.join(ctx.userDataDir, 'settings.json'); }
 
 function loadSettings(ctx: UpdaterCtx): Record<string, any> {
-  try { return JSON.parse(fs.readFileSync(settingsPath(ctx), 'utf8')); }
-  catch { return {}; }
+  return readJsonFile(settingsPath(ctx)) ?? {};
 }
 
 function saveSettings(ctx: UpdaterCtx, s: Record<string, any>): void {
-  try { fs.writeFileSync(settingsPath(ctx), JSON.stringify(s, null, 2) + '\n'); }
+  try { writeJsonAtomic(settingsPath(ctx), s); }
   catch (err) { ctx.log('update', '保存 settings 失败: ' + (err as Error).message); }
 }
 

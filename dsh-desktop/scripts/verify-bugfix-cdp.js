@@ -1,11 +1,10 @@
 'use strict';
 // Bug #58 真机操控验证：启动打包后的应用（隔离环境），通过 CDP 在真实
-// 渲染进程里驱动设置页，验证（V4.6.1 单一写者架构）：
-//   A. 侧边栏有「普通」「高级」组头（nav-custom 唯一写入）
-//   B. 高级折叠/展开可用、抗自愈、持久化到 eac:sidebar:v2
-//   C. 用户隐藏的行展开高级后也不复活
-//   D. 静置 10s 侧边栏零翻动（navList 子树 DOM 变更计数为 0，防振荡回归）
-//   E. dsh-compact 引擎在 preset 中处于激活态（engineActive）
+// 渲染进程里驱动设置页，验证（5.1.1：nav-custom 已退役，侧边栏回归官方
+// 原生 order 平铺，唯一写者是 ui-settings-general）：
+//   A. 侧边栏没有「普通」「高级」组头（nav-custom 已退役）
+//   B. 静置 10s 侧边栏零翻动（navList 子树 DOM 变更计数为 0，防振荡回归）
+//   C. dsh-compact 引擎在 preset 中处于激活态（engineActive）
 // 用法：node scripts/verify-bugfix-cdp.js --exe <path> [--port 9338]
 
 const fs = require('node:fs');
@@ -165,96 +164,22 @@ async function main() {
     // 等待配套插件扫描生效
     await sleep(2500);
 
-    // A. 单一写者：接管状态下仍应有「普通」「高级」组头（nav-custom 写入）
+    // A. nav-custom 已退役：官方原生 navList 必须没有任何组头
     const heads = await cdpEval(wsUrl, `(() => {
-      const lists = document.querySelectorAll('[class*="navList"]');
-      for (const l of lists) {
-        const hs = l.querySelectorAll('.eac-sidebar-head-basic, .eac-sidebar-head-advanced');
-        if (hs.length) return Array.from(hs).map((h) => h.textContent.trim());
-      }
-      return [];
-    })()`, 10000);
-    check('A. 「普通/高级」组头存在（单一写者）',
-      Array.isArray(heads) && heads.some((x) => x.startsWith('普通')) && heads.some((x) => x.startsWith('高级')),
-      JSON.stringify(heads));
-
-    // B. 折叠/展开：真实行级断言 —— 点收起后高级行必须真的 display:none，
-    // 且在自愈窗口（1.5s）后仍然保持隐藏；展开后恢复；状态落 eac:sidebar:v2。
-    const toggle = await cdpEval(wsUrl, `(async () => {
-      const findHead = () => {
-        for (const l of document.querySelectorAll('[class*="navList"]')) {
-          const h = l.querySelector('.eac-sidebar-head-advanced');
-          if (h) return { list: l, head: h };
+      const found = [];
+      for (const l of document.querySelectorAll('[class*="navList"]')) {
+        for (const h of l.querySelectorAll('.eac-sidebar-head-basic, .eac-sidebar-head-advanced')) {
+          found.push(h.textContent.trim());
         }
-        return null;
-      };
-      const settle = (ms) => new Promise((r) => setTimeout(r, ms));
-      let f = findHead();
-      if (!f) return 'no-head';
-      const visibleButtons = () => Array.from(f.list.querySelectorAll('button')).filter((b) => b.style.display !== 'none').length;
-      // 先归到收起态
-      if (f.head.getAttribute('aria-expanded') === 'true') { f.head.click(); await settle(600); f = findHead(); if (!f) return 'head-lost'; }
-      const visibleCollapsed = visibleButtons();
-      await settle(1500);
-      f = findHead();
-      const visibleCollapsedLater = f ? visibleButtons() : -1;
-      const ariaCollapsed = f ? f.head.getAttribute('aria-expanded') : null;
-      // 全新档案默认收起是懒持久化（从未点击不落盘），此处可能为 null
-      const stored = localStorage.getItem('eac:sidebar:v2');
-      // 再展开
-      f.head.click(); await settle(600);
-      f = findHead();
-      const visibleExpanded = f ? visibleButtons() : -1;
-      const ariaExpanded = f ? f.head.getAttribute('aria-expanded') : null;
-      const storedAfterExpand = localStorage.getItem('eac:sidebar:v2');
-      // 收回收起态，给后续检查一个确定基线
-      f.head.click(); await settle(600);
-      return { visibleCollapsed, visibleCollapsedLater, ariaCollapsed, stored, storedAfterExpand, visibleExpanded, ariaExpanded };
-    })()`, 30000);
-    const toggledOk = toggle && typeof toggle === 'object'
-      && toggle.visibleCollapsedLater === toggle.visibleCollapsed
-      && toggle.visibleCollapsed < toggle.visibleExpanded
-      && toggle.ariaCollapsed === 'false' && toggle.ariaExpanded === 'true'
-      && typeof toggle.storedAfterExpand === 'string' && toggle.storedAfterExpand.includes('"folded":false');
-    check('B. 收起真的隐藏行、抗自愈、可再展开、持久化到 eac:sidebar:v2', !!toggledOk, JSON.stringify(toggle));
-
-    // C. 用户隐藏行不被复活：隐藏「模型」→ 等 scan → 展开高级 → 模型仍隐藏
-    const hideCheck = await cdpEval(wsUrl, `(async () => {
-      const lists = document.querySelectorAll('[class*="navList"]');
-      let list = null;
-      for (const l of lists) {
-        if (Array.from(l.querySelectorAll('button')).some((b) => b.textContent.trim() === '模型')) { list = l; break; }
       }
-      if (!list) return 'no-list';
-      // 通过自定义边栏的存储直接声明隐藏（等价于用户在编辑器里取消勾选）
-      const raw = JSON.parse(localStorage.getItem('eac:settings-nav:v1') || '{}');
-      raw.hidden = ['models'];
-      localStorage.setItem('eac:settings-nav:v1', JSON.stringify(raw));
-      // 触发重扫：改 DOM（childList）让 MutationObserver 跑起来
-      const div = document.createElement('div');
-      list.appendChild(div);
-      div.remove();
-      await new Promise((r) => setTimeout(r, 1200));
-      const modelBtn = Array.from(list.querySelectorAll('button')).find((b) => b.textContent.trim() === '模型');
-      const displayAfterHide = modelBtn ? modelBtn.style.display : 'gone';
-      // 展开高级，确认隐藏行没有被复活
-      const advHead = list.querySelector('.eac-sidebar-head-advanced');
-      if (advHead && advHead.getAttribute('aria-expanded') === 'false') {
-        advHead.click();
-        await new Promise((r) => setTimeout(r, 500));
-      }
-      const modelBtn2 = Array.from(list.querySelectorAll('button')).find((b) => b.textContent.trim() === '模型');
-      const displayAfterExpand = modelBtn2 ? modelBtn2.style.display : 'gone';
-      return { displayAfterHide, displayAfterExpand };
-    })()`, 20000);
-    const hiddenOk = hideCheck && typeof hideCheck === 'object'
-      && (hideCheck.displayAfterHide === 'none' || hideCheck.displayAfterHide === 'gone')
-      && (hideCheck.displayAfterExpand === 'none' || hideCheck.displayAfterExpand === 'gone');
-    check('C. 用户隐藏的行展开高级后也不复活', !!hiddenOk, JSON.stringify(hideCheck));
+      return found;
+    })()`, 10000);
+    check('A. 侧边栏无「普通/高级」组头（nav-custom 已退役）',
+      Array.isArray(heads) && heads.length === 0, JSON.stringify(heads));
 
-    // D. 静置零翻动：给 navList 子树装 MutationObserver（childList + style），
+    // B. 静置零翻动：给 navList 子树装 MutationObserver（childList + style），
     // 静置 10s 计数必须为 0 —— 单一写者幂等收敛后，空闲期变更速率必须归零。
-    await sleep(1500); // 等 C 的展开写入彻底沉降
+    await sleep(1500); // 等 A 的断言沉降
     const armed = await cdpEval(wsUrl, `(() => {
       const lists = Array.from(document.querySelectorAll('[class*="navList"]'));
       const list = lists.find((l) => l.querySelector('button')) || null;
@@ -270,15 +195,15 @@ async function main() {
       await sleep(10000);
       flutter = await cdpEval(wsUrl, `window.__dshFlutter`, 8000);
     }
-    check('D. 静置 10s 侧边栏零翻动（变更速率归零）', armed === true && flutter === 0, 'armed=' + armed + ' mutations=' + flutter);
+    check('B. 静置 10s 侧边栏零翻动（变更速率归零）', armed === true && flutter === 0, 'armed=' + armed + ' mutations=' + flutter);
 
-    // E. dsh-compact 引擎激活（host 端点）
+    // C. dsh-compact 引擎激活（host 端点）
     const webUrl = page.url.match(/^http:\/\/127\.0\.0\.1:(\d+)/);
     if (webUrl) {
       const status = await httpGetJson(`http://127.0.0.1:${webUrl[1]}/plugins/dsh-compact/status?sessionId=`).catch((e) => ({ err: String(e) }));
-      check('E. dsh-compact status 端点可达', !!status && !status.err, JSON.stringify(status).slice(0, 160));
+      check('C. dsh-compact status 端点可达', !!status && !status.err, JSON.stringify(status).slice(0, 160));
     } else {
-      check('E. dsh-compact status 端点可达', false, '无法从页面 URL 解析端口');
+      check('C. dsh-compact status 端点可达', false, '无法从页面 URL 解析端口');
     }
 
     // 截图留证（真实渲染画面）

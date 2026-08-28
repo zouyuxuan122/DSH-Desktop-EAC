@@ -7,7 +7,8 @@
  *     请求 LAN 配对 → 渲染二维码（内置 qrcode-generator，经插件静态路由加载）
  *   - 「批准/拒绝」「断开」：配对决策（sidecar 的 decide/disconnect 只接受回环
  *     调用，WS 桥本身即回环，安全）
- *   - 手机端说明：手机端客户端正在开发中，接口（/api/rpc 白名单 + cookie）已预留
+ *   - 手机端说明：5.2 起手机扫码打开的是完整 DSH Web UI（反向代理），喵丝滑
+ *     移动端优化与通知（meow-smooth）随应用内置，扫码即用无需装 App
  *
  * 仅在 Tauri 壳（bridge.ts 提供了 phoneBridge 键组）下可用；Electron 开发壳
  * 的 preload 镜像会拒绝调用，这里兜底提示。
@@ -50,12 +51,12 @@ window.__ModuleLoader__.load({
 
     var zh = {
       nav: "连接手机",
-      intro: "通过手机浏览器扫码配对，在手机上继续电脑里的 DSH 会话。手机端客户端正在开发中——配对与接口（白名单 RPC）已就绪，接入后将自动可用。",
+      intro: "通过手机浏览器扫码配对，手机上直接打开电脑里的完整 DSH 界面（内置喵丝滑移动端优化与通知）：会话、输入、模型、工作区与设置全功能可用，无需安装 App。",
       unavailable: "桌面桥不可用：phoneBridge 仅在 Tauri 桌面壳提供（Electron 开发壳不承载）。",
       statusIdle: "未启动：点击「开始配对」生成二维码。",
       statusRunning: "桥已运行（LAN {port}），等待手机扫码。",
       statusWaiting: "手机已打开配对页，等待你在电脑端批准…",
-      statusApproved: "配对已批准：手机端已建立会话 cookie（手机端 UI 开发中）。",
+      statusApproved: "配对已批准：手机端已建立会话 cookie，扫码页将自动进入完整 DSH 界面。",
       statusExpired: "配对已过期：请点击「重新配对」。",
       start: "开始配对",
       restart: "重新配对",
@@ -65,19 +66,23 @@ window.__ModuleLoader__.load({
       disconnect: "断开并失效",
       qrHint: "用手机浏览器（微信扫一扫选择「在浏览器打开」）扫码访问。",
       urlLabel: "或手动输入地址：",
-      mobileDev: "手机端客户端开发中",
-      mobileDevHint: "手机访问后当前显示开发中占位页；会话续聊等能力将在移动端完成开发后启用。",
+      copy: "复制链接",
+      copied: "已复制",
+      qrLoading: "二维码组件加载中…",
+      qrFailed: "二维码组件加载失败（/plugins/dsh-phone/qrcode.js 不可用）——请刷新页面后重新配对，或在应用重新安装后再试。",
+      mobileDev: "手机端完整界面 + 喵丝滑优化已内置",
+      mobileDevHint: "手机扫码批准后自动进入完整 DSH 界面：会话、消息、模型与设置全功能，内置喵丝滑移动优化与任务通知，无需安装 App。",
       refresh: "刷新状态",
     };
 
     var en = {
       nav: "Connect Phone",
-      intro: "Scan with your phone to continue DSH sessions from a mobile browser. The mobile client is under development — pairing and the whitelist-RPC interface are already in place.",
+      intro: "Scan with your phone to open the full DSH web UI on the same device (built-in meow-smooth mobile optimization and notifications): sessions, input, models, workspaces and settings — no app install needed.",
       unavailable: "Desktop bridge unavailable: phoneBridge is provided by the Tauri shell only.",
       statusIdle: "Not started: click \"Start pairing\" to show a QR code.",
       statusRunning: "Bridge running (LAN {port}), waiting for a scan.",
       statusWaiting: "Phone opened the pairing page; awaiting your approval on the desktop…",
-      statusApproved: "Pairing approved: session cookie issued (mobile UI under development).",
+      statusApproved: "Pairing approved: session cookie issued; the phone now opens the chat client.",
       statusExpired: "Pairing expired: click \"Re-pair\".",
       start: "Start pairing",
       restart: "Re-pair",
@@ -87,8 +92,12 @@ window.__ModuleLoader__.load({
       disconnect: "Disconnect & revoke",
       qrHint: "Scan with a mobile browser.",
       urlLabel: "Or open this address manually:",
-      mobileDev: "Mobile client under development",
-      mobileDevHint: "The phone currently sees a placeholder page; session features will light up once the mobile client ships.",
+      copy: "Copy link",
+      copied: "Copied",
+      qrLoading: "QR component loading…",
+      qrFailed: "QR component failed to load (/plugins/dsh-phone/qrcode.js unavailable) — reload the page and re-pair, or reinstall the app.",
+      mobileDev: "Mobile chat client available",
+      mobileDevHint: "After pairing approval the phone opens the full DSH web UI (with built-in meow-smooth mobile optimization and notifications): sessions, messages, models and settings — no app install needed.",
       refresh: "Refresh",
     };
 
@@ -114,6 +123,8 @@ window.__ModuleLoader__.load({
       var [busy, setBusy] = react.useState(false);
       var [error, setError] = react.useState(null);
       var [qrReady, setQrReady] = react.useState(false);
+      var [qrErr, setQrErr] = react.useState(null);
+      var [copied, setCopied] = react.useState(false);
       var aliveRef = react.useRef(true);
 
       // 2s 轮询状态（sidecar 无推送，低频轮询即可）。
@@ -135,7 +146,8 @@ window.__ModuleLoader__.load({
         return function () { aliveRef.current = false; if (timer) clearInterval(timer); };
       }, []);
 
-      // qrcode-generator 脚本（插件静态路由）
+      // qrcode-generator 脚本（插件静态路由）。加载失败不再静默：onerror 落状态，
+      // 界面显示可见错误（旧版失败只留一块白）。
       react.useEffect(function () {
         if (typeof window === "undefined") return;
         if (typeof window.qrcode !== "undefined" || qrReady) { setQrReady(true); return; }
@@ -143,6 +155,7 @@ window.__ModuleLoader__.load({
         s.src = "/plugins/dsh-phone/qrcode.js";
         s.async = true;
         s.onload = function () { if (aliveRef.current) setQrReady(true); };
+        s.onerror = function () { if (aliveRef.current) setQrErr(t("qrFailed")); };
         document.head.appendChild(s);
       }, []);
 
@@ -181,7 +194,9 @@ window.__ModuleLoader__.load({
       }
 
       function renderQr() {
-        if (!pairUrl || !qrReady || typeof window.qrcode === "undefined") return null;
+        if (!pairUrl) return null;
+        if (qrErr) return h("span", { className: "__ph_hint", style: { color: "var(--dsw-alias-state-error-primary)" } }, qrErr);
+        if (!qrReady || typeof window.qrcode === "undefined") return h("span", { className: "__ph_hint" }, t("qrLoading"));
         try {
           var qr = window.qrcode(0, "M");
           qr.addData(pairUrl, "Byte");
@@ -203,10 +218,32 @@ window.__ModuleLoader__.load({
               }
             }
           }
-          return h("div", { className: "__ph_qr" }, h("canvas", { width: size, height: size }));
+          return h("div", { className: "__ph_qr" }, h("img", { src: canvas.toDataURL("image/png"), width: size, height: size, alt: "配对二维码" })); // 修复：画好的内容转 dataURL 上 img（旧版挂空 canvas 恒白；直挂 DOM 节点在 React 下非法会炸分区）
         } catch (e) {
-          return h("span", { className: "__ph_hint" }, String((e && e.message) || e));
+          return h("span", { className: "__ph_hint", style: { color: "var(--dsw-alias-state-error-primary)" } }, String((e && e.message) || e));
         }
+      }
+
+      // 复制完整配对链接（含 ?token=）。clipboard 不可用时降级 textarea+execCommand。
+      function copyLink() {
+        if (!pairUrl) return;
+        var done = function () {
+          setCopied(true);
+          window.setTimeout(function () { if (aliveRef.current) setCopied(false); }, 1500);
+        };
+        var legacy = function () {
+          var ta = document.createElement("textarea");
+          ta.value = pairUrl;
+          ta.style.position = "fixed";
+          ta.style.opacity = "0";
+          document.body.appendChild(ta);
+          ta.select();
+          try { document.execCommand("copy"); } catch (e) {}
+          document.body.removeChild(ta);
+        };
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+          navigator.clipboard.writeText(pairUrl).then(done, function () { legacy(); done(); });
+        } else { legacy(); done(); }
       }
 
       if (!b) {
@@ -242,7 +279,12 @@ window.__ModuleLoader__.load({
           ? h("div", { className: "__ph_root", style: { marginTop: "4px" } },
               renderQr(),
               h("div", { className: "__ph_hint" }, t("qrHint")),
-              h("div", { className: "__ph_url" }, t("urlLabel") + " " + pairUrl.split("?")[0])
+              // 完整链接（含 ?token=）展示 + 一键复制：只显示 host 部分会让人手敲
+              // 出来一个必然 403 的「配对链接无效」裸地址。
+              h("div", { className: "__ph_row", style: { alignItems: "flex-start" } },
+                h("div", { className: "__ph_url" }, pairUrl),
+                h("button", { type: "button", className: "__ph_btn __ph_btnPrimary", onClick: copyLink }, copied ? t("copied") : t("copy"))
+              )
             )
           : null,
         error ? h("p", { className: "__ph_status", style: { color: "var(--dsw-alias-state-error-primary)" } }, error) : null,

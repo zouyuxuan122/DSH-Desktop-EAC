@@ -26,31 +26,33 @@ if (targetPlatform !== 'win32' && targetPlatform !== 'linux' && targetPlatform !
   throw new Error(`[stage] 不支持目标平台: ${targetPlatform}`);
 }
 
-// 人工同步：新增根模块要加进来（Electron 时代的 main.js / preload.js 已废弃，不再打包）。
+// 人工同步：新增根模块要加进来（Electron 时代的 main.js / preload.js 与其
+// 独享模块 error-detail / koffi-preflight / renderer-recovery / watchdog /
+// session-encoding-heal 已随壳退役，不再打包）。
 const ROOT_FILES = [
   'updater.js', 'client-updater.js', 'logger.js', 'plugin-updater.js',
-  'balance.js', 'session-watcher.js', 'session-encoding-heal.js', 'profile-module-heal.js',
+  'balance.js', 'session-watcher.js', 'profile-module-heal.js',
   'patch-row-heal.js', 'builtin-collision.js', 'plugin-manager-state.js', 'plugin-guard.js',
-  'rescue-agent.js', 'preset-sync.js', 'compact-preset-migrate.js', 'error-detail.js',
-  'bundle-integrity.js', 'stable-port.js', 'stream-write-guard.js', 'koffi-preflight.js',
-  'renderer-recovery.js', 'watchdog.js', 'shortcut-maintenance.js',
+  'rescue-agent.js', 'preset-sync.js', 'compact-preset-migrate.js',
+  'bundle-integrity.js', 'stable-port.js', 'stream-write-guard.js',
+  'shortcut-maintenance.js',
   'host-bootstrap.js',
 ];
 const LIB_DESKTOP = [
   'file-roots.js', 'proc.js', 'platform.js', 'runtime-paths.js', 'profile.js', 'guard-box.js',
   'runtime-patches.js', 'companion-sync.js', 'plugin-ops.js', 'market.js',
   'shortcuts.js', 'junction-patrol.js', 'client-update.js', 'static-preview.js',
-  'boot-server.js',
+  'boot-server.js', 'feature-pack.js',
 ];
 const SCRIPTS = [
-  'koffi-preflight.cjs', 'patch-session-manage.js', 'plugin-manager-patch.js',
-  'onboarding.js', 'make-release-hashes.js', 'patch-deps.js',
+  'patch-session-manage.js', 'plugin-manager-patch.js',
+  'onboarding.js', 'patch-deps.js', 'feature-pack-cli.js',
 ];
 
 // vnext 隔离体系（vnext-absorb Phase 2）：sidecar require 的 lib/{state,log,
 // supervisor,extension-host,recovery-center} 编译产物 + 原生模块。
 const LIB_VNEXT = [
-  'state.js', 'log.js', 'plugin-copy.js',
+  'state.js', 'log.js', 'plugin-copy.js', 'atomic-json.js',
   'supervisor/registry.js', 'supervisor/state-machine.js', 'supervisor/installer.js',
   'supervisor/permissions.js', 'supervisor/incidents.js',
   'extension-host/manager.js', 'extension-host/bridge-server.js',
@@ -218,6 +220,7 @@ console.log('[stage] 编译 TypeScript（tsc 就地产物）');
 execSync('npx tsc -p tsconfig.json', { cwd: dd, stdio: 'inherit' });
 
 console.log('[stage] sidecar 产物');
+// 5.2 起 mobile-app.html 退役（手机桥 = 完整 Web UI 反向代理，见 phone-bridge.ts）。
 for (const f of ['server.js', 'bridge.js', 'rescue-integration.js', 'phone-bridge.js']) {
   cpSync(path.join(root, 'tauri-shell', 'sidecar', f), path.join(staged, 'sidecar', f));
 }
@@ -245,6 +248,18 @@ for (const f of NATIVE_MODULES) {
 mkdirSync(path.join(staged, 'dsh-desktop', 'scripts'), { recursive: true });
 for (const f of SCRIPTS) {
   copyRequired(path.join(dd, 'scripts', f), path.join(staged, 'dsh-desktop', 'scripts', f), '脚本');
+}
+// 功能包链路自检（copyRequired 保证源存在，这里校验"成对"装配）：
+// scripts/feature-pack-cli.js 与 lib/desktop/feature-pack.js 必须同时入包 ——
+// CLI 运行时 require ../lib/desktop/feature-pack，漏一个功能包页就整体不可用
+// （市场插件只能报"功能包 CLI 不可用"）。后续新增随包 CLI 照此成对补充。
+{
+  const cli = path.join(staged, 'dsh-desktop', 'scripts', 'feature-pack-cli.js');
+  const core = path.join(staged, 'dsh-desktop', 'lib', 'desktop', 'feature-pack.js');
+  if (existsSync(cli) !== existsSync(core)) {
+    throw new Error('[stage] 功能包链路装配不完整：feature-pack-cli.js 与 feature-pack.js 必须同时入包');
+  }
+  if (existsSync(cli)) console.log('[stage] 功能包链路自检通过（CLI + 核心）');
 }
 // package.json + lock 原样拷贝（npm ci 要求两者一致；--omit=dev 只装生产树）。
 // .npmrc（legacy-peer-deps）必须随行：内核包互相声明 peer，staged 目录里的

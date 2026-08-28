@@ -1,15 +1,13 @@
-# CI：push / PR 时跑测试并完整构建 dsh-desktop（Windows x64）
-# 缓存策略（三层，均按 dsh-desktop/package-lock.json 哈希命中）：
+# CI：push / PR 时跑测试并校验原生模块（Windows x64）
+# 缓存策略（两层，均按 dsh-desktop/package-lock.json 哈希命中）：
 #   1. npm 依赖下载缓存（setup-node 内置）
-#   2. Electron 二进制缓存（npm install 与 electron-builder 共用）
-#   3. electron-builder 工具链缓存（NSIS / winCodeSign 等）
+#   2. cargo 注册表与原生模块构建产物缓存
 # 镜像说明：GitHub 托管 runner 直连 npm registry / GitHub Releases，无需 README
 # 中的 ELECTRON_MIRROR 等镜像（仅自托管国内 runner 才需要，从美国 runner 访问 npmmirror 反而更慢）。
 name: CI
 
 on:
-  # paths 负向匹配（与 electron-builder.yml 的 files 规则同构）：
-  # 跳过纯文档改动，但 SKILL.md 随包分发（README「内置 Skills 分发」），必须放行。
+  # paths 负向匹配（跳过纯文档改动，但 SKILL.md 随包分发，必须放行）：
   push:
     branches:
       - main
@@ -70,22 +68,6 @@ jobs:
             -RepoPath . `
             -SkipRuntimeMatrix
 
-      - name: 缓存 Electron 二进制
-        uses: actions/cache@v4
-        with:
-          path: ~\AppData\Local\electron\Cache
-          key: dsh-electron-win-x64-${{ hashFiles('dsh-desktop/package-lock.json') }}
-          restore-keys: |
-            dsh-electron-win-x64-
-
-      - name: 缓存 electron-builder 工具链
-        uses: actions/cache@v4
-        with:
-          path: ~\AppData\Local\electron-builder\Cache
-          key: dsh-electron-builder-win-x64-${{ hashFiles('dsh-desktop/package-lock.json') }}
-          restore-keys: |
-            dsh-electron-builder-win-x64-
-
       - name: 安装 Rust 工具链（stable）
         uses: dtolnay/rust-toolchain@stable
 
@@ -127,20 +109,6 @@ jobs:
           retry_wait_seconds: 30
           retry_on: error,timeout
           command: npm --prefix dsh-desktop test
-
-      - name: 构建产物（portable + NSIS 安装包）
-        run: npm run dist
-
-      - name: 上传构建产物
-        uses: actions/upload-artifact@v4
-        with:
-          name: dsh-desktop-win-x64-ci
-          path: |
-            dsh-desktop/dist/*.exe
-            dsh-desktop/dist/*.blockmap
-            dsh-desktop/dist/SHA256SUMS.txt
-          if-no-files-found: error
-          retention-days: 7
 
   build-linux:
     name: 测试并构建 Tauri（Ubuntu 22.04 x64）

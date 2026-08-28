@@ -7,11 +7,13 @@
 import path = require('node:path');
 import fs = require('node:fs');
 import os = require('node:os');
+import crypto = require('node:crypto');
 import { updCtx, APP_ROOT } from './runtime-paths';
 import { desktopProfile, desktopProfileDir, ensureDesktopProfileInit } from './profile';
 import { ensureGuard } from './guard-box';
 import { applySessionManageFix } from './runtime-patches';
 import { pluginCapabilityDetails } from './platform';
+import { writeFileAtomic } from '../atomic-json.js';
 // 未类型化依赖（Wave 3 收编），先以窄签名消费。
 const updater = require('../../updater') as {
   loadSettings(c: ReturnType<typeof updCtx>): { removedPlugins?: unknown };
@@ -111,6 +113,18 @@ export const COMPANION_PLUGINS: CompanionPluginDef[] = [
   // 写 config 是双保险，healSoulMdPatchRow 另负责修复存量坏行。
   { id: 'soul-md', name: 'dsh-soul-md', dir: 'dsh-soul-md', config: { path: 'soul.md' } },
   { id: 'mobile-fix', name: 'dsh-web-mobile-fix', dir: 'dsh-web-mobile-fix' },
+  // 视口钳制（文档级滚动根治）：html/body overflow:hidden + 稳定契约
+  // （data-phase/data-conversation-scroll）hero 居中兜底。纯客户端 CSS，
+  // 随内核页面加载 —— 桌面壳 / 浏览器 / 手机端三端同源生效，不再依赖
+  // 桌面壳垫片与 CSS Modules 哈希类（内核更新换哈希即失效的旧方案）。
+  { id: 'viewport-lock', name: 'dsh-viewport-lock', dir: 'dsh-viewport-lock' },
+  // 喵丝滑（Phant0Meow/dsh-meow-smooth 0.5.0，MIT）：手机端 UI 交互优化
+  // （输入框折叠/侧边栏手势/窄屏适配）+ 通知系统（页面卡片 / Web Push /
+  // webhook）+ 审计投影只读路由。5.2 起取代自研 mobile-app.html 续聊客户端
+  // —— 手机桥改为完整 Web UI 反向代理，手机直接获得真界面，本插件负责
+  // 移动端体验。host 半边依赖 web-push（已加入 app 闭包 + 插件宿主依赖
+  // 落位，缺省时优雅降级：仅系统推送不可用）。配置沿用上游出厂默认。
+  { id: 'meow-smooth', name: 'meow-smooth', dir: 'dsh-meow-smooth', config: { enabled: true } },
   // VSCode 风格右侧边栏（文件树 / 编辑器 / 终端 / Git，按会话隔离）。
   // lib/ 预编译自包含（codemirror、xterm 已内嵌），服务端仅额外依赖
   // schemastery（已加入 app 闭包，见 package.json）。
@@ -161,8 +175,9 @@ export const COMPANION_PLUGINS: CompanionPluginDef[] = [
   { id: 'prompt-custom', name: '@deepseek-ai/dsh-prompt-custom' },
   // 侧边临时会话：浮窗追问、不写主会话、多种回答引擎（Ctrl+Shift+S）。
   { id: 'side-session', name: '@dsh-external/dsh-side-session', dir: 'dsh-side-session' },
-  // 手机连接（5.1.0 批次）：LAN 扫码配对 + 白名单 RPC + 手机端占位页（设置页「连接手机」）。
-  // 桥本体在 Tauri 壳 sidecar（phone-bridge.js）；本插件只是 Web UI 入口与二维码。
+  // 手机连接（5.2 方案）：LAN 扫码配对 + 完整 Web UI 反向代理（设置页「连接手机」）。
+  // 桥本体在 Tauri 壳 sidecar（phone-bridge.js）；手机端体验由内置喵丝滑
+  // （meow-smooth）提供，自研 mobile-app.html 续聊客户端已退役。
   { id: 'dsh-phone', name: 'dsh-phone', dir: 'dsh-phone' },
   // 新增强化功能入口分区（5.1.0 批次）：设置页「增强功能」——为默认关闭的
   // 内置插件（余额小鲸鱼 / AgentTeams 等）提供一键启用/停用开关。
@@ -212,10 +227,6 @@ export const COMPANION_PLUGINS: CompanionPluginDef[] = [
   // 冲突，故默认启用而非原插件的 disabled）。纯客户端实现（host 半边 no-op）。
   // 独立发布：https://github.com/jing-hy/dsh-file-drop-eac（issue #141）。
   { id: 'file-drop-eac', name: 'dsh-file-drop-eac', dir: 'dsh-file-drop-eac' },
-  // 设置页左侧边栏自定义（V4.1，用户建议）：设置面板导航底部「自定义
-  // 边栏」按钮，按需显示/隐藏与排序 settings.section 导航项，
-  // localStorage 持久化，默认全显；纯客户端实现（host 半边 no-op）。
-  { id: 'settings-nav-custom', name: 'dsh-settings-nav-custom', dir: 'dsh-settings-nav-custom' },
   // 设置页「常规」页内高级选项折叠（V4.2，用户建议）：按行标题关键词把
   // 低频选项行（外观/语言/权限预设等）收进底部「高级选项」折叠组，
   // localStorage 持久化展开状态；纯客户端实现（host 半边 no-op）。
@@ -320,19 +331,7 @@ export function builtinPluginSourceDir(dirName: string): string {
 // 默认全部以 disabled: true 注册（不启用任何皮肤），由「设置 → 皮肤」切换。
 export const SKINS_DIR = path.join(APP_ROOT, 'assets', 'skins');
 
-export function readJsonFile(file: string): Record<string, unknown> | null {
-  try { return JSON.parse(fs.readFileSync(file, 'utf8')); } catch { return null; }
-}
-
-// 拷贝一个插件包目录到 profile node_modules（按包名 scope 落位，幂等）。
-// 插件包复制（vnext-absorb Phase 3）：戳记/拷贝/完整性判定收编到
-// lib/plugin-copy.ts —— 戳记 {v,f,b}→{v,f,b,h}（FNV-1a 滚动哈希，捕获同字节
-// 就地改写）+ 单遍走树 + 进程内源戳缓存 + 目标完整性判定缓存（同进程内
-// 第二次 sync 免全量走树）。行为契约不变：companion-copy-integrity 锁定的
-// 「源戳记一致但目标文件缺失 → 重拷」语义保留（pluginCopyIsComplete 缓存按
-// 目标顶层 mtime 失效）。re-export 保持既有消费方（plugin-ops / 契约测试）
-// 零改动。
-import { copyPluginPackage } from '../plugin-copy.js';
+import { copyPluginPackage, readJsonFile } from '../plugin-copy.js';
 
 export {
   COPY_STAMP,
@@ -341,6 +340,7 @@ export {
   pluginStampOf,
   pluginCopyIsComplete,
   copyPluginPackage,
+  readJsonFile,
 } from '../plugin-copy.js';
 
 // pnpm（dsh plugin add / 插件市场）hoist 进 profile node_modules 的
@@ -372,6 +372,13 @@ export const RETIRED_BUILTIN_PLUGINS = [
   // 5.1.1：按用户要求移除内置「第三方模型思考强度」插件
   //（reasoning_effort 控件）。老 profile 的 patch 行/包副本由退役清理兜底。
   { id: 'third-party-thinking', name: '@deepseek-ai/dsh-third-party-thinking' },
+  // dsh-tool-vision 自 4.5.0 起被 picturereader 取代但从未列入退役清单：
+  // 老 profile 残留的行+包副本会在设置页注册一张「视觉模型」卡，其
+  // settings 命名空间在新内核上失效，点开即空白页。
+  { id: 'tool-vision', name: 'dsh-tool-vision' },
+  // 按用户要求移除「普通/高级」分栏（nav-custom 是该分栏唯一写入者，
+  // 见 test/settings-groups-standdown.test.ts 的单写者契约改判）。
+  { id: 'settings-nav-custom', name: 'dsh-settings-nav-custom' },
 ];
 
 // 清理退役内置插件在 profile 的所有残留（patch 行 / 包副本 / 依赖项）。
@@ -382,9 +389,7 @@ export function retireRemovedBuiltinPlugins(profileDirP: string): void {
       const text = fs.readFileSync(patchFile, 'utf8');
       const patched = removePluginFromPatch(text, p.id);
       if (patched !== text) {
-        const tmp = patchFile + '.tmp';
-        fs.writeFileSync(tmp, patched, 'utf8');
-        fs.renameSync(tmp, patchFile);
+        writeFileAtomic(patchFile, patched);
         ctx.log('boot', `已清理退役内置插件 ${p.id} 的 profile 行`);
       }
     } catch (err) {
@@ -425,10 +430,15 @@ function safeModeActive(): boolean {
   }
 }
 
-// 退役清理的「升级对齐门控」（issue #74）：删除性手术只在应用版本变化后的
-// 首次启动执行一次 —— 升级时清掉上一版本退役插件残留；同一版本内用户
-// 手动恢复/调整的插件树（管理页开关、市场安装的同类包）不再被每次启动
-// 强制改写。settings 键 pluginTreeAlignedVersion 记录已对齐的应用版本。
+// 退役清理的「升级对齐门控」（issue #74）：删除性手术只在「应用版本变化」
+// 或「退役清单本身变化」（新增退役目标）后的首次启动执行一次 —— 升级时清掉
+// 上一版本退役插件残留，同一版本内用户手动恢复/调整的插件树（管理页开关、
+// 市场安装的同类包）不再被每次启动强制改写。settings 键 pluginTreeAlignedVersion
+// 记录已对齐的应用版本，pluginTreeRetiredListHash 记录已对齐的清单内容：
+// 只比对版本会让同版本内新列入的退役条目永远清不到（5.1.0 实测踩坑）。
+function retiredListHash(): string {
+  return crypto.createHash('sha256').update(JSON.stringify(RETIRED_BUILTIN_PLUGINS)).digest('hex');
+}
 function retireRemovedBuiltinPluginsGated(profileDirP: string): void {
   let version = '';
   try {
@@ -444,14 +454,15 @@ function retireRemovedBuiltinPluginsGated(profileDirP: string): void {
   try {
     const c = updCtx();
     const settings = updater.loadSettings(c) as Record<string, unknown>;
-    if (settings && settings.pluginTreeAlignedVersion === version) {
+    const hash = retiredListHash();
+    if (settings && settings.pluginTreeAlignedVersion === version && settings.pluginTreeRetiredListHash === hash) {
       ctx.log('boot', `已在本版本（${version}）对齐过内置插件树，跳过退役清理（用户调整优先）`);
       return;
     }
     retireRemovedBuiltinPlugins(profileDirP);
     const next = settings && typeof settings === 'object'
-      ? { ...settings, pluginTreeAlignedVersion: version }
-      : { pluginTreeAlignedVersion: version };
+      ? { ...settings, pluginTreeAlignedVersion: version, pluginTreeRetiredListHash: hash }
+      : { pluginTreeAlignedVersion: version, pluginTreeRetiredListHash: hash };
     updater.saveSettings(c, next);
     ctx.log('boot', `已在本版本（${version}）完成内置插件树对齐`);
   } catch (err) {
@@ -667,6 +678,9 @@ function ensurePluginHostDeps(profileDirP: string): void {
     }
   };
   ensureCopy('schemastery', 0);
+  // web-push（meow-smooth 通知 host 半边的运行时依赖；动态 import，缺省时
+  // 该插件优雅降级为仅页面内提醒 —— 这里落位让系统推送开箱即用）。
+  ensureCopy('web-push', 0);
   // cosmokit 只在共享层没有时兜底（避免遮蔽内核闭包内的配套版本）。
   const sharedCosmo = path.join(ctx.getDshHome() || path.join(os.homedir(), '.dsh'), 'profiles', 'node_modules', '@deepseek-ai', 'cosmokit');
   if (!fs.existsSync(sharedCosmo)) {

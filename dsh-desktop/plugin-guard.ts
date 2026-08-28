@@ -24,6 +24,9 @@ import fs = require('node:fs');
 import path = require('node:path');
 import os = require('node:os');
 
+const { writeJsonAtomic } = require('./lib/atomic-json') as {
+  writeJsonAtomic(file: string, value: unknown): void;
+};
 const { healProfileModuleShadowing } = require('./profile-module-heal') as {
   healProfileModuleShadowing(home: string, profile?: string, log?: (m: string) => void): string[];
 };
@@ -127,13 +130,7 @@ function createGuard(opts: GuardOpts): GuardApi {
   }
 
   function writeJson(file: string, value: unknown): void {
-    fs.mkdirSync(path.dirname(file), { recursive: true });
-    const tmp = file + '.tmp-' + Date.now();
-    fs.writeFileSync(tmp, JSON.stringify(value, null, 2) + '\n');
-    try { fs.renameSync(tmp, file); } catch {
-      fs.rmSync(file, { force: true, maxRetries: 3 });
-      fs.renameSync(tmp, file);
-    }
+    writeJsonAtomic(file, value);
   }
 
   // ── 快照 / 回滚（plugin-guard 的核心）────────────────────────────────

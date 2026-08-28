@@ -1,16 +1,27 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
+import { readFileSync, existsSync } from 'node:fs';
 
 const GROUPS_SRC = readFileSync(new URL('../assets/plugins/dsh-settings-groups/lib/client.js', import.meta.url), 'utf8');
-const NAV_SRC = readFileSync(new URL('../assets/plugins/dsh-settings-nav-custom/lib/client.js', import.meta.url), 'utf8');
+const SYNC_SRC = readFileSync(new URL('../lib/desktop/companion-sync.ts', import.meta.url), 'utf8');
 
-// V4.6.1 架构：侧边栏唯一写者为 dsh-settings-nav-custom，groups 不再触碰
-// 侧边栏 — 避免两个 MutationObserver 对同一批行拉锯导致抽搐。旧的共存
-// 标记/豁免/指纹耦合全部删除，groups 只保留页内折叠。
+// 5.1.1 架构：侧边栏「普通/高级」分组随 dsh-settings-nav-custom 一并退役
+// （用户裁定该分栏无用），设置页左侧回归 ui-settings-general 的官方原生
+// order 平铺。groups 继续只负责「常规页」页内折叠，且绝不能重新接管侧边栏。
 
-test('groups no longer touches the sidebar (single writer)', () => {
-  assert.ok(!GROUPS_SRC.includes("'eac:settings-nav:v1'"), 'groups must not reference nav-custom storage');
+test('nav-custom is retired and never comes back', () => {
+  assert.ok(!existsSync(new URL('../assets/plugins/dsh-settings-nav-custom/package.json', import.meta.url)),
+    'dsh-settings-nav-custom 插件目录必须删除');
+  assert.match(SYNC_SRC, /id:\s*'settings-nav-custom'/,
+    'nav-custom 必须登记在 RETIRED_BUILTIN_PLUGINS（启动时清理老 profile 残留行/包副本）');
+  const companionStart = SYNC_SRC.indexOf('const COMPANION_PLUGINS');
+  const companionSlice = SYNC_SRC.slice(companionStart, SYNC_SRC.indexOf('];', companionStart));
+  assert.doesNotMatch(companionSlice, /settings-nav-custom/,
+    'nav-custom 绝不能回到 COMPANION_PLUGINS —— 复活会再次注入普通/高级分栏');
+});
+
+test('groups no longer touches the sidebar', () => {
+  assert.ok(!GROUPS_SRC.includes("'eac:settings-nav:v1'"), 'groups must not reference nav storage');
   assert.ok(!GROUPS_SRC.includes('applyNav'), 'groups must not contain sidebar applyNav');
   assert.ok(!GROUPS_SRC.includes('eac-settings-groups-navhead'), 'groups must not contain sidebar heads');
   assert.ok(!GROUPS_SRC.includes('data-eac-adv-fold'), 'groups must not contain fold markers');
@@ -20,17 +31,4 @@ test('groups still folds the general page items', () => {
   assert.ok(GROUPS_SRC.includes('applySection'), 'general-page folding must remain');
   assert.ok(GROUPS_SRC.includes('DEFAULT_ADVANCED_KEYWORDS'), 'general-page keywords must remain');
   assert.ok(GROUPS_SRC.match(/function scan[^]*?applySection/), 'scan must still drive general-page folding');
-});
-
-test('nav-custom now owns sidebar grouping and folding', () => {
-  assert.ok(NAV_SRC.includes("'eac:sidebar:v2'"), 'nav-custom must own new fold key');
-  assert.ok(NAV_SRC.includes('SIDEBAR_ADVANCED_KEYWORDS'), 'nav-custom must own sidebar keywords');
-  assert.ok(NAV_SRC.includes('computeSidebarLayout'), 'nav-custom must expose layout pure function');
-  assert.ok(NAV_SRC.includes('migrateFoldConfig'), 'nav-custom must migrate legacy fold key');
-  assert.ok(NAV_SRC.includes('eac-settings-groups-navhead') || NAV_SRC.includes('eac-sidebar-head'), 'nav-custom must create sidebar heads');
-});
-
-test('nav-custom default fold is collapsed (收起)', () => {
-  assert.match(NAV_SRC, /folded:\s*true/);
-  assert.ok(NAV_SRC.includes("'eac:settings-groups-nav:v1'"), 'nav-custom must read legacy fold key for migration');
 });

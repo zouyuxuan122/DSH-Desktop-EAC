@@ -39,7 +39,7 @@
 - `tauri-shell/sidecar/*.ts`：TypeScript 是事实源，同名 `.js` 由构建生成。
 - `tauri-shell/src/main.rs`：Rust 壳事实源。
 - `dsh-desktop/assets/plugins/**`：可能是自研源码、第三方源码或预构建产物，修改前先看包来源和许可证。
-- `dsh-desktop/main.js`、`preload.js`：冻结 Electron 兼容链，不作为新功能默认落点。
+- Electron 壳链（`main.js` / `preload.js` / `electron-builder.yml`）已随 5.1.x 瘦身退役删除；窗口桥单源 = `dsh-desktop/assets/ws-jsonrpc-client.js` + `tauri-shell/sidecar/bridge.ts`（build.rs 拼装注入）。
 
 ## 受控依赖补丁
 

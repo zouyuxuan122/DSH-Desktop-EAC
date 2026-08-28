@@ -33,7 +33,7 @@ import { NS } from './config.js';
 import { settingsNamespace } from '@deepseek-ai/dsh-settings';
 import z from '@deepseek-ai/schemastery';
 import { ensureSettingsNamespaceExposed } from './settings-expose.js';
-import { setRuntimeSource } from './runtime.js';
+import { setRuntimeSource, getRuntimeConfig } from './runtime.js';
 import { attachImageBridge } from './bridge.js';
 import { registerTwinAdapters } from './picturereader-vision.mjs';
 import { writeFile, readFile, mkdir } from 'node:fs/promises';
@@ -202,7 +202,7 @@ const Config = z.object({
   ocr_engine: z
     .string()
     .default('windows')
-    .description('默认 OCR 引擎：windows / paddle / rapid'),
+    .description('默认 OCR 引擎：windows / paddle / rapid / macos'),
   vlm_timeout_ms: z
     .number()
     .default(300000)
@@ -313,7 +313,7 @@ export function apply(ctx, config) {
       const handler = async (req, res) => {
         try {
           const data = await readFile(MODELS_CACHE, 'utf-8');
-          console.log('[picturereader] models route: read', data.length, 'bytes from', MODELS_CACHE);
+          if (getRuntimeConfig()?.debug) console.log('[picturereader] models route: read', data.length, 'bytes from', MODELS_CACHE);
           res.writeHead(200, { 'content-type': 'application/json' });
           res.end(data);
         } catch (err) {
