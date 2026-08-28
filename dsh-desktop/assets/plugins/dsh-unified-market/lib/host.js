@@ -39,7 +39,7 @@ import { scanCandidate, collectProfileState } from './plugin-conflict-scan.mjs'
 export const name = 'dsh-unified-market'
 
 /** 本市场自身版本（与 package.json 同步；自更新检测用）。 */
-export const SELF_VERSION = '0.3.0'
+export const SELF_VERSION = '0.3.1'
 
 /** Hard dependency: the HTTP carrier must exist before the route registers. */
 export const inject = ['webServer']
@@ -1653,17 +1653,30 @@ const PACKS_CACHE_TTL = 5 * 60 * 1000
 let packsCache = null // { at, packs, source }
 const PACK_UPLOAD_MAX = 128 * 1024 * 1024
 
-function packCliPath() {
+// 定位功能包 CLI，返回 { cli, reason }：cli 为 null 时 reason 给出用户可
+// 行动的原因 —— 区分「桌面壳未注入环境变量」（壳过旧/非桌面端）与「CLI
+// 文件不存在」（客户端安装不完整或版本过旧，需升级/重装客户端）。
+// 0.3.0 及之前两种失败统一误报"缺少 DSH_DESKTOP_RESOURCE_ROOT"，排障困难。
+function packCliStatus() {
   const root = process.env.DSH_DESKTOP_RESOURCE_ROOT
-  if (!root) return null
+  if (!root) {
+    return { cli: null, reason: '功能包 CLI 不可用（桌面壳未注入 DSH_DESKTOP_RESOURCE_ROOT：若在浏览器等非桌面环境请改用桌面客户端，若已在桌面端请升级客户端）' }
+  }
   const cli = join(root, 'scripts', 'feature-pack-cli.js')
-  try { return existsSync(cli) ? cli : null } catch { return null }
+  try {
+    if (existsSync(cli)) return { cli, reason: null }
+  } catch { /* existsSync 异常按缺失处理 */ }
+  return { cli: null, reason: '功能包 CLI 不可用（桌面客户端缺少 ' + cli + '，客户端安装不完整或版本过旧，请升级或重装桌面客户端）' }
+}
+
+function packCliPath() {
+  return packCliStatus().cli
 }
 
 /** 同步跑功能包 CLI（快命令：list/inspect/export/rollback/scan）。 */
 function runPackCli(args) {
-  const cli = packCliPath()
-  if (!cli) return { ok: false, error: '功能包 CLI 不可用（缺少 DSH_DESKTOP_RESOURCE_ROOT，请在桌面壳内使用）' }
+  const { cli, reason } = packCliStatus()
+  if (!cli) return { ok: false, error: reason }
   let r
   try {
     r = spawnSync(process.execPath, [cli, ...args], {
@@ -1686,8 +1699,8 @@ function runPackCli(args) {
 
 /** 异步慢命令（install/uninstall/update）作为 op 跑，复用现有 op 轮询模型。 */
 function startPackOp(packArgs, label, initialOutput) {
-  const cli = packCliPath()
-  if (!cli) return { ok: false, error: '功能包 CLI 不可用（缺少 DSH_DESKTOP_RESOURCE_ROOT，请在桌面壳内使用）' }
+  const { cli, reason } = packCliStatus()
+  if (!cli) return { ok: false, error: reason }
   if (activeOp && activeOp.status === 'running') {
     return { ok: false, busy: true, output: '已有任务进行中：' + activeOp.label }
   }

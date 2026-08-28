@@ -954,6 +954,18 @@ fn sanitize_label(s: &str) -> String {
     }
 }
 
+/// Windows 任务栏/标题栏图标：tao 注册的窗口 class 不带图标（WNDCLASSEXW
+/// 的 hIcon/hIconSm 为 NULL），动态创建的窗口不显式注入图标时，任务栏按钮
+/// 会显示空白默认图。default_window_icon 与托盘同源（tauri-build 嵌入的
+/// bundle icon）；set_icon 失败只影响观感，不阻塞窗口创建。
+fn apply_window_icon(win: &tauri::WebviewWindow, app: &tauri::AppHandle) {
+    if let Some(icon) = app.default_window_icon() {
+        if let Err(e) = win.set_icon(icon.clone()) {
+            eprintln!("[shell] window icon set failed: {}", e);
+        }
+    }
+}
+
 /// 会话浮窗（硬门槛①）：第二个 WebviewWindow + 独立 data_directory
 /// （= Electron 的 persist:dsh-float 分区），与主窗 localStorage 隔离。
 /// 同一会话复用同一标签 → 单浮窗；返回 false 表示已存在（show+focus）。
@@ -1001,9 +1013,8 @@ fn open_float_window(app: &tauri::AppHandle, session_id: &str) -> Result<bool, S
             ));
         }
     }
-    builder
-        .build()
-        .map_err(|e| e.to_string())?;
+    let win = builder.build().map_err(|e| e.to_string())?;
+    apply_window_icon(&win, app);
     println!("[shell] float window {} created", label);
     Ok(true)
 }
@@ -1037,9 +1048,12 @@ fn open_recovery_center_window(app: &tauri::AppHandle) -> bool {
         .data_directory(data_dir)
         .disable_drag_drop_handler()
         .focused(true);
-    if let Err(e) = builder.build() {
-        eprintln!("[shell] recovery-center window build failed: {}", e);
-        return false;
+    match builder.build() {
+        Ok(win) => apply_window_icon(&win, app),
+        Err(e) => {
+            eprintln!("[shell] recovery-center window build failed: {}", e);
+            return false;
+        }
     }
     println!("[shell] recovery-center window created");
     true
@@ -1697,6 +1711,7 @@ fn main() {
                                     }
                                     match builder.build() {
                                         Ok(win) => {
+                                            apply_window_icon(&win, &app_win);
                                             if sim_max {
                                                 let _ = win.maximize();
                                             }
@@ -1787,6 +1802,7 @@ fn main() {
                                         }
                                         match builder.build() {
                                             Ok(win) => {
+                                                apply_window_icon(&win, &app_died);
                                                 if sim_max {
                                                     let _ = win.maximize();
                                                 }

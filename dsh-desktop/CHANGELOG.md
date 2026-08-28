@@ -58,6 +58,33 @@ next2（功能包体系：.dshpack 打包分发插件+预设+技能，声明官�
     → `jing-hy`（自研，GitHub 仓库归属一致）。
 - 英文版致谢表补上此前缺失的 `computer-user` 条目，与中文版对齐。
 
+## 功能包链路修复 + 任务栏图标 · next
+
+### 打包装配：功能包 CLI 白名单补齐（tauri-shell/stage-resources.mjs）
+
+- 修复功能包体系随包分发缺失：#237 新增的 `scripts/feature-pack-cli.js` 与
+  `lib/desktop/feature-pack.js` 未加入 stage 脚本的 `LIB_DESKTOP`/`SCRIPTS`
+  人工白名单，导致打包产出的客户端缺失功能包 CLI，统一市场「📦 功能包」
+  全部操作报「功能包 CLI 不可用（缺少 DSH_DESKTOP_RESOURCE_ROOT）」。
+- 两文件补入白名单，并新增成对装配自检：CLI 与核心模块必须同时入包，
+  缺一即 stage 直接失败（后续新增随包 CLI 照此成对补充）。
+
+### Tauri 壳：Windows 任务栏图标修复（tauri-shell/src/main.rs）
+
+- tao 注册的窗口 class 不带图标（`WNDCLASSEXW.hIcon` 为 NULL），动态创建的
+  窗口不显式注入图标时，Windows 任务栏按钮显示空白默认图。
+- 主窗 / 会话浮窗 / 恢复中心 / died 页四处窗口统一在 build 成功后经
+  `apply_window_icon` 注入 `default_window_icon`（与托盘图标同源，tauri-build
+  嵌入的 bundle icon）；注入失败仅打印告警，不阻塞窗口创建。
+
+### 内置插件：dsh-unified-market 0.3.0 → 0.3.1
+
+- 同步上游 0.3.1（npm `dsh-unified-market@0.3.1`）：功能包 CLI 定位失败区分
+  「桌面壳未注入 `DSH_DESKTOP_RESOURCE_ROOT`」与「CLI 文件不存在（客户端安装
+  不完整或版本过旧）」两种原因，给出可行动提示（升级 / 重装桌面客户端），
+  修复 0.3.0 及之前统一误报"缺少 DSH_DESKTOP_RESOURCE_ROOT"导致用户在桌面端
+  却被提示去桌面端的排障误导。
+
 ## 功能包体系（Feature Pack · 借鉴 HMCL 整合包架构）· next
 
 ### 功能包（.dshpack）：插件 + 预设 + 技能打包分发

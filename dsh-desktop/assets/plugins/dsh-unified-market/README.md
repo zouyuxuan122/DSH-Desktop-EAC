@@ -1,11 +1,15 @@
 # dsh-unified-market — 统一插件市场（Unified Plugin Market for DeepSeek Harness）
 
+[![version](https://img.shields.io/badge/version-0.3.0-2563eb)](https://github.com/jing-hy/dsh-unified-market/releases) [![license](https://img.shields.io/badge/license-MIT-green)](./LICENSE) [![node ≥18.18](https://img.shields.io/badge/node-%E2%89%A518.18-339933?logo=nodedotjs&logoColor=white)](https://github.com/jing-hy/dsh-unified-market)
+
 > 一个市场，三个数据源：**精选目录 + GitHub dsh-plugin 生态 + npm registry**。
 > 对 DSH Desktop（EAC）针对性适配，开箱即用的插件安装 / 更新 / 自动更新 / 管理。
 
 在设置页 **设置 → 插件 → 🛒 统一市场** 提供一站式体验：三源切换、分类下拉筛选、
 已下载插件更新面板（一键全部更新 / 逐个更新 / 自动更新三档开关）、更新进度窗口、
 市场自身自更新。
+
+**English**: A unified plugin marketplace for DeepSeek Harness. It merges three sources — the curated awesome-dsh-plugin catalog, the GitHub `dsh-plugin` ecosystem and the npm registry — into one storefront inside DSH Desktop (EAC), with source whitelisting, conflict pre-checks, trial-boot install verification, update management (manual / batch / auto) and `.dshpack` feature-pack management.
 
 > **v0.3.0 起新增「📦 功能包」tab**：EAC 功能包（.dshpack）的安装 / 卸载 / 更新 /
 > 导出 / 回滚与管理（本包承担交互编排层，核心逻辑在 L2 功能包 CLI，见下）。
@@ -29,6 +33,8 @@
 ---
 
 ## 对 EAC 的针对性适配
+
+> **版本适配基线**：当前版本对 **DSH Desktop（EAC）5.1** 与 **dsh 0.1.1-rc.2** 进行过专项适配测试，为推荐的运行组合；其余官方版本的兼容性以桌面壳内置的兼容扫描结果为准。
 
 EAC（DeepSeek Harness Desktop）的 Web UI 跑在**桌面专属 profile `web-desktop`**
 （由主进程通过 `DSH_DESKTOP_PROFILE` 注入）。旧市场中：
@@ -184,6 +190,11 @@ host 半边运行在 `dsh web` 进程（Cordis plugin，注入 `webServer`）。
 - **0.3.0**（2026）：新增「📦 功能包」tab 与 `pack.*` host 方法 —— EAC 功能包
   （.dshpack）的交互编排层（安装/卸载/更新/导出/回滚/市场浏览 + 官方内核兼容扫描
   联动），SELF_VERSION 与 package.json 同步 0.3.0。
+- **0.3.1**（2026）：修复功能包 CLI 定位失败的误导性报错 —— 0.3.0 及之前，
+  「桌面壳未注入 `DSH_DESKTOP_RESOURCE_ROOT`」与「CLI 文件不存在（客户端安装
+  不完整/版本过旧）」两种失败统一误报"缺少 DSH_DESKTOP_RESOURCE_ROOT"，用户
+  明明在桌面端却被提示去桌面端，排障困难；现 `packCliStatus()` 区分两种原因
+  并给出可行动提示（升级/重装桌面客户端）。
 
 ## 发布
 

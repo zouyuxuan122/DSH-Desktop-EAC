@@ -42,11 +42,11 @@ const LIB_DESKTOP = [
   'file-roots.js', 'proc.js', 'platform.js', 'runtime-paths.js', 'profile.js', 'guard-box.js',
   'runtime-patches.js', 'companion-sync.js', 'plugin-ops.js', 'market.js',
   'shortcuts.js', 'junction-patrol.js', 'client-update.js', 'static-preview.js',
-  'boot-server.js',
+  'boot-server.js', 'feature-pack.js',
 ];
 const SCRIPTS = [
   'patch-session-manage.js', 'plugin-manager-patch.js',
-  'onboarding.js', 'patch-deps.js',
+  'onboarding.js', 'patch-deps.js', 'feature-pack-cli.js',
 ];
 
 // vnext 隔离体系（vnext-absorb Phase 2）：sidecar require 的 lib/{state,log,
@@ -247,6 +247,18 @@ for (const f of NATIVE_MODULES) {
 mkdirSync(path.join(staged, 'dsh-desktop', 'scripts'), { recursive: true });
 for (const f of SCRIPTS) {
   copyRequired(path.join(dd, 'scripts', f), path.join(staged, 'dsh-desktop', 'scripts', f), '脚本');
+}
+// 功能包链路自检（copyRequired 保证源存在，这里校验"成对"装配）：
+// scripts/feature-pack-cli.js 与 lib/desktop/feature-pack.js 必须同时入包 ——
+// CLI 运行时 require ../lib/desktop/feature-pack，漏一个功能包页就整体不可用
+// （市场插件只能报"功能包 CLI 不可用"）。后续新增随包 CLI 照此成对补充。
+{
+  const cli = path.join(staged, 'dsh-desktop', 'scripts', 'feature-pack-cli.js');
+  const core = path.join(staged, 'dsh-desktop', 'lib', 'desktop', 'feature-pack.js');
+  if (existsSync(cli) !== existsSync(core)) {
+    throw new Error('[stage] 功能包链路装配不完整：feature-pack-cli.js 与 feature-pack.js 必须同时入包');
+  }
+  if (existsSync(cli)) console.log('[stage] 功能包链路自检通过（CLI + 核心）');
 }
 // package.json + lock 原样拷贝（npm ci 要求两者一致；--omit=dev 只装生产树）。
 // .npmrc（legacy-peer-deps）必须随行：内核包互相声明 peer，staged 目录里的
