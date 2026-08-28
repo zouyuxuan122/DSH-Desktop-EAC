@@ -75,6 +75,44 @@ function patchSettingsNavScroll(): void {
   console.log('[patch-deps] 已补丁 settings-general：设置弹窗左栏可滚动，底部条目不再被裁掉');
 }
 
+// 设置弹窗宽度自适应 + 可拖拽拉伸补丁：上游 panel 固定 width:800px，大屏
+// 主窗里右侧内容拥挤且用户无法调整。两件事：
+//   1) width 改 min(75vw,1280px) —— 100vw 即主窗视口宽，弹窗跟随主窗宽度
+//      伸缩（cap 1280 防大屏占比过大）；max-width calc(100vw - 48px) 保留
+//      （窄窗收敛语义不变）。
+//   2) overflow:hidden 放开为 auto + resize:horizontal —— 允许拖右下角
+//      手柄手动调宽；panel 是 flex 容器（左栏 flex:none 固定 188px、内容
+//      区 flex:1 min-width:0 自适应），panel 变宽后内容自然跟随；子树已有
+//      自身滚动约束，panel 的 overflow:auto 不会产生意外滚动条；min-width
+//      防拖到不可用。幂等标记 dsh-desktop-panel-resize。
+const PANEL_RESIZE_MARKER = 'dsh-desktop-panel-resize';
+const PANEL_RE =
+  /\.([A-Za-z0-9_-]+)_panel\{(z-index:1;background:var\(--dsw-alias-bg-layer-2\);)width:800px;(max-width:[^;]+;height:[^;]+;[^{}]*?display:flex;position:relative;)overflow:hidden\}/;
+
+function patchSettingsPanelResize(): void {
+  const file = path.join(root, 'node_modules', '@deepseek-ai', 'dsh-client-ui-settings-general', 'lib', 'client.js');
+  if (!fs.existsSync(file)) {
+    console.log('[patch-deps] dsh-client-ui-settings-general 不存在，跳过');
+    return;
+  }
+  let src = fs.readFileSync(file, 'utf8');
+  if (src.includes(PANEL_RESIZE_MARKER)) {
+    console.log('[patch-deps] 设置弹窗宽度补丁已应用，跳过');
+    return;
+  }
+  const m = PANEL_RE.exec(src);
+  if (!m) {
+    console.log('[patch-deps] 设置弹窗未匹配到 panel CSS（上游版本可能已修复/更新），跳过');
+    return;
+  }
+  const next =
+    '.' + m[1] + '_panel{' + m[2] + 'width:min(75vw,1280px);' + m[3] +
+    'overflow:auto;resize:horizontal;min-width:640px;/*' + PANEL_RESIZE_MARKER + '*/}';
+  src = src.replace(m[0], next);
+  fs.writeFileSync(file, src);
+  console.log('[patch-deps] 已补丁 settings-general：弹窗宽度跟随主窗（≤1280px）+ 可拖拽拉伸');
+}
+
 // 函数工具桥接兼容补丁：部分外部工具适配器忽略 JSON Schema 的 required 数组，
 // 把所有 properties 错当成必填。全权限默认策略下不存在可升级的更宽模式，仍
 // 暴露 sandbox_permissions/justification 会让适配器强制提交一条必然失败的同级
@@ -351,6 +389,7 @@ function patchMenuSubmenuScroll(file?: string): boolean {
 function main(): void {
   patchPickerWorker();
   patchSettingsNavScroll();
+  patchSettingsPanelResize();
   patchOptionalEscalationFields();
   patchAgentPresetMenu();
   patchMenuSubmenuScroll();

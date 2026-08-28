@@ -92,6 +92,16 @@ next2（功能包体系：.dshpack 打包分发插件+预设+技能，声明官�
   判为旧版本异常残留，直接丢弃走首启默认并打印告警，不再每次启动都恢复成
   小窗；正常拖小（≥ 下限）的窗口记忆不受影响。
 
+### 设置弹窗宽度自适应 + 可拖拽拉伸（scripts/patch-deps.ts）
+
+- 上游设置弹窗 panel 固定 `width:800px`，大屏主窗里右侧内容拥挤且无法调整。
+- 新增 `patchSettingsPanelResize`：panel 宽度改 `min(75vw,1280px)` 跟随主窗
+  视口宽伸缩；`overflow:hidden` 放开为 `auto` 并加 `resize:horizontal` +
+  `min-width:640px`，可拖右下角手柄手动调宽。panel 为 flex 容器（左栏固定
+  188px、内容区 `flex:1` 自适应），宽度变化后内容自然跟随；子树自带滚动
+  约束，panel 自身不产生滚动条。
+- 幂等标记 `dsh-desktop-panel-resize`；类名哈希用捕获组匹配兼容上游小版本。
+
 ### 内置插件：dsh-unified-market 0.3.0 → 0.3.1
 
 - 同步上游 0.3.1（npm `dsh-unified-market@0.3.1`）：功能包 CLI 定位失败区分
