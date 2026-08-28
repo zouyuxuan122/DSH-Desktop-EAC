@@ -41,6 +41,45 @@ next2（功能包体系：.dshpack 打包分发插件+预设+技能，声明官�
 官方版本升级自动检出并一键迁移/回滚 —— 核心在 L2 功能包引擎 + CLI，
 交互集成进 dsh-unified-market 插件；详见下方「功能包体系（Feature Pack）」批次）
 
+## 新建对话滚动残余加固 + CI 测试挂起防护 + macOS CI · next
+
+### settings-scroll-fix 2.0.2：会话树守卫收窄 + dialog 分支补判定（assets/plugins/dsh-settings-scroll-fix/）
+
+- 「设置根」守卫 `CONVERSATION_GUARD_SELECTOR` 从 `[data-phase], [data-conversation-scroll],
+  [data-composer-seat]` 收窄为后两者：`[data-phase]` 并非会话骨架独占 —— 设置弹层的
+  plugin-inventory 分区条目同样挂 `data-phase`，一旦浮层缺失 `role=dialog`，守卫会把设置
+  弹层自己误判成「含会话树」整条拒绝，设置滚动修复整体失效。评分排除列表同步收窄，
+  与守卫保持同一套会话契约语义。
+- `promoteToSettingsRoot` 的 `role=dialog` 分支补上 `!containsConversationTree` 判定：
+  含会话树的 dialog 形态大框（种子失真）同样不得充当设置根，与 250x180 分支同一契约。
+- package.json 2.0.1 → 2.0.2（lib 产物随构建同步）。新增 3 个回归用例：hero 整页框架
+  （含会话树）一律不打标、含会话树的 role=dialog 被拒、弹层内 `data-phase` 条目不再令
+  弹层被误拒 —— 最后一条对 2.0.1 产物反向验证为红，确认测试有效。
+
+### 手机桥代理响应修复 + 测试句柄泄漏根治（tauri-shell/sidecar/phone-bridge.ts、test/phone-bridge.test.ts）
+
+- 修复 5.2.0 反向代理响应头双 framing：HTML polyfill 注入分支重建响应体后新增
+  `content-length`，却保留了上游的 `transfer-encoding: chunked`，`Content-Length can't
+  be present with Transfer-Encoding` 属非法响应，Node http client 直接
+  `HPE_INVALID_CONTENT_LENGTH` 拒收（HTML 代理面对真实浏览器同样非法）；gzip 重编码
+  分支同步补删 `transfer-encoding`，framing 一律由 Node 依最终头自行选择。
+- 测试加固：三个起桥用例（桌面批准 / gzip+SSE / WebSocket 透传）在 finally 兜底
+  `bridge.stop()` —— 此前断言失败会跳过 try 尾的 stop，桥监听句柄泄漏令
+  node --test 文件进程永不退出（「测试全跑完但套件挂住」的直接来源）。
+- `npm test` 传 `--test-force-exit` 作进程级兜底：任何残余句柄不再能拖死整套件。
+
+### CI：npm test 加单测超时与强制退出防护（dsh-desktop/package.json）
+
+- `npm test` 显式传 `test/*.test.ts` glob（恢复 test-runner 的原发现语义；缺 glob 时
+  `node --test` 走默认发现，文件集不同且未退出）+ `--test-timeout=120000` +
+  `--test-force-exit`：挂起单测 2 分钟内点名并快速失败，`force-exit` 作进程级兜底
+  （配合 ci.yml nick-fields retry 的 15 分钟超时窗）。
+- 根因：CI runner 镜像在 2026-08-28 03:42（镜像 `20260818.207.1`）和之后
+  （镜像 `20260824.214.3`）滚动更新；后者「运行测试」步骤确定性挂起
+  （430 个用例完成后 15 分钟零输出，3 次重试全超时），而本地同 Node v24.19.0 却
+  48 秒全绿。定位到 `phone-bridge.test.ts` 断言失败（代理响应双 framing）+
+  监听句柄泄漏 → 进程不退出。
+
 ## 文档：插件致谢补齐提供者并按首字母排序 · next
 
 ### README.md / README.en.md「插件致谢」

@@ -153,8 +153,9 @@ test('phone bridge: 桌面批准 → approved + cookie + 完整代理（Host/Ori
   kernel.listen(0, '127.0.0.1')
   await once(kernel, 'listening')
 
+  let bridge: ReturnType<typeof launch>['bridge'] | null = null
   try {
-    const { bridge } = launch(kernel)
+    bridge = launch(kernel).bridge
     const info = await bridge.start()
     const base = `http://127.0.0.1:${info.port}`
     const token = new URL(info.url).searchParams.get('token') as string
@@ -202,6 +203,9 @@ test('phone bridge: 桌面批准 → approved + cookie + 完整代理（Host/Ori
     await bridge.stop()
   } finally {
     kernel.close()
+    // 断言失败也必须停桥：泄漏的监听句柄会让 node --test 进程永不退出
+    // （全量测试「跑完不退出」挂起的直接来源）。stop 幂等，重复调用无害。
+    if (bridge !== null) await bridge.stop().catch(() => {})
   }
 })
 
@@ -223,8 +227,9 @@ test('phone bridge: POST /api JSON 大响应按 Accept-Encoding 压缩，SSE/静
   })
   kernel.listen(0, '127.0.0.1')
   await once(kernel, 'listening')
+  let bridge: ReturnType<typeof launch>['bridge'] | null = null
   try {
-    const { bridge } = launch(kernel)
+    bridge = launch(kernel).bridge
     const info = await bridge.start()
     const base = `http://127.0.0.1:${info.port}`
     bridge.decide(true)
@@ -249,6 +254,7 @@ test('phone bridge: POST /api JSON 大响应按 Accept-Encoding 压缩，SSE/静
     await bridge.stop()
   } finally {
     kernel.close()
+    if (bridge !== null) await bridge.stop().catch(() => {})
   }
 })
 
@@ -261,8 +267,9 @@ test('phone bridge: WebSocket 升级透传（需配对 cookie）', async () => {
   })
   kernel.listen(0, '127.0.0.1')
   await once(kernel, 'listening')
+  let bridge: ReturnType<typeof launch>['bridge'] | null = null
   try {
-    const { bridge } = launch(kernel)
+    bridge = launch(kernel).bridge
     const info = await bridge.start()
     const base = `http://127.0.0.1:${info.port}`
 
@@ -280,6 +287,7 @@ test('phone bridge: WebSocket 升级透传（需配对 cookie）', async () => {
     await bridge.stop()
   } finally {
     kernel.close()
+    if (bridge !== null) await bridge.stop().catch(() => {})
   }
 })
 

@@ -68,7 +68,11 @@ window.__ModuleLoader__.load({
     // portal 到 body 的浮层，绝不会包含会话树；候选"设置根"一旦包含
     // 这些节点，说明种子匹配失真（如侧栏"设置"按钮把公共祖先爬到整页
     // 框架），必须整条丢弃 —— 否则修复器会把对话区大盒子当滚动容器打标。
-    const CONVERSATION_GUARD_SELECTOR = '[data-phase], [data-conversation-scroll], [data-composer-seat]'
+    // 只收 [data-conversation-scroll] / [data-composer-seat] 两个会话骨架
+    // 独占属性：[data-phase] 不是会话专属（设置弹层的 plugin-inventory
+    // 分区条目同样挂 data-phase），纳入判定会把设置浮层自己误判成"含
+    // 会话树"而整条拒绝，令修复在 role=dialog 缺失的形态下整体失效。
+    const CONVERSATION_GUARD_SELECTOR = '[data-conversation-scroll], [data-composer-seat]'
 
     function containsConversationTree(element) {
       try {
@@ -84,7 +88,9 @@ window.__ModuleLoader__.load({
         if (current === document.body || current === document.documentElement) break
         const rect = rectOf(current)
         const role = String(current.getAttribute('role') || '').toLowerCase()
-        if (role === 'dialog' && rect.width >= 200 && rect.height >= 150 && settingsSignalCount(current) >= 1) return current
+        // dialog 分支同样要求不含会话树：浮层形态的"设置根"绝不含
+        // 会话骨架，含之即为种子失真（与下方 250x180 分支同一判定）。
+        if (role === 'dialog' && rect.width >= 200 && rect.height >= 150 && settingsSignalCount(current) >= 1 && !containsConversationTree(current)) return current
         if (rect.width >= 250 && rect.height >= 180 && settingsSignalCount(current) >= 2) {
           // 含会话树的大框（整页框架/中心列）不是设置浮层：hero 首页的
           // "设置"按钮等词表命中会把公共祖先爬到这里，误标会话区。
@@ -158,8 +164,11 @@ window.__ModuleLoader__.load({
       // composerStack 因发光背景 svg 天然 scrollHeight > clientHeight，
       // 曾经以此得分被打上滚动容器标记，overflow-y:auto 连带 overflow-x
       // 变 auto，横竖双滚动条 + 输入卡底部裁切（2026-08-28 事故）。
+      // 排除列表与"设置根"守卫同一套会话骨架契约（不含 [data-phase]，
+      // 理由见 CONVERSATION_GUARD_SELECTOR），[class*="composer"] 对
+      // 内核 CSS-module 哈希类名（*_composer*）作纵深兜底。
       try {
-        if (element.matches('[data-phase], [data-conversation-scroll], [data-composer-seat], [data-composer-card], [class*="composer"]')) return -1
+        if (element.matches('[data-conversation-scroll], [data-composer-seat], [data-composer-card], [class*="composer"]')) return -1
         if (element.closest('[data-conversation-scroll]') !== null) return -1
       } catch {
         // 选择器不受支持时按不排除处理，保持旧行为。

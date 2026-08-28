@@ -312,8 +312,12 @@ export function createPhoneBridge(options: PhoneBridgeOptions) {
             req.method === 'POST' && pathName.startsWith('/api/') && contentType.includes('application/json');
           if (isUnaryJson && wantsGzip) {
             const headers = { ...up.headers };
+            // 上游 chunked 头不能带着转发：重编码后由 Node 依 content-length
+            // 自选 framing，保留会与显式 content-length 冲突（非法响应，
+            // Node http client 直接 HPE_INVALID_CONTENT_LENGTH 拒收）。
             delete headers['content-length'];
             delete headers['content-encoding'];
+            delete headers['transfer-encoding'];
             res.writeHead(up.statusCode ?? 200, { ...headers, 'content-encoding': 'gzip', vary: 'accept-encoding' });
             up.pipe(zlib.createGzip()).pipe(res);
           } else if (!isUnaryJson && contentType.includes('text/html') && up.headers['content-encoding'] === undefined) {
@@ -327,6 +331,9 @@ export function createPhoneBridge(options: PhoneBridgeOptions) {
               body = body.slice(0, injectAt) + RANDOMUUID_POLYFILL + body.slice(injectAt);
               const payload = Buffer.from(body, 'utf8');
               const headers = { ...up.headers };
+              // 同上：体已重建（polyfill 注入）且显式声明 content-length，
+              // 必须丢弃上游 transfer-encoding，否则双 framing 非法。
+              delete headers['transfer-encoding'];
               headers['content-length'] = String(Buffer.byteLength(payload));
               res.writeHead(up.statusCode ?? 200, headers);
               res.end(payload);
