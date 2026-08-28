@@ -1,0 +1,158 @@
+/** @typedef {import('./types').OfflineStreamObject} OfflineStreamObject */
+/** @typedef {import('./types').OfflineStreamHandle} OfflineStreamHandle */
+/** @typedef {import('./types').OfflineRecognizerHandle} OfflineRecognizerHandle */
+/** @typedef {import('./types').Waveform} Waveform */
+/**
+ * @typedef {import('./types').OfflineRecognizerConfig} OfflineRecognizerConfig
+ */
+/**
+ * @typedef {import('./types').OfflineRecognizerResult} OfflineRecognizerResult
+ */
+
+const addon = require('./addon.js');
+
+/**
+ * Internal symbol to mark async-created recognizers.
+ * Not accessible unless someone has a reference to this Symbol.
+ */
+const kFromAsyncFactory = Symbol('OfflineRecognizer.fromAsync');
+
+/**
+ * OfflineStream represents a synchronous offline audio stream.
+ */
+class OfflineStream {
+  /**
+   * @param {OfflineStreamObject|Object} handle
+   */
+  constructor(handle) {
+    this.handle = handle;
+  }
+
+  /**
+   * Accept a chunk of waveform samples.
+   * @param {Waveform} obj - { samples: Float32Array, sampleRate: number }
+   */
+  acceptWaveform(obj) {
+    addon.acceptWaveformOffline(this.handle, obj);
+  }
+
+  /**
+   * Set a string option on the underlying offline stream.
+   * @param {string} key
+   * @param {string} value
+   */
+  setOption(key, value) {
+    addon.offlineStreamSetOption(this.handle, key, value);
+  }
+}
+
+/**
+ * OfflineRecognizer wraps the native offline recognizer.
+ */
+class OfflineRecognizer {
+  /**
+   * Constructor (SYNC path).
+   *
+   * Users call:
+   *   new OfflineRecognizer(config)
+   *
+   * Async factory calls this with an internal descriptor.
+   *
+   * @param {OfflineRecognizerConfig | Object} configOrInternal
+   */
+  constructor(configOrInternal) {
+    // ----- async factory path -----
+    if (configOrInternal && typeof configOrInternal === 'object' &&
+        configOrInternal[kFromAsyncFactory]) {
+      this.handle = configOrInternal.handle;
+      this.config = configOrInternal.config;
+      return;
+    }
+
+    // ----- sync constructor path -----
+    this.config = configOrInternal;
+    this.handle = addon.createOfflineRecognizer(this.config);
+  }
+
+  /**
+   * Create an OfflineRecognizer asynchronously (non-blocking).
+   *
+   * @param {OfflineRecognizerConfig} config
+   * @returns {Promise<OfflineRecognizer>}
+   */
+  static async createAsync(config) {
+    const handle = await addon.createOfflineRecognizerAsync(config);
+
+    return new OfflineRecognizer({
+      [kFromAsyncFactory]: true,
+      handle,
+      config,
+    });
+  }
+
+  /**
+   * Create a new OfflineStream bound to this recognizer.
+   *
+   * The optional hotwords argument enables contextual biasing for this
+   * stream only. Hotwords are supported only by transducer models decoded
+   * with decodingMethod 'modified_beam_search'. Separate multiple phrases
+   * with '/', and optionally append a per-phrase boosting score, e.g.
+   * 'PHOEBE :2.0/DON QUIXOTE'. When modelConfig.modelingUnit and
+   * modelConfig.bpeVocab are set, phrases are given as normal words;
+   * otherwise each phrase must be a sequence of tokens from tokens.txt
+   * separated by spaces. See also
+   * https://k2-fsa.github.io/sherpa/onnx/hotwords/index.html
+   *
+   * @param {string} [hotwords] Optional hotwords for this stream.
+   * @returns {OfflineStream}
+   */
+  createStream(hotwords) {
+    const handle = hotwords === undefined ?
+        addon.createOfflineStream(this.handle) :
+        addon.createOfflineStream(this.handle, hotwords);
+    return new OfflineStream(handle);
+  }
+
+  /**
+   * Replace the recognizer config at runtime.
+   * @param {OfflineRecognizerConfig} config
+   */
+  setConfig(config) {
+    this.config = config;
+    addon.offlineRecognizerSetConfig(this.handle, config);
+  }
+
+  /**
+   * Decode an offline stream (synchronous).
+   * @param {OfflineStream} stream
+   */
+  decode(stream) {
+    addon.decodeOfflineStream(this.handle, stream.handle);
+  }
+
+  /**
+   * Decode an offline stream asynchronously (non-blocking).
+   * @param {OfflineStream} stream
+   * @returns {Promise<OfflineRecognizerResult>}
+   */
+  async decodeAsync(stream) {
+    const jsonStr =
+        await addon.decodeOfflineStreamAsync(this.handle, stream.handle);
+    return JSON.parse(jsonStr);
+  }
+
+  /**
+   * Get recognition result for a stream.
+   * @param {OfflineStream} stream
+   * @returns {OfflineRecognizerResult}
+   */
+  getResult(stream) {
+    const jsonStr = addon.getOfflineStreamResultAsJson(stream.handle);
+    return JSON.parse(jsonStr);
+  }
+}
+
+module.exports = {
+  OfflineRecognizer,
+  OfflineStream,
+};

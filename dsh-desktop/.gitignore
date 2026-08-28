@@ -1,6 +1,12 @@
 node_modules/
+# dsh-stt 识别引擎（sherpa-onnx 原生二进制）必须随仓库分发：
+# 插件依赖由 copyPluginPackage 连 node_modules 一起拷进 profile，
+# 启动链路无 npm install 兜底，缺它则转写直接报错（picturereader 先例 dbf38b3）。
+!assets/plugins/dsh-stt/node_modules/
 dist/
 vendor/
+# dsh-stt 无 vendor 目录，防止上条 vendor/ 忽略规则误伤（显式豁免）
+!assets/plugins/dsh-stt/vendor/
 *.log
 data/
 .playwright-mcp/
