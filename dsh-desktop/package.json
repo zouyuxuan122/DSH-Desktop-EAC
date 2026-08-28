@@ -17,7 +17,7 @@
     "test:native": "node scripts/build-native.js test",
     "clippy:native": "node scripts/build-native.js clippy",
     "pretest": "npm run build",
-    "test": "node scripts/test-runner.js"
+    "test": "node scripts/test-runner.js test/*.test.ts --test-timeout=120000 --test-force-exit"
   },
   "dependencies": {
     "@deepseek-ai/cordis-plugin-group": "1.0.1",
