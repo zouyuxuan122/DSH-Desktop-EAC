@@ -17,6 +17,10 @@
   // ───────────────────────── 纯逻辑（可测） ─────────────────────────
   var MAX_IMAGE_BYTES = 15 * 1024 * 1024;
 
+  function usesEnglishUi() {
+    return typeof document !== 'undefined' && String(document.documentElement.lang || '').toLowerCase().indexOf('en') === 0;
+  }
+
   var IMAGE_MIME_EXT = {
     'image/png': '.png',
     'image/jpeg': '.jpg',
@@ -60,7 +64,7 @@
   /** 文件名清洗：去路径分隔符与保留字，限长；空名回退默认。 */
   function sanitizeName(name) {
     var s = String(name || '').replace(/[\\/:*?"<>|\u0000-\u001f]/g, '_').trim().slice(0, 40);
-    return s || '粘贴图片';
+    return s || (usesEnglishUi() ? 'pasted-image' : '粘贴图片');
   }
 
   /**
@@ -69,15 +73,16 @@
    */
   function buildPasteHint(_a) {
     var images = _a.images;
-    var lines = ['[粘贴图片]'];
+    var english = usesEnglishUi();
+    var lines = [english ? '[Pasted images]' : '[粘贴图片]'];
     for (var i = 0; i < images.length; i++) {
       var im = images[i] || {};
       var name = sanitizeName(im.name);
       var path = im.path || '';
-      var sizeText = im.size != null ? '，大小 ' + formatSize(im.size) : '';
-      lines.push('- ' + name + sizeText + (path ? '\n  完整路径：' + path : ''));
+      var sizeText = im.size != null ? (english ? ', size ' : '，大小 ') + formatSize(im.size) : '';
+      lines.push('- ' + name + sizeText + (path ? (english ? '\n  Full path: ' : '\n  完整路径：') + path : ''));
     }
-    lines.push('请用 inspect_image 工具逐一分析这些图片后继续。');
+    lines.push(english ? 'Use inspect_image to analyze each image before continuing.' : '请用 inspect_image 工具逐一分析这些图片后继续。');
     return lines.join('\n');
   }
 
@@ -124,9 +129,10 @@
       }
       var reader = new FileReader();
       reader.onload = function () {
-        b.save({ dataUrl: String(reader.result || ''), name: file.name || '粘贴图片' })
+        var fallbackName = usesEnglishUi() ? 'pasted-image' : '粘贴图片';
+        b.save({ dataUrl: String(reader.result || ''), name: file.name || fallbackName })
           .then(function (res) {
-            if (res && res.ok) resolve({ name: file.name || '粘贴图片', path: res.path, size: res.size != null ? res.size : file.size });
+            if (res && res.ok) resolve({ name: file.name || fallbackName, path: res.path, size: res.size != null ? res.size : file.size });
             else reject(new Error((res && res.error) || 'save failed'));
           })
           .catch(reject);

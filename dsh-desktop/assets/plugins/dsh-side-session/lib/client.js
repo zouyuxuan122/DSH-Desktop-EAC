@@ -195,34 +195,41 @@ window.__ModuleLoader__.load({
     // ------------------------------------------------------------------
     // 系统提示 + 消息组装
     // ------------------------------------------------------------------
+    function usesEnglishUi() {
+      return typeof document !== "undefined" && String(document.documentElement.lang || "").toLowerCase().startsWith("en");
+    }
+
     function buildSystemPrompt(ctx) {
       ctx = ctx || { title: "", files: [], transcript: [] };
       var lines = [];
-      lines.push("你是一个「DSH 临时会话」辅助助手。当前用户正在主会话中工作，你基于下方自动导入的「当前会话上下文」回答用户的临时追问。");
+      var english = usesEnglishUi();
+      lines.push(english
+        ? "You are a DSH temporary-session assistant. Answer the user's temporary questions from the imported current-session context below."
+        : "你是一个「DSH 临时会话」辅助助手。当前用户正在主会话中工作，你基于下方自动导入的「当前会话上下文」回答用户的临时追问。");
       lines.push("");
-      lines.push("硬性规则：");
-      lines.push("1. 你只做解释、分析、答疑，绝不修改任何文件，不要输出任何写文件/编辑/执行命令的操作。");
-      lines.push("2. 回答紧扣上下文；上下文不足以回答时，明确说明「根据当前会话上下文无法确认」。");
-      lines.push("3. 保持简洁，用中文。");
+      lines.push(english ? "Rules:" : "硬性规则：");
+      lines.push(english ? "1. Explain, analyze, and answer questions only. Never modify files or propose write/edit/command operations." : "1. 你只做解释、分析、答疑，绝不修改任何文件，不要输出任何写文件/编辑/执行命令的操作。");
+      lines.push(english ? "2. Stay grounded in the context. If it is insufficient, say that the current session context does not establish the answer." : "2. 回答紧扣上下文；上下文不足以回答时，明确说明「根据当前会话上下文无法确认」。");
+      lines.push(english ? "3. Be concise and answer in English." : "3. 保持简洁，用中文。");
       lines.push("");
-      lines.push("==== 当前会话上下文 ====");
-      lines.push("会话标题：" + (ctx.title || "(未知)"));
+      lines.push(english ? "==== Current session context ====" : "==== 当前会话上下文 ====");
+      lines.push((english ? "Session title: " : "会话标题：") + (ctx.title || (english ? "(unknown)" : "(未知)")));
       lines.push("");
-      lines.push("--- 对话记录（最近部分）---");
+      lines.push(english ? "--- Recent conversation ---" : "--- 对话记录（最近部分）---");
       var trans = ctx.transcript || [];
-      if (trans.length === 0) lines.push("(无)");
+      if (trans.length === 0) lines.push(english ? "(none)" : "(无)");
       else {
         for (var i = 0; i < trans.length; i++) {
           var m = trans[i];
-          var who = m.role === "assistant" ? "助手" : "用户";
+          var who = m.role === "assistant" ? (english ? "assistant" : "助手") : (english ? "user" : "用户");
           var text = (m.text || "").slice(0, 4000);
           lines.push("[" + who + "] " + text);
         }
       }
       lines.push("");
-      lines.push("--- 本会话涉及的文件 ---");
+      lines.push(english ? "--- Files involved in this session ---" : "--- 本会话涉及的文件 ---");
       var files = ctx.files || [];
-      if (files.length === 0) lines.push("(无)");
+      if (files.length === 0) lines.push(english ? "(none)" : "(无)");
       else {
         var shown = 0;
         for (var j = 0; j < files.length; j++) {
@@ -233,7 +240,7 @@ window.__ModuleLoader__.load({
           if (content) lines.push(content);
           shown++;
           if (shown >= 40) {
-            lines.push("…(文件过多，已截断展示)");
+            lines.push(english ? "...(file list truncated)" : "…(文件过多，已截断展示)");
             break;
           }
         }
@@ -315,7 +322,7 @@ window.__ModuleLoader__.load({
       if (mode === "2" && !pluginSettings.apiKey) {
         setState({
           streaming: false,
-          error: "插件 API Key 为空：请在「设置 → 临时会话」填写 API Key，或切换到其他模式。",
+          error: usesEnglishUi() ? "The plugin API key is empty. Enter one under Settings > Temporary session, or switch modes." : "插件 API Key 为空：请在「设置 → 临时会话」填写 API Key，或切换到其他模式。",
         });
         return;
       }

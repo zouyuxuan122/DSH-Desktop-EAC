@@ -148,6 +148,19 @@
 <script>
 (function () {
   'use strict';
+  var hasChineseLanguage = function () {
+    var languages = Array.from((navigator && navigator.languages) || []);
+    if (navigator && navigator.language) languages.push(navigator.language);
+    return languages.some(function (tag) { return String(tag).toLowerCase().split('-')[0] === 'zh'; });
+  };
+  var english = !hasChineseLanguage();
+  document.documentElement.lang = english ? 'en' : 'zh-CN';
+
+  function englishError(value) {
+    var text = String(value == null ? '' : value);
+    return /[\u3400-\u9fff]/.test(text) ? 'See the desktop log for details.' : text;
+  }
+
   var bridge = window.onboarding;
   var state = { mode: 'first', catalog: [], current: null, selected: new Set(), busy: false };
 
@@ -157,6 +170,26 @@
   var totalCountEl = $('totalCount');
   var goBtn = $('goBtn');
   var skipBtn = $('skipBtn');
+
+  if (english) {
+    document.title = 'Built-in plugin wizard';
+    $('modeTag').textContent = 'First run';
+    $('closeBtn').title = 'Close (skip)';
+    $('closeBtn').setAttribute('aria-label', 'Close');
+    document.querySelector('.hero h1').textContent = 'Built-in plugin wizard';
+    $('intro').textContent = 'Choose the built-in plugins enabled by default. Unselected packages remain installed and can be enabled later under Settings > Plugins > Manage or by reopening this wizard.';
+    var count = document.querySelector('.count');
+    count.childNodes[0].nodeValue = 'Selected ';
+    count.childNodes[count.childNodes.length - 1].nodeValue = ' total';
+    $('pureBtn').textContent = 'Minimal (core only)';
+    $('pureBtn').title = 'Keep only required core plugins';
+    $('fullBtn').textContent = 'Full (select all)';
+    $('fullBtn').title = 'Select every plugin, including optional enhancements';
+    $('noneBtn').textContent = 'Clear optional';
+    $('footerNote').textContent = 'Disabling is not uninstalling: plugin packages remain available in Plugin management and can be enabled anytime.';
+    $('skipBtn').textContent = 'Skip (keep all enabled)';
+    $('goBtn').textContent = 'Install selected plugins';
+  }
 
   function fmtSize(bytes) {
     if (!bytes || bytes <= 0) return '';
@@ -177,12 +210,14 @@
     totalCountEl.textContent = String(state.catalog.length);
     selCountEl.textContent = String(state.selected.size);
     goBtn.disabled = state.busy;
-    goBtn.textContent = state.busy ? '正在应用…' : (state.mode === 'rerun' ? '应用更改' : '安装所选插件');
+    goBtn.textContent = english
+      ? (state.busy ? 'Applying...' : (state.mode === 'rerun' ? 'Apply changes' : 'Install selected plugins'))
+      : (state.busy ? '正在应用…' : (state.mode === 'rerun' ? '应用更改' : '安装所选插件'));
 
     var html = '';
-    html += section('核心必装', 'badge-lock', '始终启用（主界面/设置页底座）', core);
-    html += section('推荐', 'badge-rec', '常用功能增强', rec);
-    html += section('可选增强', 'badge-opt', '按需启用', opt);
+    html += section(english ? 'Required core' : '核心必装', 'badge-lock', english ? 'Always enabled (UI foundation)' : '始终启用（主界面/设置页底座）', core);
+    html += section(english ? 'Recommended' : '推荐', 'badge-rec', english ? 'Common enhancements' : '常用功能增强', rec);
+    html += section(english ? 'Optional' : '可选增强', 'badge-opt', english ? 'Enable as needed' : '按需启用', opt);
     groupsEl.innerHTML = html;
 
     groupsEl.querySelectorAll('input[type=checkbox]').forEach(function (box) {
@@ -200,12 +235,14 @@
     return h + items.map(function (p) {
       var checked = p.core || state.selected.has(p.id);
       var size = fmtSize(p.size);
-      var tag = (p.registryDisabled && !p.core) ? '<span class="tag tag-off">默认停用</span>' : '';
+      var tag = (p.registryDisabled && !p.core) ? '<span class="tag tag-off">' + (english ? 'Disabled by default' : '默认停用') + '</span>' : '';
+      var description = p.description || '';
+      if (english && /[\u3400-\u9fff]/.test(description)) description = 'Built-in extension for Deepseek Harness EAC.';
       return '<div class="row">' +
         '<input type="checkbox" data-id="' + esc(p.id) + '"' + (checked ? ' checked' : '') + (p.core || state.busy ? ' disabled' : '') + ' />' +
         '<div class="main">' +
           '<div class="name">' + esc(p.name.split('/').pop()) + '<span class="pkg">' + esc(p.name) + '</span></div>' +
-          (p.description ? '<div class="desc">' + esc(p.description) + '</div>' : '') +
+          (description ? '<div class="desc">' + esc(description) + '</div>' : '') +
         '</div>' +
         (size ? '<span class="size">' + size + '</span>' : '') +
         tag +
@@ -224,22 +261,22 @@
   function run() {
     bridge.list().then(function (res) {
       if (!res || !Array.isArray(res.catalog)) {
-        $('intro').textContent = '向导数据加载失败，请重试。';
+        $('intro').textContent = english ? 'Could not load wizard data. Try again.' : '向导数据加载失败，请重试。';
         return;
       }
       state.mode = res.mode || 'first';
       state.catalog = res.catalog;
       state.current = res.current || null;
       if (state.mode === 'rerun') {
-        $('modeTag').textContent = '二次调整';
-        $('intro').textContent = '重新打开插件选择向导：勾选 = 启用，取消勾选 = 停用。改动会立即写入并重启 Web 服务生效。';
-        $('footerNote').textContent = '停用不等于卸载：插件包与「插件管理」页保持完整，随时可一键启用或再次调整。';
+        $('modeTag').textContent = english ? 'Adjust selection' : '二次调整';
+        $('intro').textContent = english ? 'Adjust the plugin selection: checked means enabled and unchecked means disabled. Changes are saved immediately and applied after the web service restarts.' : '重新打开插件选择向导：勾选 = 启用，取消勾选 = 停用。改动会立即写入并重启 Web 服务生效。';
+        $('footerNote').textContent = english ? 'Disabling is not uninstalling: packages remain in Plugin management and can be enabled or adjusted anytime.' : '停用不等于卸载：插件包与「插件管理」页保持完整，随时可一键启用或再次调整。';
         skipBtn.hidden = true;
       }
       defaults(state.current);
       render();
     }).catch(function (e) {
-      $('intro').textContent = '向导数据加载失败: ' + String((e && e.message) || e);
+      $('intro').textContent = english ? 'Could not load wizard data: ' + englishError((e && e.message) || e) : '向导数据加载失败: ' + String((e && e.message) || e);
     });
   }
 
@@ -269,16 +306,16 @@
     bridge.submit(ids).then(function (res) {
       if (!res || res.ok !== true) {
         state.busy = false;
-        $('footerNote').textContent = '应用失败：' + (res && res.error) || '未知错误';
+        $('footerNote').textContent = english ? 'Could not apply changes: ' + englishError(res && res.error) : ('应用失败：' + ((res && res.error) || '未知错误'));
         render();
         return;
       }
       if (res.errors && res.errors.length) {
-        $('footerNote').textContent = '部分插件未生效: ' + res.errors.join('；');
+        $('footerNote').textContent = english ? 'Some plugins could not be applied. See the desktop log for details.' : '部分插件未生效: ' + res.errors.join('；');
       }
     }).catch(function (e) {
       state.busy = false;
-      $('footerNote').textContent = '应用失败: ' + String((e && e.message) || e);
+      $('footerNote').textContent = english ? 'Could not apply changes: ' + englishError((e && e.message) || e) : '应用失败: ' + String((e && e.message) || e);
       render();
     });
   });

@@ -93,6 +93,9 @@ export const COMPANION_PLUGINS: CompanionPluginDef[] = [
   { id: 'unified-market', name: 'dsh-unified-market', dir: 'dsh-unified-market' },
   { id: 'skin-switch', name: '@deepseek-ai/dsh-skin-switch' },
   { id: 'easy-setup', name: '@deepseek-ai/dsh-easy-setup' },
+  // 旧版/社区客户端插件的英文兼容层：跟随官方 locale 状态翻译固定 UI
+  // 文案，不触碰会话、代码、终端、编辑器或用户输入。作为界面底座始终启用。
+  { id: 'eac-locale-compat', name: 'dsh-eac-locale-compat', dir: 'dsh-eac-locale-compat' },
   // VNext Core Bridge（受信组件，vnext-absorb Phase 2）：把隔离 SDK 插件的
   // 工具/上下文经回环端点桥接进 dsh Agent（DSH_EAC_BRIDGE_URL/TOKEN 由
   // sidecar 在拉起 dsh web 前注入）；必须随包分发并默认启用。

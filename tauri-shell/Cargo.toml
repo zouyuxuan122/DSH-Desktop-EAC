@@ -21,6 +21,7 @@ http = "1"
 # 经 hwnd() 直呼 USER32。版本对齐依赖树既有 0.61.x（复用，不新增编译单元）。
 [target.'cfg(windows)'.dependencies]
 windows-sys = { version = "0.61", features = [
+  "Win32_Globalization",
   "Win32_UI_WindowsAndMessaging",
   "Win32_System_LibraryLoader",
 ] }

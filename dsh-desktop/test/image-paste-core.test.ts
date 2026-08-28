@@ -12,14 +12,16 @@ import vm from 'node:vm';
 
 const BUNDLE = new URL('../assets/plugins/dsh-image-paste/lib/client.js', import.meta.url);
 
-function loadCore() {
+function loadCore(language = '') {
   const src = readFileSync(BUNDLE, 'utf8');
   const captured = {};
   const win = {
     __ModuleLoader__: { load: (handoff) => { captured.handoff = handoff; } },
   };
+  const document = { documentElement: { lang: language } };
   vm.runInNewContext(src, {
     window: win,
+    document,
     console,
     Promise,
     FileReader: class {},
@@ -34,6 +36,15 @@ function loadCore() {
 }
 
 const core = loadCore();
+
+test('English UI produces English image instructions for the agent', () => {
+  const englishCore = loadCore('en');
+  const output = englishCore.buildPasteHint({ images: [{ name: 'screen.png', path: 'C:\\screen.png', size: 2048 }] });
+  assert.match(output, /Pasted images/);
+  assert.match(output, /Full path/);
+  assert.match(output, /Use inspect_image/);
+  assert.doesNotMatch(output, /[\u3400-\u9fff]/u);
+});
 
 test('isImageItem accepts image files and rejects text/HTML items', () => {
   assert.equal(core.isImageItem({ kind: 'file', type: 'image/png' }), true);

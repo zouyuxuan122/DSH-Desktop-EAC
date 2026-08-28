@@ -48,6 +48,56 @@ use tokio_tungstenite::tungstenite::Message;
 // 窗口桥注入 = WS 回环客户端（单源）+ 桥胶水（build.rs 拼装 bridge-bundle.js）。
 const BRIDGE_JS: &str = include_str!(concat!(env!("OUT_DIR"), "/bridge-bundle.js"));
 const WS_PORT: u16 = 19873;
+static CHINESE_UI: OnceLock<bool> = OnceLock::new();
+
+fn locale_tag_is_chinese(tag: &str) -> bool {
+    tag.trim()
+        .split(['-', '_'])
+        .next()
+        .is_some_and(|primary| primary.eq_ignore_ascii_case("zh"))
+}
+
+#[cfg(windows)]
+fn detect_chinese_ui_language() -> bool {
+    use windows_sys::Win32::Globalization::GetUserDefaultLocaleName;
+    let mut locale = [0u16; 85];
+    let len = unsafe { GetUserDefaultLocaleName(locale.as_mut_ptr(), locale.len() as i32) };
+    if len <= 1 {
+        return false;
+    }
+    locale_tag_is_chinese(&String::from_utf16_lossy(&locale[..len as usize - 1]))
+}
+
+#[cfg(not(windows))]
+fn detect_chinese_ui_language() -> bool {
+    ["LC_ALL", "LC_MESSAGES", "LANG", "LANGUAGE"]
+        .iter()
+        .filter_map(|name| std::env::var(name).ok())
+        .flat_map(|value| value.split(':').map(str::to_owned).collect::<Vec<_>>())
+        .any(|tag| locale_tag_is_chinese(tag.split('.').next().unwrap_or(&tag)))
+}
+
+fn use_chinese_ui() -> bool {
+    *CHINESE_UI.get_or_init(detect_chinese_ui_language)
+}
+
+fn ui_text<'a>(zh: &'a str, en: &'a str) -> &'a str {
+    if use_chinese_ui() { zh } else { en }
+}
+
+#[cfg(test)]
+mod ui_language_tests {
+    use super::locale_tag_is_chinese;
+
+    #[test]
+    fn recognizes_chinese_locale_variants_only() {
+        assert!(locale_tag_is_chinese("zh-CN"));
+        assert!(locale_tag_is_chinese("zh_Hant_TW"));
+        assert!(!locale_tag_is_chinese("en-US"));
+        assert!(!locale_tag_is_chinese("ja-JP"));
+        assert!(!locale_tag_is_chinese(""));
+    }
+}
 
 /// 打包态与开发态（CARGO_MANIFEST_DIR 布局）的资源根。
 /// 实测（R6 Stage 1）：Tauri v2 resources map 目标相对安装根，NSIS 装出
@@ -1062,7 +1112,7 @@ fn open_float_window(app: &tauri::AppHandle, session_id: &str) -> Result<bool, S
         .map_err(|e| e.to_string())?
         .join("float-webview");
     let mut builder = tauri::webview::WebviewWindowBuilder::new(app, &label, tauri::WebviewUrl::External(url))
-        .title("DSH 会话")
+        .title(ui_text("DSH 会话", "DSH Session"))
         .inner_size(900.0, 640.0)
         .min_inner_size(480.0, 360.0)
         .decorations(false)
@@ -1110,7 +1160,7 @@ fn open_recovery_center_window(app: &tauri::AppHandle) -> bool {
         .map(|p| p.join("recovery-center-webview"))
         .unwrap_or_default();
     let builder = tauri::webview::WebviewWindowBuilder::new(app, label, tauri::WebviewUrl::External(url))
-        .title("恢复中心")
+        .title(ui_text("恢复中心", "Recovery Center"))
         .inner_size(980.0, 720.0)
         .min_inner_size(760.0, 520.0)
         .data_directory(data_dir)
@@ -1228,50 +1278,60 @@ fn loading_page() -> String {
          color:#dfe6ff;font-family:'Segoe UI','Microsoft YaHei',system-ui,sans-serif\">\
          <div style=\"text-align:center\">\
          <div style=\"font-size:20px;font-weight:600;margin-bottom:14px\">Deepseek Harness EAC</div>\
-         <div style=\"font-size:13px;color:#8b9ac4\">正在启动服务…</div>\
+         <div style=\"font-size:13px;color:#8b9ac4\">{}</div>\
          <div style=\"margin-top:18px;width:34px;height:34px;margin-left:auto;margin-right:auto;\
          border:3px solid rgba(255,255,255,.12);border-top-color:#5b8cff;border-radius:50%;\
          animation:dshspin 1s linear infinite\"></div></div>\
          <style>@keyframes dshspin{{to{{transform:rotate(360deg)}}}}</style>\
          <script>window.__DSH_BRIDGE_WS__='ws://127.0.0.1:{}/ws';{}</script>",
-        WS_PORT, BRIDGE_JS
+        ui_text("正在启动服务…", "Starting services..."), WS_PORT, BRIDGE_JS
     )
 }
 
 fn died_page(log_path: &str, code: &str) -> String {
     let esc = |s: &str| s.replace('&', "&amp;").replace('<', "&lt;").replace('>', "&gt;");
     format!(
-        "<!doctype html><meta charset=utf-8><title>服务已停止</title>\
+        "<!doctype html><html lang={0}><meta charset=utf-8><title>{1}</title>\
          <body style=\"margin:0;height:100vh;display:grid;place-items:center;background:#0b1220;\
          color:#dfe6ff;font-family:'Segoe UI','Microsoft YaHei',system-ui,sans-serif\">\
          <div style=\"text-align:center;max-width:560px\">\
-         <div style=\"font-size:20px;font-weight:600;margin-bottom:10px\">DSH 服务已停止</div>\
-         <div style=\"font-size:13px;color:#8b9ac4;margin-bottom:6px\">退出码 {}</div>\
-         <div style=\"font-size:12px;color:#5f6f9c;font-family:Consolas,monospace;margin-bottom:20px\">{}</div>\
+         <div style=\"font-size:20px;font-weight:600;margin-bottom:10px\">{2}</div>\
+         <div style=\"font-size:13px;color:#8b9ac4;margin-bottom:6px\">{3} {4}</div>\
+         <div style=\"font-size:12px;color:#5f6f9c;font-family:Consolas,monospace;margin-bottom:20px\">{5}</div>\
          <div style=\"display:flex;gap:10px;justify-content:center\">\
          <button onclick=\"retry()\" style=\"padding:8px 22px;border:1px solid rgba(255,255,255,.18);\
-         border-radius:9px;background:rgba(91,140,255,.15);color:#dfe6ff;font-size:13px;cursor:pointer\">重新启动</button>\
+         border-radius:9px;background:rgba(91,140,255,.15);color:#dfe6ff;font-size:13px;cursor:pointer\">{6}</button>\
          <button onclick=\"safeMode()\" style=\"padding:8px 22px;border:1px solid rgba(255,200,120,.25);\
-         border-radius:9px;background:rgba(255,180,80,.10);color:#ffd9a3;font-size:13px;cursor:pointer\">安全模式重启</button>\
+         border-radius:9px;background:rgba(255,180,80,.10);color:#ffd9a3;font-size:13px;cursor:pointer\">{7}</button>\
          </div>\
          </div>\
-         <script>window.__DSH_BRIDGE_WS__='ws://127.0.0.1:{}/ws';{}\
+         <script>window.__DSH_BRIDGE_WS__='ws://127.0.0.1:{8}/ws';{9}\
          function retry(){{\
-           var b=document.querySelector('button');b.textContent='正在重启…';b.disabled=true;\
+           var b=document.querySelector('button');b.textContent={10:?};b.disabled=true;\
            window.dshDesktop._call('boot.start',{{}}).then(function(){{location.reload();}})\
-             .catch(function(e){{b.textContent='重启失败，请重试';b.disabled=false;}});\
+             .catch(function(e){{b.textContent={11:?};b.disabled=false;}});\
          }}\
          function safeMode(){{\
-           var b=event.target;b.textContent='进入安全模式…';b.disabled=true;\
+           var b=event.target;b.textContent={12:?};b.disabled=true;\
            window.dshDesktop._call('rescue.safe-mode',{{on:true}}).then(function(){{\
              return window.dshDesktop._call('boot.start',{{}});\
            }}).then(function(){{location.reload();}})\
-             .catch(function(e){{b.textContent='失败（服务可能仍在运行）';b.disabled=false;}});\
+             .catch(function(e){{b.textContent={13:?};b.disabled=false;}});\
          }}</script></body>",
+        ui_text("zh-CN", "en"),
+        ui_text("服务已停止", "Service stopped"),
+        ui_text("DSH 服务已停止", "The DSH service has stopped"),
+        ui_text("退出码", "Exit code"),
         esc(code),
         esc(log_path),
+        ui_text("重新启动", "Restart"),
+        ui_text("安全模式重启", "Restart in safe mode"),
         WS_PORT,
-        BRIDGE_JS
+        BRIDGE_JS,
+        ui_text("正在重启…", "Restarting..."),
+        ui_text("重启失败，请重试", "Restart failed. Try again."),
+        ui_text("进入安全模式…", "Entering safe mode..."),
+        ui_text("失败（服务可能仍在运行）", "Failed (the service may still be running)"),
     )
 }
 
@@ -1297,18 +1357,24 @@ fn encode_back(url: &str) -> String {
 /// 更新进度页（client-update.show / agent 更新共用；进度经 _onNotify 渲染）。
 fn update_page(version: &str, kind: &str) -> String {
     let esc = |s: &str| s.replace('&', "&amp;").replace('<', "&lt;").replace('>', "&gt;");
+    let product = if kind == "agent" {
+        ui_text("dsh 内核", "dsh core")
+    } else {
+        "Deepseek Harness EAC"
+    };
     format!(
-        "<!doctype html><meta charset=utf-8><title>正在更新</title>\
+        "<!doctype html><html lang={0}><meta charset=utf-8><title>{1}</title>\
          <body style=\"margin:0;height:100vh;display:grid;place-items:center;background:#0b1220;\
          color:#dfe6ff;font-family:'Segoe UI','Microsoft YaHei',system-ui,sans-serif\">\
          <div style=\"text-align:center;max-width:520px;width:82%\">\
-         <div style=\"font-size:19px;font-weight:600;margin-bottom:8px\">正在更新 {0}</div>\
-         <div style=\"font-size:12.5px;color:#8b9ac4;margin-bottom:22px\">v{3} · 更新完成后应用会自动重启；插件、皮肤与会话全部保留。</div>\
+         <div style=\"font-size:19px;font-weight:600;margin-bottom:8px\">{2} {3}</div>\
+         <div style=\"font-size:12.5px;color:#8b9ac4;margin-bottom:22px\">v{4} · {5}</div>\
          <div style=\"height:8px;border-radius:6px;background:rgba(255,255,255,.08);overflow:hidden\">\
          <div id=fill style=\"height:100%;width:0%;border-radius:6px;background:#5b8cff;transition:width .3s\"></div></div>\
-         <div id=status style=\"margin-top:14px;font-size:12.5px;color:#8b9ac4;font-family:Consolas,monospace\">准备中…</div>\
+         <div id=status style=\"margin-top:14px;font-size:12.5px;color:#8b9ac4;font-family:Consolas,monospace\">{6}</div>\
          </div>\
-         <script>window.__DSH_BRIDGE_WS__='ws://127.0.0.1:{1}/ws';{2}\
+         <script>window.__DSH_BRIDGE_WS__='ws://127.0.0.1:{7}/ws';{8}\
+         var EN={9};\
          var BACK=new URLSearchParams(location.search).get('back')||'';\
          window.dshDesktop._onNotify(function(m,p){{\
            if (m==='client-update.progress'){{\
@@ -1317,43 +1383,59 @@ fn update_page(version: &str, kind: &str) -> String {
                document.getElementById('fill').style.width=pct+'%';\
                var extra='';\
                if (p.speedMBps) extra=' · '+p.speedMBps.toFixed(1)+' MB/s';\
-               if (p.etaSec && isFinite(p.etaSec) && p.etaSec>0){{var s=Math.round(p.etaSec);extra+=' · 剩余 '+(s>=60?Math.floor(s/60)+' 分 '+(s%60)+' 秒':s+' 秒');}}\
-               document.getElementById('status').textContent='正在下载 '+pct+'%'+extra;\
+               if (p.etaSec && isFinite(p.etaSec) && p.etaSec>0){{var s=Math.round(p.etaSec);extra+=EN?' · '+(s>=60?Math.floor(s/60)+'m '+(s%60)+'s':s+'s')+' remaining':' · 剩余 '+(s>=60?Math.floor(s/60)+' 分 '+(s%60)+' 秒':s+' 秒');}}\
+               document.getElementById('status').textContent=(EN?'Downloading ':'正在下载 ')+pct+'%'+extra;\
              }} else if (p && p.stage){{\
-               document.getElementById('status').textContent=p.stage;\
+               var stages={{fetch:'Downloading packages...',install:'Installing...',done:'Finishing...',mirror:'Switching download source...'}};\
+               document.getElementById('status').textContent=EN?(stages[p.stage]||'Updating...'):p.stage;\
              }}\
            }} else if (m==='client-update.hide'){{\
              if (BACK) location.replace(BACK);\
            }}\
          }});</script></body>",
-        if kind == "agent" { "dsh 内核" } else { "Deepseek Harness EAC" },
+        ui_text("zh-CN", "en"),
+        ui_text("正在更新", "Updating"),
+        ui_text("正在更新", "Updating"),
+        product,
+        esc(version),
+        ui_text("更新完成后应用会自动重启；插件、皮肤与会话全部保留。", "The app restarts automatically when the update finishes. Plugins, skins, and sessions are preserved."),
+        ui_text("准备中…", "Preparing..."),
         WS_PORT,
         BRIDGE_JS,
-        esc(version),
+        if use_chinese_ui() { "false" } else { "true" },
     )
 }
 
 /// 关于页（menu.action 'about'；版本经 chrome.init 动态读取）。
 fn about_page() -> String {
     format!(
-        "<!doctype html><meta charset=utf-8><title>关于</title>\
+        "<!doctype html><html lang={0}><meta charset=utf-8><title>{1}</title>\
          <body style=\"margin:0;height:100vh;display:grid;place-items:center;background:#0b1220;\
          color:#dfe6ff;font-family:'Segoe UI','Microsoft YaHei',system-ui,sans-serif\">\
          <div style=\"text-align:center;max-width:460px;padding:30px 38px;border:1px solid rgba(255,255,255,.08);\
          border-radius:16px;background:color-mix(in srgb,#0b1220 92%,white)\">\
          <div style=\"font-size:20px;font-weight:600;margin-bottom:6px\">Deepseek Harness EAC</div>\
-         <div id=ver style=\"font-size:13px;color:#8b9ac4;margin-bottom:14px\">读取版本中…</div>\
-         <div style=\"font-size:12px;color:#5f6f9c;line-height:1.8\">Tauri 壳（Rust L1）· Node sidecar（L2）· dsh 内核零改动（L3）<br/>\
-         本项目为社区增强封装，与官方 DeepSeek 无隶属关系。</div>\
+         <div id=ver style=\"font-size:13px;color:#8b9ac4;margin-bottom:14px\">{2}</div>\
+         <div style=\"font-size:12px;color:#5f6f9c;line-height:1.8\">{3}<br/>{4}</div>\
          <button onclick=\"if(BACK)location.replace(BACK)\" style=\"margin-top:20px;padding:8px 26px;border:1px solid rgba(255,255,255,.18);\
-         border-radius:9px;background:rgba(91,140,255,.15);color:#dfe6ff;font-size:13px;cursor:pointer\">返回</button>\
+         border-radius:9px;background:rgba(91,140,255,.15);color:#dfe6ff;font-size:13px;cursor:pointer\">{5}</button>\
          </div>\
-         <script>window.__DSH_BRIDGE_WS__='ws://127.0.0.1:{}/ws';{}\
+         <script>window.__DSH_BRIDGE_WS__='ws://127.0.0.1:{6}/ws';{7}\
          var BACK=new URLSearchParams(location.search).get('back')||'';\
          window.dshDesktop._call('chrome.init',{{}}).then(function(i){{\
-           document.getElementById('ver').textContent='封装 v'+i.appVersion+' · dsh 内核 '+i.agentVersion+'（'+(i.agentSource||'bundled')+'）';\
-         }}).catch(function(){{document.getElementById('ver').textContent='版本信息暂不可用';}});</script></body>",
-        WS_PORT, BRIDGE_JS
+           document.getElementById('ver').textContent={8:?}+' v'+i.appVersion+' · '+{9:?}+' '+i.agentVersion+' ('+(i.agentSource||'bundled')+')';\
+         }}).catch(function(){{document.getElementById('ver').textContent={10:?};}});</script></body>",
+        ui_text("zh-CN", "en"),
+        ui_text("关于", "About"),
+        ui_text("读取版本中…", "Reading version..."),
+        ui_text("Tauri 壳（Rust L1）· Node sidecar（L2）· dsh 内核零改动（L3）", "Tauri shell (Rust L1) · Node sidecar (L2) · unchanged dsh core (L3)"),
+        ui_text("本项目为社区增强封装，与官方 DeepSeek 无隶属关系。", "This community enhancement is not affiliated with official DeepSeek."),
+        ui_text("返回", "Back"),
+        WS_PORT,
+        BRIDGE_JS,
+        ui_text("封装", "App"),
+        ui_text("dsh 内核", "dsh core"),
+        ui_text("版本信息暂不可用", "Version information is unavailable"),
     )
 }
 
@@ -1363,7 +1445,11 @@ fn about_page() -> String {
 fn wizard_page() -> String {
     let file = resource_root().join("dsh-desktop").join("assets").join("onboarding.html");
     let html = std::fs::read_to_string(&file).unwrap_or_else(|_| {
-        "<!doctype html><meta charset=utf-8><title>向导</title><body style=\"background:#0b1220;color:#dfe6ff;font-family:sans-serif;display:grid;place-items:center;height:100vh\">向导资源缺失（assets/onboarding.html）</body>".to_string()
+        format!(
+            "<!doctype html><meta charset=utf-8><title>{0}</title><body style=\"background:#0b1220;color:#dfe6ff;font-family:sans-serif;display:grid;place-items:center;height:100vh\">{1} (assets/onboarding.html)</body>",
+            ui_text("向导", "Wizard"),
+            ui_text("向导资源缺失", "Wizard resource is missing"),
+        )
     });
     let injection = format!(
         "<script>window.__DSH_BRIDGE_WS__='ws://127.0.0.1:{}/ws';{};\
@@ -1390,7 +1476,11 @@ fn wizard_page() -> String {
 fn recovery_center_page() -> String {
     let file = resource_root().join("dsh-desktop").join("assets").join("recovery-center.html");
     let html = std::fs::read_to_string(&file).unwrap_or_else(|_| {
-        "<!doctype html><meta charset=utf-8><title>恢复中心</title><body style=\"background:#0b1220;color:#dfe6ff;font-family:sans-serif;display:grid;place-items:center;height:100vh\">恢复中心资源缺失（assets/recovery-center.html）</body>".to_string()
+        format!(
+            "<!doctype html><meta charset=utf-8><title>{0}</title><body style=\"background:#0b1220;color:#dfe6ff;font-family:sans-serif;display:grid;place-items:center;height:100vh\">{1} (assets/recovery-center.html)</body>",
+            ui_text("恢复中心", "Recovery Center"),
+            ui_text("恢复中心资源缺失", "Recovery Center resource is missing"),
+        )
     });
     let ws_rpc = std::fs::read_to_string(resource_root().join("dsh-desktop").join("assets").join("ws-jsonrpc-client.js")).unwrap_or_default();
     let preload = std::fs::read_to_string(resource_root().join("dsh-desktop").join("assets").join("recovery-center-preload.js")).unwrap_or_default();
@@ -1890,11 +1980,11 @@ fn main() {
 
             // 托盘（L1）：对齐 Electron 托盘全项（显示/隐藏、恢复中心、重启服务、反馈、退出）。
             let app_handle = app.handle().clone();
-            let show = tauri::menu::MenuItem::with_id(app, "show", "显示 / 隐藏窗口", true, None::<&str>)?;
-            let recovery = tauri::menu::MenuItem::with_id(app, "recovery", "恢复中心…", true, None::<&str>)?;
-            let restart = tauri::menu::MenuItem::with_id(app, "restart", "重启 Web 服务", true, None::<&str>)?;
-            let feedback = tauri::menu::MenuItem::with_id(app, "feedback", "反馈建议", true, None::<&str>)?;
-            let quit = tauri::menu::MenuItem::with_id(app, "quit", "退出", true, None::<&str>)?;
+            let show = tauri::menu::MenuItem::with_id(app, "show", ui_text("显示 / 隐藏窗口", "Show / Hide Window"), true, None::<&str>)?;
+            let recovery = tauri::menu::MenuItem::with_id(app, "recovery", ui_text("恢复中心…", "Recovery Center..."), true, None::<&str>)?;
+            let restart = tauri::menu::MenuItem::with_id(app, "restart", ui_text("重启 Web 服务", "Restart Web Service"), true, None::<&str>)?;
+            let feedback = tauri::menu::MenuItem::with_id(app, "feedback", ui_text("反馈建议", "Feedback"), true, None::<&str>)?;
+            let quit = tauri::menu::MenuItem::with_id(app, "quit", ui_text("退出", "Quit"), true, None::<&str>)?;
             let sep1 = tauri::menu::PredefinedMenuItem::separator(app)?;
             let sep2 = tauri::menu::PredefinedMenuItem::separator(app)?;
             let menu = tauri::menu::Menu::with_items(app, &[&show, &sep1, &recovery, &restart, &sep2, &feedback, &quit])?;

@@ -22,6 +22,10 @@
   var TEXT_MAX_BYTES = 256 * 1024;
   var SNIFF_BYTES = 8192;
 
+  function usesEnglishUi() {
+    return typeof document !== 'undefined' && String(document.documentElement.lang || '').toLowerCase().indexOf('en') === 0;
+  }
+
   var TEXT_EXT = new Set([
     '.txt', '.md', '.markdown', '.js', '.mjs', '.cjs', '.ts', '.tsx', '.jsx',
     '.json', '.jsonc', '.yaml', '.yml', '.toml', '.ini', '.cfg', '.conf',
@@ -77,7 +81,7 @@
     }
     return {
       kind: 'text',
-      text: '<!-- 拖入文件：' + name + ' -->\n' + text,
+      text: (usesEnglishUi() ? '<!-- Dropped file: ' : '<!-- 拖入文件：') + name + ' -->\n' + text,
     };
   }
 
@@ -85,19 +89,33 @@
   function buildPathHint(_a) {
     var name = _a.name, path = _a.path, size = _a.size;
     var label = name || '（未命名文件）';
-    var sizeText = size != null ? '，大小 ' + formatSize(size) : '';
+    var english = usesEnglishUi();
+    if (english && !name) label = '(unnamed file)';
+    var sizeText = size != null ? (english ? ', size ' : '，大小 ') + formatSize(size) : '';
     if (path) {
-      return '[拖入文件：' + label + sizeText + ']\n完整路径：' + path + '\n请读取该文件内容后继续处理。';
+      return english
+        ? '[Dropped file: ' + label + sizeText + ']\nFull path: ' + path + '\nRead this file before continuing.'
+        : '[拖入文件：' + label + sizeText + ']\n完整路径：' + path + '\n请读取该文件内容后继续处理。';
     }
-    return '[拖入文件：' + label + sizeText + ']\n（无法获取完整路径，请通过文件标签页或项目目录读取该文件。）';
+    return english
+      ? '[Dropped file: ' + label + sizeText + ']\n(The full path is unavailable. Read it from the Files tab or project directory.)'
+      : '[拖入文件：' + label + sizeText + ']\n（无法获取完整路径，请通过文件标签页或项目目录读取该文件。）';
   }
 
   /** 文件夹降级提示：浏览器/Electron 拿不到磁盘绝对路径，给出替代方案。 */
   function buildFolderHint(folders) {
+    var english = usesEnglishUi();
     var list = (folders || []).map(function (f) {
-      var v = f && f.virtualPath && f.virtualPath !== '/' ? '（' + f.virtualPath + '）' : '';
-      return '  · ' + (f && f.name || '（未命名目录）') + v;
+      var v = f && f.virtualPath && f.virtualPath !== '/' ? (english ? ' (' + f.virtualPath + ')' : '（' + f.virtualPath + '）') : '';
+      return '  · ' + (f && f.name || (english ? '(unnamed directory)' : '（未命名目录）')) + v;
     }).join('\n');
+    if (english) return [
+      '[Dropped folders: ' + (folders ? folders.length : 0) + ']', list, '',
+      'Browser security prevents this page from reading absolute folder paths or passing an entire directory to the model.',
+      'Use either option:',
+      '  · Open the directory from the Files / Project directory tab so the agent can read its files;',
+      '  · Drop the relevant files into the composer individually.', ''
+    ].join('\n');
     return [
       '[拖入文件夹：' + (folders ? folders.length : 0) + ' 个]',
       list,

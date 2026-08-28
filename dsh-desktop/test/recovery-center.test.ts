@@ -25,7 +25,7 @@ test('恢复中心三入口（Tauri 版）：托盘菜单 / 启动失败链 / �
   const mainRs = read('..', 'tauri-shell', 'src', 'main.rs');
   const serverTs = read('..', 'tauri-shell', 'sidecar', 'server.ts');
   // 入口 1：Rust 托盘常驻菜单「恢复中心…」→ open_recovery_center_window。
-  assert.ok(/MenuItem::with_id\(app, "recovery", "恢复中心…"/.test(mainRs), 'tray menu entry missing');
+  assert.ok(/MenuItem::with_id\(app, "recovery", ui_text\("恢复中心…", "Recovery Center\.\.\."\)/.test(mainRs), 'localized tray menu entry missing');
   assert.ok(/"recovery" => \{\s*\n\s*open_recovery_center_window\(app\)/.test(mainRs), 'tray item must open RC window');
   // 入口 3：DSH_DESKTOP_RECOVERY=1 直开恢复中心（Rust 侧）并跳过常规 boot（sidecar 侧）。
   assert.ok(/DSH_DESKTOP_RECOVERY/.test(mainRs), 'env entry missing in main.rs');

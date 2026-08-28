@@ -350,7 +350,10 @@ window.__ModuleLoader__.load({
 								inputActions.setDraft(`/goal ${objective}`);
 								finish("done", "已完成 · 已生成 /goal");
 							} else if (verifyWithBrowser) {
-								inputActions.setDraft(`${objective}\n\n请用 AI 浏览器实际验证上面这条提示词能否正常工作，并简要报告验证结论。`);
+								const verification = String(document.documentElement.lang || "").toLowerCase().startsWith("en")
+									? "Use the AI browser to verify that the prompt above works as intended, then report the result briefly."
+									: "请用 AI 浏览器实际验证上面这条提示词能否正常工作，并简要报告验证结论。";
+								inputActions.setDraft(`${objective}\n\n${verification}`);
 								finish("done", "已完成 · 已附加浏览器验证");
 							} else finish("done", formatMs(payload.elapsedMs));
 							return;

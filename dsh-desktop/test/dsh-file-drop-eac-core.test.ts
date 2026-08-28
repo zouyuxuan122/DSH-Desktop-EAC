@@ -15,14 +15,15 @@ import vm from 'node:vm';
 const BUNDLE = new URL('../assets/plugins/dsh-file-drop-eac/lib/client.js', import.meta.url);
 
 /** 用 stubbed window 载入真实 client bundle，返回暴露的 core。 */
-function loadCore() {
+function loadCore(language = '') {
   const src = readFileSync(BUNDLE, 'utf8');
   const captured = {};
   const win = {
     __ModuleLoader__: { load: (handoff) => { captured.handoff = handoff; } },
   };
+  const document = { documentElement: { lang: language } };
   vm.runInNewContext(src, {
-    window: win, console, setTimeout, clearTimeout,
+    window: win, document, console, setTimeout, clearTimeout,
     FileReader: class {}, DataTransfer: class {}, InputEvent: class {}, Event: class {},
     HTMLTextAreaElement: { prototype: {} },
   });
@@ -33,6 +34,17 @@ function loadCore() {
 }
 
 const core = loadCore();
+
+test('English UI produces English file and folder instructions for the agent', () => {
+  const englishCore = loadCore('en');
+  const pathHint = englishCore.buildPathHint({ name: 'a.zip', path: 'C:\\a.zip', size: 10 });
+  const folderHint = englishCore.buildFolderHint([{ name: 'project', virtualPath: '/project' }]);
+  assert.match(pathHint, /Dropped file/);
+  assert.match(pathHint, /Full path/);
+  assert.doesNotMatch(pathHint, /[\u3400-\u9fff]/u);
+  assert.match(folderHint, /Dropped folders/);
+  assert.doesNotMatch(folderHint, /[\u3400-\u9fff]/u);
+});
 
 const TEXT_SAMPLES = ['a.txt', 'main.js', 'b.md', 'c.json', 'd.yaml', 'e.log', 'f.csv', 'Makefile', 'LICENSE', 'package.json'];
 const IMAGE_SAMPLES = ['a.png', 'b.jpg', 'c.jpeg', 'd.webp', 'e.gif', 'f.bmp', 'g.svg'];

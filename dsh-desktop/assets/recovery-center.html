@@ -88,8 +88,38 @@
 <script>
 'use strict';
 const $ = (id) => document.getElementById(id);
+const hasChineseLanguage = () => {
+  const languages = Array.from((navigator && navigator.languages) || []);
+  if (navigator && navigator.language) languages.push(navigator.language);
+  return languages.some((tag) => String(tag).toLowerCase().split('-')[0] === 'zh');
+};
+const english = !hasChineseLanguage();
+document.documentElement.lang = english ? 'en' : 'zh-CN';
+const safeError = (value) => {
+  const text = String(value == null ? '' : value);
+  return english && /[\u3400-\u9fff]/.test(text) ? 'See the desktop log for details.' : text;
+};
 const esc = (s) => String(s == null ? '' : s)
   .replace(/[&<>"']/g, (c) => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+
+if (english) {
+  document.title = 'Recovery Center - Deepseek Harness EAC';
+  document.querySelector('header h1').textContent = 'Recovery Center';
+  $('meta').textContent = 'Loading...';
+  $('banner').textContent = 'This page runs independently from the Web UI. Disable, remove, restore, or quarantine a faulty plugin here, then retry startup.';
+  $('btn-retry').textContent = 'Retry web service startup';
+  $('btn-safemode').textContent = 'Restart in safe mode';
+  $('btn-safemode').title = 'Restart the app with all non-core external plugins disabled';
+  $('btn-snapshot').textContent = 'Create configuration snapshot';
+  $('btn-rollback').textContent = 'Restore latest good snapshot';
+  $('btn-rollback').title = 'Restore the latest good snapshot and restart the web service';
+  $('btn-export').textContent = 'Export diagnostics';
+  document.querySelectorAll('section h2')[0].textContent = 'Installed plugins';
+  document.querySelectorAll('section h2')[1].textContent = 'Desktop log tail (desktop.log)';
+  const headers = ['Plugin', 'Type', 'Source', 'Status', 'Latest error', 'Actions'];
+  document.querySelectorAll('thead th').forEach((node, index) => { node.textContent = headers[index]; });
+  $('rows').innerHTML = '<tr><td colspan="6" class="empty">Loading...</td></tr>';
+}
 
 async function act(action, value) {
   try { return await window.rc.action(action, value); }
@@ -104,38 +134,38 @@ function banner(text, kind) {
 
 async function refresh() {
   const st = await act('status');
-  if (!st || !st.ok) { banner('状态读取失败：' + (st && st.error), 'err'); return; }
+  if (!st || !st.ok) { banner(english ? 'Could not read status: ' + safeError(st && st.error) : '状态读取失败：' + (st && st.error), 'err'); return; }
   $('meta').textContent = 'v' + st.appVersion + ' · profile: ' + st.profile +
-    ' · 快照 ' + st.snapshots.length + ' · 事故 ' + st.incidents.length;
+    (english ? ' · snapshots ' + st.snapshots.length + ' · incidents ' + st.incidents.length : ' · 快照 ' + st.snapshots.length + ' · 事故 ' + st.incidents.length);
   const tb = $('rows');
   if (!st.plugins.length) {
-    tb.innerHTML = '<tr><td colspan="6" class="empty">注册表为空（尚未登记插件档案）</td></tr>';
+    tb.innerHTML = '<tr><td colspan="6" class="empty">' + (english ? 'The registry is empty. No plugin records exist yet.' : '注册表为空（尚未登记插件档案）') + '</td></tr>';
   } else {
     tb.innerHTML = st.plugins.map((p) => {
       const ops = [];
-      if (p.enabled) ops.push(`<button data-act="disable" data-id="${esc(p.id)}">停用</button>`);
-      else ops.push(`<button data-act="enable" data-id="${esc(p.id)}">启用</button>`);
-      ops.push(`<button data-act="remove" data-id="${esc(p.id)}" class="danger">移除</button>`);
+      if (p.enabled) ops.push(`<button data-act="disable" data-id="${esc(p.id)}">${english ? 'Disable' : '停用'}</button>`);
+      else ops.push(`<button data-act="enable" data-id="${esc(p.id)}">${english ? 'Enable' : '启用'}</button>`);
+      ops.push(`<button data-act="remove" data-id="${esc(p.id)}" class="danger">${english ? 'Remove' : '移除'}</button>`);
       if (p.state === 'failed' || p.state === 'quarantined') {
-        ops.push(`<button data-act="unquarantine" data-id="${esc(p.id)}">解除隔离</button>`);
+        ops.push(`<button data-act="unquarantine" data-id="${esc(p.id)}">${english ? 'Unquarantine' : '解除隔离'}</button>`);
       } else {
-        ops.push(`<button data-act="quarantine" data-id="${esc(p.id)}" class="danger">隔离</button>`);
+        ops.push(`<button data-act="quarantine" data-id="${esc(p.id)}" class="danger">${english ? 'Quarantine' : '隔离'}</button>`);
       }
       const err = p.lastError
-        ? `<span class="err-line" title="${esc(p.lastError)}">${esc(p.lastError)}</span><br><span class="sub">${esc(p.lastErrorAt || '')}</span>`
+        ? `<span class="err-line" title="${esc(safeError(p.lastError))}">${esc(safeError(p.lastError))}</span><br><span class="sub">${esc(p.lastErrorAt || '')}</span>`
         : '—';
       return `<tr>
         <td class="id">${esc(p.id)}${p.version ? '<br><span class="sub">v' + esc(p.version) + '</span>' : ''}</td>
         <td><span class="risk ${esc(p.risk)}">${esc(p.risk)}</span></td>
         <td>${esc(p.source)}</td>
-        <td class="state ${esc(p.state)}">${esc(p.state)}${p.enabled ? '' : '<br>(已停用)'}</td>
+        <td class="state ${esc(p.state)}">${esc(p.state)}${p.enabled ? '' : '<br>' + (english ? '(disabled)' : '(已停用)')}</td>
         <td>${err}</td>
         <td class="btns">${ops.join('')}</td>
       </tr>`;
     }).join('');
   }
   const logs = await act('read-log', 'desktop.log');
-  $('logtail').textContent = logs && logs.ok ? logs.tail : '(日志不可读)';
+  $('logtail').textContent = logs && logs.ok ? logs.tail : (english ? '(log unavailable)' : '(日志不可读)');
 }
 
 $('rows').addEventListener('click', async (ev) => {
@@ -147,36 +177,36 @@ $('rows').addEventListener('click', async (ev) => {
   const r = await act(action, id);
   btn.disabled = false;
   if (r && r.ok) {
-    banner(action + ' 已执行：' + id + (r.restartRequired ? '（重启 Web 服务后生效）' : ''), 'ok');
+    banner(english ? action + ' completed: ' + id + (r.restartRequired ? ' (restart the web service to apply)' : '') : action + ' 已执行：' + id + (r.restartRequired ? '（重启 Web 服务后生效）' : ''), 'ok');
   } else {
-    banner(action + ' 失败：' + ((r && r.error) || '未知错误'), 'err');
+    banner(english ? action + ' failed: ' + safeError((r && r.error) || 'Unknown error') : action + ' 失败：' + ((r && r.error) || '未知错误'), 'err');
   }
   refresh();
 });
 
 $('btn-retry').addEventListener('click', async () => {
-  banner('正在重试启动 Web 服务…');
+  banner(english ? 'Retrying web service startup...' : '正在重试启动 Web 服务…');
   const r = await act('retry-boot');
-  if (r && r.ok) banner('Web 服务已重新拉起。', 'ok');
-  else banner('重试失败：' + ((r && r.error) || '未知错误'), 'err');
+  if (r && r.ok) banner(english ? 'The web service is running again.' : 'Web 服务已重新拉起。', 'ok');
+  else banner(english ? 'Retry failed: ' + safeError((r && r.error) || 'Unknown error') : '重试失败：' + ((r && r.error) || '未知错误'), 'err');
 });
 $('btn-safemode').addEventListener('click', async () => {
   const r = await act('safe-mode');
-  if (!(r && r.ok)) banner('安全模式重启失败：' + ((r && r.error) || ''), 'err');
+  if (!(r && r.ok)) banner(english ? 'Safe-mode restart failed: ' + safeError(r && r.error) : '安全模式重启失败：' + ((r && r.error) || ''), 'err');
 });
 $('btn-snapshot').addEventListener('click', async () => {
   const r = await act('snapshot');
-  banner(r && r.ok ? '快照已创建。' : '快照失败：' + ((r && r.error) || ''), r && r.ok ? 'ok' : 'err');
+  banner(r && r.ok ? (english ? 'Snapshot created.' : '快照已创建。') : (english ? 'Snapshot failed: ' + safeError(r && r.error) : '快照失败：' + ((r && r.error) || '')), r && r.ok ? 'ok' : 'err');
   refresh();
 });
 $('btn-rollback').addEventListener('click', async () => {
   const r = await act('rollback-last-good');
-  if (r && r.ok) banner('已回滚到最后良好快照，可重试启动。', 'ok');
-  else banner('回滚失败：' + ((r && r.error) || '无可回滚快照'), 'err');
+  if (r && r.ok) banner(english ? 'Restored the latest good snapshot. You can retry startup.' : '已回滚到最后良好快照，可重试启动。', 'ok');
+  else banner(english ? 'Restore failed: ' + safeError((r && r.error) || 'No snapshot is available') : '回滚失败：' + ((r && r.error) || '无可回滚快照'), 'err');
 });
 $('btn-export').addEventListener('click', async () => {
   const r = await act('export-logs');
-  banner(r && r.ok ? '诊断包已导出：' + r.zipPath : '导出失败：' + ((r && r.error) || ''), r && r.ok ? 'ok' : 'err');
+  banner(r && r.ok ? (english ? 'Diagnostics exported: ' : '诊断包已导出：') + r.zipPath : (english ? 'Export failed: ' + safeError(r && r.error) : '导出失败：' + ((r && r.error) || '')), r && r.ok ? 'ok' : 'err');
 });
 
 refresh();

@@ -293,6 +293,13 @@ window.__ModuleLoader__.load({
 			/** 行显示名：名称（可读 id）+ 包名（moduleName/package）；匿名 id 退化为只显包名。 */
 			const rowName = (row) => (/^[0-9a-f]{8}$/i.test(row.id) ? null : row.id);
 			const rowPkg = (row) => row.title;
+			const usesEnglishUi = () => String(document.documentElement.lang || "").toLowerCase().startsWith("en");
+			const rowDescription = (row) => {
+				const description = row.description || L.descFallback;
+				return usesEnglishUi() && /[\u3400-\u9fff]/u.test(description)
+					? "Plugin package: " + rowPkg(row)
+					: description;
+			};
 
 			/** 简洁视图卡片（官方清单页同款：标题 + 状态圆点 + 开关）。 */
 			const renderCompactCard = (row) => {
@@ -307,7 +314,7 @@ window.__ModuleLoader__.load({
 				const short = rowName(row) ? pkgShort(rowPkg(row)) : null;
 				return jsxs("div", {
 					key: row.id,
-					title: row.description || L.descFallback,
+					title: rowDescription(row),
 					style: {
 						display: "flex",
 						alignItems: "center",
@@ -359,7 +366,7 @@ window.__ModuleLoader__.load({
 								phaseBadge(row),
 								rowDirty(row) ? badge(L.badgePending, "var(--dsw-alias-state-info-primary, #5b9bd5)") : null
 							] }),
-							jsx("span", { style: { fontSize: 12, opacity: 0.65, lineHeight: 1.5 }, children: row.description || L.descFallback })
+							jsx("span", { style: { fontSize: 12, opacity: 0.65, lineHeight: 1.5 }, children: rowDescription(row) })
 						]
 					}),
 					row.removed
@@ -397,7 +404,9 @@ window.__ModuleLoader__.load({
 						jsxs("div", { style: { fontWeight: 600, fontSize: 13, margin: "14px 0 2px" }, children: [
 							jsx("span", { children: title }),
 							jsx("span", { style: { fontSize: 12, opacity: 0.55, marginLeft: 8 }, children: note + " · " + items.length }),
-							jsx("span", { style: { fontSize: 12, opacity: 0.4, marginLeft: 8 }, children: items.filter((r) => rowValue(r)).length + " 启用 / " + items.filter((r) => !rowValue(r)).length + " 关闭" })
+							jsx("span", { style: { fontSize: 12, opacity: 0.4, marginLeft: 8 }, children: usesEnglishUi()
+								? items.filter((r) => rowValue(r)).length + " enabled / " + items.filter((r) => !rowValue(r)).length + " disabled"
+								: items.filter((r) => rowValue(r)).length + " 启用 / " + items.filter((r) => !rowValue(r)).length + " 关闭" })
 						] }),
 						compact
 							? jsx("div", { className: "dshpm-cards", style: { display: "grid", gridTemplateColumns: "repeat(2, minmax(0, 1fr))", gap: 10, marginTop: 6 }, children: items.map(renderCompactCard) })
