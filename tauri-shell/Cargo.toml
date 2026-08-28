@@ -17,6 +17,14 @@ tokio-tungstenite = "0.24"
 futures-util = "0.3"
 http = "1"
 
+# 任务栏 Big 图标（WM_SETICON）专用：tauri 未暴露 tao 的 set_taskbar_icon，
+# 经 hwnd() 直呼 USER32。版本对齐依赖树既有 0.61.x（复用，不新增编译单元）。
+[target.'cfg(windows)'.dependencies]
+windows-sys = { version = "0.61", features = [
+  "Win32_UI_WindowsAndMessaging",
+  "Win32_System_LibraryLoader",
+] }
+
 [[bin]]
 name = "dsh-eac-shell"
 path = "src/main.rs"

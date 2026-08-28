@@ -842,6 +842,7 @@ dependencies = [
  "tauri-plugin-single-instance",
  "tokio",
  "tokio-tungstenite",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]

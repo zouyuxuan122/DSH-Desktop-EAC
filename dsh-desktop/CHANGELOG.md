@@ -58,7 +58,7 @@ next2（功能包体系：.dshpack 打包分发插件+预设+技能，声明官�
     → `jing-hy`（自研，GitHub 仓库归属一致）。
 - 英文版致谢表补上此前缺失的 `computer-user` 条目，与中文版对齐。
 
-## 功能包链路修复 + 任务栏图标 · next
+## 功能包链路修复 + 任务栏图标 + 窗口尺寸 · next
 
 ### 打包装配：功能包 CLI 白名单补齐（tauri-shell/stage-resources.mjs）
 
@@ -69,13 +69,28 @@ next2（功能包体系：.dshpack 打包分发插件+预设+技能，声明官�
 - 两文件补入白名单，并新增成对装配自检：CLI 与核心模块必须同时入包，
   缺一即 stage 直接失败（后续新增随包 CLI 照此成对补充）。
 
-### Tauri 壳：Windows 任务栏图标修复（tauri-shell/src/main.rs）
+### Tauri 壳：Windows 任务栏图标修复（tauri-shell/src/main.rs + Cargo.toml）
 
-- tao 注册的窗口 class 不带图标（`WNDCLASSEXW.hIcon` 为 NULL），动态创建的
-  窗口不显式注入图标时，Windows 任务栏按钮显示空白默认图。
-- 主窗 / 会话浮窗 / 恢复中心 / died 页四处窗口统一在 build 成功后经
-  `apply_window_icon` 注入 `default_window_icon`（与托盘图标同源，tauri-build
-  嵌入的 bundle icon）；注入失败仅打印告警，不阻塞窗口创建。
+- 根因分两层：① tao 注册的窗口 class 不带图标（`WNDCLASSEXW.hIcon` 为 NULL）；
+  ② tao 区分 Small（`set_window_icon`，标题栏）与 Big（`set_taskbar_icon`，
+  任务栏）两套图标 —— tauri 的 `set_icon` 只映射 Small 且未暴露 Big API，
+  动态创建的无框窗口两套均空，任务栏显示空白默认图（白色文件图标）。
+- 修复：新增 `apply_taskbar_icon_big` —— 经 `hwnd()` 从 exe 内嵌资源加载
+  tauri-build 以 ID 32512 嵌入的 bundle .ico（`LoadImageW`），`WM_SETICON`
+  同时补 Big（任务栏）与 Small（标题栏）；Small 仍由 `default_window_icon`
+  （tauri `set_icon`）负责。主窗 / 会话浮窗 / 恢复中心 / died 页四处窗口
+  统一接入；失败仅打印告警，不阻塞窗口创建。
+- 依赖：新增 `windows-sys 0.61`（仅 Windows 目标；版本对齐依赖树既有条目，
+  复用不新增编译单元）。
+
+### Tauri 壳：主窗默认尺寸自适应 + 坏状态防御（tauri-shell/src/main.rs）
+
+- 首启默认（无 `window-state.json`）：改为 work area（去双边距）的 80%，
+  收敛到 [1200×800, 1920×1080] 逻辑区间 —— 1080p 及以上屏幕首启即约八成
+  宽高；`DSH_WINDOW_W/H` 显式覆盖保留。
+- 坏状态防御（重装后窗口很小的根因）：恢复历史状态时尺寸 < 600×400（逻辑）
+  判为旧版本异常残留，直接丢弃走首启默认并打印告警，不再每次启动都恢复成
+  小窗；正常拖小（≥ 下限）的窗口记忆不受影响。
 
 ### 内置插件：dsh-unified-market 0.3.0 → 0.3.1
 

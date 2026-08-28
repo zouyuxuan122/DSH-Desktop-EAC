@@ -277,6 +277,16 @@ fn resolved_initial_bounds(
         // 范围），窗口将永远无法完整显示 —— 以 work area 为实际下限（保底 1px）。
         let eff_min_w = min_w.min(work_w - FIRST_RUN_MARGIN).max(1.0);
         let eff_min_h = min_h.min(work_h - FIRST_RUN_MARGIN).max(1.0);
+        if std::env::var_os("DSH_WINDOW_W").is_none() && std::env::var_os("DSH_WINDOW_H").is_none()
+        {
+            // 自适应首启默认（issue：重装/首启窗口过小）：work area 双边距后
+            // 取 80%，收敛到 [1200×800, 1920×1080] 逻辑区间 —— 1080p 及以上
+            // 屏幕首启即约八成宽高，窄副屏由下方 work-area 收敛兜底。
+            let fit_w = (work_w - FIRST_RUN_MARGIN * 2.0) * 0.8;
+            let fit_h = (work_h - FIRST_RUN_MARGIN * 2.0) * 0.8;
+            out_w = fit_w.clamp(1200.0, 1920.0);
+            out_h = fit_h.clamp(800.0, 1080.0);
+        }
         out_w = out_w.min(work_w - FIRST_RUN_MARGIN).max(eff_min_w);
         out_h = out_h.min(work_h - FIRST_RUN_MARGIN).max(eff_min_h);
         let cx = ct.position.x as f64 + (ct.size.width as f64 - out_w * scale) / 2.0;
@@ -285,6 +295,16 @@ fn resolved_initial_bounds(
     }
 
     if let Some(st) = load_window_state(app) {
+        // 坏状态防御（issue：重装后窗口很小）：历史尺寸过小（<600×400 逻辑，
+        // 低于有意义的可用下限）多为旧版本异常会话/坏写盘残留 —— 直接丢弃
+        // 走上面的首启默认，避免每次启动都恢复成小窗。正常拖小的窗口首次
+        // 调整后重新记忆即可恢复。
+        if st.w < 600.0 || st.h < 400.0 {
+            eprintln!(
+                "[shell] window-state too small ({}x{}), ignored (use default size)",
+                st.w, st.h
+            );
+        } else {
         // 目标显示器：窗口中心点所在显示器（副屏拼接/拔插后旧坐标仍指向其它
         // 屏也算合法；完全失效时 monitor_from_point 返回 None → 回退上面的默认）。
         let scale = primary.as_ref().map(|p| p.scale_factor()).unwrap_or(1.0);
@@ -317,6 +337,7 @@ fn resolved_initial_bounds(
             out_h = h;
             out_pos = Some((x / mscale, y / mscale));
             out_max = st.maximized;
+        }
         }
     }
 
@@ -954,6 +975,51 @@ fn sanitize_label(s: &str) -> String {
     }
 }
 
+/// Windows 任务栏 Big 图标：tauri 的 set_icon 只走 tao set_window_icon
+/// （IconType::Small —— 标题栏/Alt+Tab），而任务栏读取的是 ICON_BIG；
+/// tao 注册的窗口 class 不带图标（hIcon NULL）且 tauri 未暴露
+/// set_taskbar_icon，任务栏因此显示空白默认图。
+/// 处理：从 exe 内嵌资源加载图标（tauri-build 以资源 ID 32512 嵌入的
+/// bundle .ico，lib.rs set_icon_with_id），SendMessage(WM_SETICON) 同时
+/// 补 Big（任务栏）与 Small（标题栏）。失败仅告警，不阻塞窗口创建。
+#[cfg(windows)]
+fn apply_taskbar_icon_big(win: &tauri::WebviewWindow) {
+    use windows_sys::Win32::System::LibraryLoader::GetModuleHandleW;
+    use windows_sys::Win32::UI::WindowsAndMessaging::{
+        GetSystemMetrics, LoadImageW, SendMessageW, ICON_BIG, ICON_SMALL, IMAGE_ICON,
+        LR_DEFAULTSIZE, SM_CXSMICON, SM_CYSMICON, WM_SETICON,
+    };
+    let Ok(hwnd) = win.hwnd() else { return };
+    // tauri hwnd() 返回 windows crate 的 HWND(pub *mut c_void)，与 windows-sys 指针同形。
+    let hwnd = hwnd.0;
+    unsafe {
+        let hinstance = GetModuleHandleW(std::ptr::null());
+        if hinstance.is_null() {
+            return;
+        }
+        // MAKEINTRESOURCEW(32512)：资源 ID 按约定即指针值的低 16 位。
+        let icon_name: *const u16 = 32512usize as *const u16;
+        let hicon_big = LoadImageW(hinstance, icon_name, IMAGE_ICON, 0, 0, LR_DEFAULTSIZE);
+        let hicon_small = LoadImageW(
+            hinstance,
+            icon_name,
+            IMAGE_ICON,
+            GetSystemMetrics(SM_CXSMICON),
+            GetSystemMetrics(SM_CYSMICON),
+            0,
+        );
+        if !hicon_big.is_null() {
+            SendMessageW(hwnd, WM_SETICON, ICON_BIG as usize, hicon_big as isize);
+        }
+        if !hicon_small.is_null() {
+            SendMessageW(hwnd, WM_SETICON, ICON_SMALL as usize, hicon_small as isize);
+        }
+        if hicon_big.is_null() && hicon_small.is_null() {
+            eprintln!("[shell] taskbar icon: LoadImage(resource 32512) returned null");
+        }
+    }
+}
+
 /// Windows 任务栏/标题栏图标：tao 注册的窗口 class 不带图标（WNDCLASSEXW
 /// 的 hIcon/hIconSm 为 NULL），动态创建的窗口不显式注入图标时，任务栏按钮
 /// 会显示空白默认图。default_window_icon 与托盘同源（tauri-build 嵌入的
@@ -964,6 +1030,8 @@ fn apply_window_icon(win: &tauri::WebviewWindow, app: &tauri::AppHandle) {
             eprintln!("[shell] window icon set failed: {}", e);
         }
     }
+    #[cfg(windows)]
+    apply_taskbar_icon_big(win);
 }
 
 /// 会话浮窗（硬门槛①）：第二个 WebviewWindow + 独立 data_directory
