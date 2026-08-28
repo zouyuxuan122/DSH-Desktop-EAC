@@ -64,6 +64,20 @@ window.__ModuleLoader__.load({
       return count
     }
 
+    // 会话列骨架的稳定契约（内核 data-* 属性，非构建哈希）：设置弹层是
+    // portal 到 body 的浮层，绝不会包含会话树；候选"设置根"一旦包含
+    // 这些节点，说明种子匹配失真（如侧栏"设置"按钮把公共祖先爬到整页
+    // 框架），必须整条丢弃 —— 否则修复器会把对话区大盒子当滚动容器打标。
+    const CONVERSATION_GUARD_SELECTOR = '[data-phase], [data-conversation-scroll], [data-composer-seat]'
+
+    function containsConversationTree(element) {
+      try {
+        return element.querySelector(CONVERSATION_GUARD_SELECTOR) !== null
+      } catch {
+        return false
+      }
+    }
+
     function promoteToSettingsRoot(seed) {
       let current = seed
       for (let depth = 0; isElement(current) && depth < 9; depth += 1) {
@@ -71,7 +85,11 @@ window.__ModuleLoader__.load({
         const rect = rectOf(current)
         const role = String(current.getAttribute('role') || '').toLowerCase()
         if (role === 'dialog' && rect.width >= 200 && rect.height >= 150 && settingsSignalCount(current) >= 1) return current
-        if (rect.width >= 250 && rect.height >= 180 && settingsSignalCount(current) >= 2) return current
+        if (rect.width >= 250 && rect.height >= 180 && settingsSignalCount(current) >= 2) {
+          // 含会话树的大框（整页框架/中心列）不是设置浮层：hero 首页的
+          // "设置"按钮等词表命中会把公共祖先爬到这里，误标会话区。
+          if (!containsConversationTree(current)) return current
+        }
         current = current.parentElement
       }
       return null
@@ -136,6 +154,16 @@ window.__ModuleLoader__.load({
 
     function scoreCandidate(element, root) {
       if (!isVisible(element) || isExcludedScrollable(element)) return -1
+      // 会话区契约元素与其内部一律不打标（纵深兜底）：hero 阶段的
+      // composerStack 因发光背景 svg 天然 scrollHeight > clientHeight，
+      // 曾经以此得分被打上滚动容器标记，overflow-y:auto 连带 overflow-x
+      // 变 auto，横竖双滚动条 + 输入卡底部裁切（2026-08-28 事故）。
+      try {
+        if (element.matches('[data-phase], [data-conversation-scroll], [data-composer-seat], [data-composer-card], [class*="composer"]')) return -1
+        if (element.closest('[data-conversation-scroll]') !== null) return -1
+      } catch {
+        // 选择器不受支持时按不排除处理，保持旧行为。
+      }
       const clientHeight = Number(element.clientHeight || 0)
       const scrollHeight = Number(element.scrollHeight || 0)
       if (clientHeight < 24 || scrollHeight <= clientHeight + 1) return -1

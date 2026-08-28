@@ -1,10 +1,10 @@
 'use strict';
-// 手机配对全链路验证（5.1.2）· 真实 Tauri 壳 + CDP：
+// 手机配对全链路验证（5.2 完整 Web UI 代理版）· 真实 Tauri 壳 + CDP：
 //  1) /plugins/dsh-phone/qrcode.js 静态路由 200（二维码库可达）
 //  2) phoneBridge.start() → LAN /pair?token= 200（配对等待页，不再 403/白块）
 //  3) desktop decide(true) → /api/pair-state approved + 下发 dsh_mobile cookie
-//  4) / 与 /app 返回手机端续聊客户端（非「开发中」占位页）
-//  5) /api/rpc 经真内核 client-request 信封往返成功（session.list）
+//  4) / 未配对 401 门页；配对后 / 返回完整内核 Web UI（5.2 代理版，非占位页）
+//  5) /api 代理往返真内核（client-request 信封 session.list）+ 喵丝滑 /pending 路由可达
 //  6) 顺带抽查：设置侧边栏出现「余额」「多智能体协作团队」入口（尽力而为）
 // 用法: node verify-phone-pair.cjs [exePath]
 const { spawn } = require('node:child_process');
@@ -138,15 +138,19 @@ const check = (name, ok, detail) => { console.log(`${ok ? '✔' : '✖'} ${name}
     const setCookie = poll.headers['set-cookie'] ? poll.headers['set-cookie'].join('; ') : '';
     check('P5 状态 approved + 下发 dsh_mobile cookie', poll.status === 200 && poll.body.state === 'approved' && /dsh_mobile=1/.test(setCookie), JSON.stringify({ state: poll.body && poll.body.state, cookie: /dsh_mobile=1/.test(setCookie) }));
 
-    // 5) 手机端页面 = 真实续聊客户端
-    const home = await httpReq(`http://127.0.0.1:${port}/`, {});
-    const app = await httpReq(`http://127.0.0.1:${port}/app`, {});
-    check('P6 手机端 / 返回续聊客户端（非占位）', home.status === 200 && /session\.list/.test(home.raw), 'len=' + home.raw.length);
-    check('P6b /app 同客户端', app.status === 200 && /session\.list/.test(app.raw), 'len=' + app.raw.length);
+    // 5) 手机端 = 完整内核 Web UI 反向代理（未配对 401 门页，配对后真页面）
+    const gate = await httpReq(`http://127.0.0.1:${port}/`, {});
+    check('P6 未配对 / 返回 401 门页', gate.status === 401 && /需要重新配对/.test(gate.raw), 'status=' + gate.status);
+    const home = await httpReq(`http://127.0.0.1:${port}/`, { cookie: 'dsh_mobile=1' });
+    check('P6b 配对后 / 返回完整内核页面', home.status === 200 && /id="root"|DeepSeek Harness/.test(home.raw), 'len=' + home.raw.length);
 
-    // 6) 白名单 RPC 经真内核信封往返
-    const rpc = await httpReq(`http://127.0.0.1:${port}/api/rpc`, { method: 'POST', body: { method: 'session.list', params: {} }, cookie: 'dsh_mobile=1' });
-    check('P7 /api/rpc 白名单信封往返成功', rpc.status === 200 && rpc.body && rpc.body.ok === true, 'status=' + rpc.status + ' body=' + JSON.stringify(rpc.body).slice(0, 120));
+    // 6) /api 代理往返真内核（client-request 信封，内核按 server-response 应答）
+    const envelope = { type: 'client-request', rpcId: 'e2e-' + Date.now(), method: 'session.list', payload: {} };
+    const rpc = await httpReq(`http://127.0.0.1:${port}/api/session.list`, { method: 'POST', body: envelope, cookie: 'dsh_mobile=1' });
+    check('P7 /api 代理往返真内核成功', rpc.status === 200 && /server-response|session/.test(rpc.raw), 'status=' + rpc.status + ' body=' + String(rpc.raw).slice(0, 120));
+    // 喵丝滑 host 路由（5.2 内置）经代理可达
+    const pending = await httpReq(`http://127.0.0.1:${port}/plugins/meow-smooth/pending`, { cookie: 'dsh_mobile=1' });
+    check('P7b 喵丝滑 /pending 路由经代理可达', pending.status === 200 && /hostVersion/.test(pending.raw), 'status=' + pending.status);
 
     // 7) 状态面
     const status = await client.evalJs(`window.dshDesktop.phoneBridge.status().then((r) => r).catch((e) => ({ err: String(e && e.message || e) }))`);

@@ -220,7 +220,8 @@ console.log('[stage] 编译 TypeScript（tsc 就地产物）');
 execSync('npx tsc -p tsconfig.json', { cwd: dd, stdio: 'inherit' });
 
 console.log('[stage] sidecar 产物');
-for (const f of ['server.js', 'bridge.js', 'rescue-integration.js', 'phone-bridge.js', 'mobile-app.html']) {
+// 5.2 起 mobile-app.html 退役（手机桥 = 完整 Web UI 反向代理，见 phone-bridge.ts）。
+for (const f of ['server.js', 'bridge.js', 'rescue-integration.js', 'phone-bridge.js']) {
   cpSync(path.join(root, 'tauri-shell', 'sidecar', f), path.join(staged, 'sidecar', f));
 }
 

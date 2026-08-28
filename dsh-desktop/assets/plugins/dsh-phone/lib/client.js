@@ -7,7 +7,8 @@
  *     请求 LAN 配对 → 渲染二维码（内置 qrcode-generator，经插件静态路由加载）
  *   - 「批准/拒绝」「断开」：配对决策（sidecar 的 decide/disconnect 只接受回环
  *     调用，WS 桥本身即回环，安全）
- *   - 手机端说明：手机端续聊客户端已随应用内置（扫码即用，浏览器打开无需装 App）
+ *   - 手机端说明：5.2 起手机扫码打开的是完整 DSH Web UI（反向代理），喵丝滑
+ *     移动端优化与通知（meow-smooth）随应用内置，扫码即用无需装 App
  *
  * 仅在 Tauri 壳（bridge.ts 提供了 phoneBridge 键组）下可用；Electron 开发壳
  * 的 preload 镜像会拒绝调用，这里兜底提示。
@@ -50,12 +51,12 @@ window.__ModuleLoader__.load({
 
     var zh = {
       nav: "连接手机",
-      intro: "通过手机浏览器扫码配对，在手机上继续电脑里的 DSH 会话。手机端续聊客户端已可用：会话列表、历史消息、发送消息、切换模型与新建会话，无需安装 App。",
+      intro: "通过手机浏览器扫码配对，手机上直接打开电脑里的完整 DSH 界面（内置喵丝滑移动端优化与通知）：会话、输入、模型、工作区与设置全功能可用，无需安装 App。",
       unavailable: "桌面桥不可用：phoneBridge 仅在 Tauri 桌面壳提供（Electron 开发壳不承载）。",
       statusIdle: "未启动：点击「开始配对」生成二维码。",
       statusRunning: "桥已运行（LAN {port}），等待手机扫码。",
       statusWaiting: "手机已打开配对页，等待你在电脑端批准…",
-      statusApproved: "配对已批准：手机端已建立会话 cookie，扫码页将自动进入续聊客户端。",
+      statusApproved: "配对已批准：手机端已建立会话 cookie，扫码页将自动进入完整 DSH 界面。",
       statusExpired: "配对已过期：请点击「重新配对」。",
       start: "开始配对",
       restart: "重新配对",
@@ -69,14 +70,14 @@ window.__ModuleLoader__.load({
       copied: "已复制",
       qrLoading: "二维码组件加载中…",
       qrFailed: "二维码组件加载失败（/plugins/dsh-phone/qrcode.js 不可用）——请刷新页面后重新配对，或在应用重新安装后再试。",
-      mobileDev: "手机端续聊客户端已可用",
-      mobileDevHint: "手机扫码批准后自动进入续聊客户端：会话列表、历史消息、发送消息、切换模型与新建会话，无需安装 App。",
+      mobileDev: "手机端完整界面 + 喵丝滑优化已内置",
+      mobileDevHint: "手机扫码批准后自动进入完整 DSH 界面：会话、消息、模型与设置全功能，内置喵丝滑移动优化与任务通知，无需安装 App。",
       refresh: "刷新状态",
     };
 
     var en = {
       nav: "Connect Phone",
-      intro: "Scan with your phone to continue DSH sessions from a mobile browser. The mobile client is built in: session list, history, sending messages, model switching and session creation — no app install needed.",
+      intro: "Scan with your phone to open the full DSH web UI on the same device (built-in meow-smooth mobile optimization and notifications): sessions, input, models, workspaces and settings — no app install needed.",
       unavailable: "Desktop bridge unavailable: phoneBridge is provided by the Tauri shell only.",
       statusIdle: "Not started: click \"Start pairing\" to show a QR code.",
       statusRunning: "Bridge running (LAN {port}), waiting for a scan.",
@@ -96,7 +97,7 @@ window.__ModuleLoader__.load({
       qrLoading: "QR component loading…",
       qrFailed: "QR component failed to load (/plugins/dsh-phone/qrcode.js unavailable) — reload the page and re-pair, or reinstall the app.",
       mobileDev: "Mobile chat client available",
-      mobileDevHint: "After pairing approval the phone opens the chat client: session list, history, sending, model switching and session creation — no app install needed.",
+      mobileDevHint: "After pairing approval the phone opens the full DSH web UI (with built-in meow-smooth mobile optimization and notifications): sessions, messages, models and settings — no app install needed.",
       refresh: "Refresh",
     };
 
@@ -217,7 +218,7 @@ window.__ModuleLoader__.load({
               }
             }
           }
-          return h("div", { className: "__ph_qr" }, h("canvas", { width: size, height: size }));
+          return h("div", { className: "__ph_qr" }, h("img", { src: canvas.toDataURL("image/png"), width: size, height: size, alt: "配对二维码" })); // 修复：画好的内容转 dataURL 上 img（旧版挂空 canvas 恒白；直挂 DOM 节点在 React 下非法会炸分区）
         } catch (e) {
           return h("span", { className: "__ph_hint", style: { color: "var(--dsw-alias-state-error-primary)" } }, String((e && e.message) || e));
         }

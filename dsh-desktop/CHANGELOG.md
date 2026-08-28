@@ -109,6 +109,65 @@ next2（功能包体系：.dshpack 打包分发插件+预设+技能，声明官�
   不完整或版本过旧）」两种原因，给出可行动提示（升级 / 重装桌面客户端），
   修复 0.3.0 及之前统一误报"缺少 DSH_DESKTOP_RESOURCE_ROOT"导致用户在桌面端
   却被提示去桌面端的排障误导。
+## 5.2.0（本版：手机控制整体替换为喵丝滑 + 文档级滚动根治）· 2026-08-28
+
+### 手机控制整体替换：内置 dsh-meow-smooth（Phant0Meow，MIT），退役自研续聊客户端
+
+- **内置「喵丝滑」插件 0.5.0**（assets/plugins/dsh-meow-smooth）：手机端 UI
+  交互优化（输入框失焦折叠、手机回车=换行、侧边栏边缘手势、窄屏按钮收缩、
+  禁意外缩放、表格触摸滚动、设置页手机适配）+ 通知系统（页面内提醒卡片 /
+  Web Push / webhook 三级通道，审批/提问/长任务完成/回合失败提醒，多会话
+  并行可感知）+ 审计投影只读路由（/plugins/meow-smooth/pending）。
+- **web-push 运行时依赖随包供给**：加入应用闭包（package.json dependencies）
+  与插件宿主依赖落位（ensurePluginHostDeps）；缺省时插件优雅降级为仅页面内
+  提醒，绝不拖垮插件树。
+- **mobile-app.html 自研续聊客户端退役**（sidecar 与 stage 清单同步移除）：
+  手机端改为直接访问完整 DSH Web UI，喵丝滑负责移动端体验；设置页「连接手机」
+  文案同步更新。
+
+### 手机连接桥重写：完整 Web UI 反向代理（安全边界不变）
+
+- **phone-bridge 5.2**：配对链路原样保留（一次性 token 5min TTL +
+  timingSafeEqual、/api/pair-state 下发 HttpOnly+SameSite=Strict cookie、
+  /desktop/decide|disconnect 仅回环）；批准后的一切路径透明代理到内核 Web
+  服务——静态资源、/api/*、/plugins/*、WebSocket 升级全支持，手机获得与
+  桌面一致的完整界面。
+- **信任围栏零登记**：代理把 Host/Origin/Referer 改写为内核自身 origin，
+  内核浏览器信任围栏看到的始终是同源流量，无需把动态 LAN 地址登记进
+  trusted-host 白名单。
+- **unary JSON gzip**：POST /api/* 的 JSON 响应按 Accept-Encoding 压缩
+  （大会话历史 1-8MB 压缩 70-90%，蜂窝网络流畅）；SSE/WS/静态资源透传不缓冲。
+- **停桥修复**：升级后的 WS socket 已脱离 http.Server 连接计数，
+  close/closeAllConnections 均不覆盖——新增活跃 WS socket 对追踪，
+  stop() 显式销毁（修复停桥后手机侧 WS 仍存活、close 回调永不触发）。
+- **未配对门禁**：一切代理面 401 中文门页（指引回桌面端重新配对），
+  不再暴露任何内容。
+
+### 文档级滚动根治（老毛病：hero 输入卡裁切 + 横/纵双滚动条复发）
+
+- **根因**：内核视口链 html,body,#root{height:100%} 干净，但 html/body 无
+  overflow 钳制；hero 态 scrollBody 以 justify-content:center 居中内容，
+  内容高于视口时溢出沿包含链漏到文档层 → 文档级滚动条 + flex 居中溢出
+  上/下两端不可滚达。旧修复锚定 CSS Modules 哈希类（.wSkVaW_*）且只随
+  桌面壳注入——内核前端更新换哈希即静默失效，浏览器/手机端完全裸奔。
+- **根治 = 新内置插件 dsh-viewport-lock**（纯客户端 CSS，随内核页面加载，
+  桌面/浏览器/手机三端同源生效）：① html/body overflow:hidden 文档级
+  钳制（内核全部滚动面均为内部滚动容器，文档滚动条不是任何功能载体；
+  print 媒体下还原）；② hero 居中兜底改锚稳定契约
+  [data-phase="hero"] [data-conversation-scroll]（非哈希，永不失效），
+  放得下居中、放不下从顶排布且滚动体自身可滚，输入卡永远可达。
+
+### 验证
+
+- `npm test` 全量 **724 用例：714 通过 / 0 失败 / 10 skip**（退役测试
+  留档；新增/重写手机桥回路 7 用例：门禁 401、配对→cookie、Host/Origin
+  改写、unary JSON gzip、WS 升级透传、503、回环 decide、lanAddress）。
+- 真内核 + 真桥端到端 9 项全过（配对→cookie→完整页面→喵丝滑 /pending
+  经代理→静态资源→gzip 解包出内核 server-response→WS 放行）。
+- 客户端实机验证：390×720 手机视口下喵丝滑客户端生效（禁缩放 viewport、
+  touch-action CSS 注入）、viewport-lock 生效（html overflow hidden、
+  无文档溢出）、零控制台错误；桌面壳 13 场景扫描（隐藏侧边栏/长草稿/
+  620-1006px 宽度扫描/模型菜单/active 会话/设置页）文档零溢出。
 
 ## 功能包体系（Feature Pack · 借鉴 HMCL 整合包架构）· next
 

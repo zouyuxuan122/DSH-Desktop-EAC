@@ -1,6 +1,6 @@
 {
   "name": "dsh-settings-scroll-fix",
-  "version": "2.0.0",
+  "version": "2.0.1",
   "private": true,
   "description": "DSH settings scrolling repair without version-specific CSS-module hashes.",
   "type": "module",
@@ -30,7 +30,9 @@
       "patch": "./cordis.patch.yml"
     },
     "client": {
-      "inject": ["@deepseek-ai/dsh-client-runtime"],
+      "inject": [
+        "@deepseek-ai/dsh-client-runtime"
+      ],
       "platform": "web",
       "immediately": true
     }

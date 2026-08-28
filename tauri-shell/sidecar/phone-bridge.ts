@@ -1,46 +1,46 @@
 'use strict';
-// DSH 手机连接桥（sidecar 层，Tauri 壳运行期）。
+// DSH 手机连接桥（5.2：完整 Web UI 反向代理版，sidecar 层，Tauri 壳运行期）。
 //
-// 参照上游 dsh-desktop 的「手机访问 = 扫码配对 + 白名单 RPC 续聊桥」架构
-// （非 scrcpy 类屏幕远控）：本模块在 sidecar 上开一个 0.0.0.0 的 LAN HTTP
-// 端口，只暴露配对/状态/白名单 RPC 三条面，Harness 本体仍只在 127.0.0.1
-// 回环监听，绝不把内核 Web 服务绑到公网接口。
-//
-// 本版本（5.1.1）落地完整配对链路与接口契约，但手机端 UI 为占位页
-// 「手机端正在开发中」——客户端接入点（/、/api/rpc、cookie）全部保留，
-// 供后续移动端接入时直接使用：
+// 5.1.x 是「白名单 RPC + 自研 mobile-app.html 续聊客户端」；5.2 起替换为
+// dsh-meow-smooth 方案：手机经本桥直接访问**完整内核 Web UI**，喵丝滑插件
+// （内置随包分发）在手机浏览器里提供移动端交互优化与通知，本桥不再自带
+// 任何自研客户端页。安全边界不变：
 //   /pair?token=…        配对：一次性 token（5 分钟 TTL，timingSafeEqual 比对）
-//   /api/pair-state?token=… 手机端轮询配对状态；approved 时下发 dsh_mobile cookie
-//   /desktop/decide       桌面端批准（仅回环可达）
-//   /desktop/disconnect   桌面端断开（仅回环可达；轮换 token，手机端立即失效）
-//   /api/rpc              白名单 RPC 转发到内核（需 dsh_mobile cookie）
-//   /                     手机端占位页（PWA meta；「手机端正在开发中」）
+//   /api/pair-state?…    手机端轮询配对状态；approved 时下发 dsh_mobile cookie
+//   /desktop/decide      桌面端批准（仅回环可达）
+//   /desktop/disconnect  桌面端断开（仅回环可达；轮换 token，手机端立即失效）
+//   其余一切路径          反向代理到内核 Web 服务（需 dsh_mobile cookie）：
+//                        静态资源 / /api/* / /plugins/* / WebSocket 升级
 //
-// 安全边界：配对 token 一次性 + 5min TTL + 常量时间比对；approve/decide/
-// disconnect 仅接受回环来源；dsh_mobile cookie HttpOnly + SameSite=Strict，
-// 一年有效期；RPC 白名单仅放行会话/模型/工作区只读或明确的用户动作。
+// 代理细节：Host/Origin 头改写为内核自身 origin —— 内核的浏览器信任围栏
+// 看到的始终是同源流量，无需把 LAN 地址登记进 trusted-host 白名单；
+// POST /api/* 的 unary JSON 响应按 Accept-Encoding 加 gzip（手机蜂窝网络
+// 拉大会话历史 1-8MB 的场景压缩 70-90%），SSE/WS/静态资源原样透传。
+// 配对 token 一次性 + 5min TTL + 常量时间比对；approve/decide/disconnect
+// 仅接受回环来源；dsh_mobile cookie HttpOnly + SameSite=Strict，一年有效期。
 
-import * as fs from 'node:fs';
 import * as http from 'node:http';
-import * as https from 'node:https';
+import type * as net from 'node:net';
 import * as os from 'node:os';
-import * as path from 'node:path';
-import { randomBytes, randomUUID, timingSafeEqual } from 'node:crypto';
+import zlib from 'node:zlib';
+import { randomBytes, timingSafeEqual } from 'node:crypto';
 
 const PAIRING_TTL_MS = 5 * 60 * 1000;
 const COOKIE_MAX_AGE = 60 * 60 * 24 * 365; // 一年
-const RPC_ALLOWLIST = new Set([
-  'workspace.list',
-  'agentPreset.list',
-  'agentPreset.select',
-  'session.list',
-  'session.history',
-  'session.models',
-  'session.selectModel',
-  'session.create',
-  'session.prompt',
-  'session.cancel',
-]);
+
+// LAN 明网（http://192.168.x.x）是非安全上下文：`crypto.randomUUID`（Chrome 92+
+// 起）只在安全上下文暴露，手机端拿到的是 undefined。内核浏览器端用它生成
+// RpcId / 消息 id（dsh-client-connection），一崩就是全部 RPC 失败 —— 会话与
+// 工作区列表全空、退回「选择工作区」冷启动、目录选择弹「crypto.randomUUID
+// is not a function」。桥在 HTML 响应最前面注入 polyfill（getRandomValues 在
+// 非安全上下文可用），内核源码不动。仅注入未压缩的 text/html。
+const RANDOMUUID_POLYFILL =
+  '<script>if(typeof crypto!=="undefined"&&typeof crypto.randomUUID!=="function"){'
+  + 'crypto.randomUUID=function(){var b=crypto.getRandomValues(new Uint8Array(16));'
+  + 'b[6]=(b[6]&0x0f)|0x40;b[8]=(b[8]&0x3f)|0x80;'
+  + 'var h="";for(var i=0;i<16;i++)h+=(b[i]+256).toString(16).slice(1);'
+  + 'return h.slice(0,8)+"-"+h.slice(8,12)+"-"+h.slice(12,16)+"-"+h.slice(16,20)+"-"+h.slice(20);};}'
+  + '</script>';
 
 export interface PhoneBridgeOptions {
   getWebUrl: () => string | null;
@@ -116,46 +116,27 @@ function json(res: http.ServerResponse, status: number, body: unknown): void {
   res.end(payload);
 }
 
-// 手机端续聊客户端（单文件静态页，随 sidecar 分发；与 phone-bridge.js 同级，
-// stage-resources 的 sidecar 清单已含 mobile-app.html）。读盘失败时回退占位页。
-let mobileClientHtml: string | null = null;
-function mobileClientPage(): string {
-  if (mobileClientHtml !== null) return mobileClientHtml;
-  try {
-    mobileClientHtml = fs.readFileSync(path.join(__dirname, 'mobile-app.html'), 'utf8');
-  } catch {
-    mobileClientHtml = mobilePlaceholderPage();
-  }
-  return mobileClientHtml;
+function html(res: http.ServerResponse, status: number, page: string, extraHeaders: Record<string, string> = {}): void {
+  res.writeHead(status, {
+    'content-type': 'text/html; charset=utf-8',
+    'cache-control': 'no-store',
+    'x-frame-options': 'DENY',
+    ...extraHeaders,
+    'content-length': Buffer.byteLength(page),
+  });
+  res.end(page);
 }
 
-function mobilePlaceholderPage(): string {
+/** 未配对/配对失效时给手机看的门页（不是客户端，只指路）。 */
+function gatePage(): string {
   return [
-    '<!doctype html>',
-    '<html lang="zh-CN">',
-    '<head>',
-    '<meta charset="utf-8">',
+    '<!doctype html><html lang="zh-CN"><head><meta charset="utf-8">',
     '<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">',
-    '<meta name="apple-mobile-web-app-capable" content="yes">',
-    '<meta name="mobile-web-app-capable" content="yes">',
-    '<meta name="theme-color" content="#111418">',
-    '<title>DSH Mobile</title>',
-    '<style>',
-    'body{margin:0;background:#111418;color:#e8eaed;font-family:system-ui,-apple-system,"PingFang SC","Microsoft YaHei",sans-serif;display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:100vh;text-align:center;padding:24px;box-sizing:border-box}',
-    '.card{max-width:420px;background:#1c2128;border:1px solid #2b333d;border-radius:16px;padding:32px 24px}',
-    'h1{font-size:20px;margin:0 0 12px}',
-    'p{font-size:14px;line-height:1.7;color:#aab2bd;margin:0}',
-    '.badge{display:inline-block;margin-top:16px;background:#2a3340;color:#9ecbff;border-radius:999px;padding:4px 12px;font-size:12px}',
-    '</style>',
-    '</head>',
-    '<body>',
-    '<div class="card">',
-    '<h1>DSH Mobile</h1>',
-    '<p>手机端客户端正在开发中，敬请期待。<br>配对与接口已就绪，移动端接入后将自动可用。</p>',
-    '<span class="badge">开发中</span>',
-    '</div>',
-    '</body>',
-    '</html>',
+    '<title>DSH 需要配对</title>',
+    '<style>body{margin:0;background:#111418;color:#e8eaed;font-family:system-ui,-apple-system,"PingFang SC","Microsoft YaHei",sans-serif;display:flex;align-items:center;justify-content:center;min-height:100vh;padding:24px;box-sizing:border-box}.card{max-width:380px;background:#1c2128;border:1px solid #2b333d;border-radius:16px;padding:28px 22px;text-align:center}h1{font-size:18px;margin:0 0 10px}p{font-size:14px;color:#aab2bd;line-height:1.7;margin:0}</style>',
+    '</head><body><div class="card"><h1>需要重新配对</h1>',
+    '<p>本设备的配对已失效。请在电脑端 DSH「设置 → 连接手机」重新发起配对，扫码批准后即可继续使用。</p>',
+    '</div></body></html>',
   ].join('');
 }
 
@@ -185,7 +166,11 @@ export function createPhoneBridge(options: PhoneBridgeOptions) {
   let port = 0;
   let lanUrl = '';
   let pairing: PairingState | null = null;
-  let mobileReady = true; // 手机端续聊客户端已随 sidecar 内置分发
+  let mobileReady = true; // 手机端 = 完整 Web UI（喵丝滑移动优化随包内置），桥即代理
+  // 活跃 WS 代理的 socket 对：升级后的 socket 已脱离 http.Server 的连接计数
+  // （server.close/closeAllConnections 都不等它们），stop() 必须显式销毁，
+  // 否则停桥后手机侧 WS 仍活着、server.close() 回调也永不触发。
+  const liveWsSockets = new Set<net.Socket>();
 
   function rotatePairing(): void {
     pairing = {
@@ -202,188 +187,172 @@ export function createPhoneBridge(options: PhoneBridgeOptions) {
     return 'waiting';
   }
 
-  function forwardRpc(method: string, params: unknown): Promise<{ status: number; body: unknown }> {
-    const base = getWebUrl();
-    if (!base) return Promise.resolve({ status: 503, body: { error: 'harness web service is not running' } });
-    return new Promise((resolve) => {
-      let url: URL;
-      try {
-        url = new URL(`/api/${method}`, base);
-      } catch {
-        resolve({ status: 400, body: { error: 'bad kernel web url' } });
-        return;
-      }
-      // 内核只认 dsh-host-apiproxy 的 client-request 信封（docs/MOBILE-CLIENT-DEV-SPEC.md §4.1）；
-      // 旧实现把手机端 body 原样转发，内核信封校验失败恒 400 bad-request。
-      const envelope = JSON.stringify({
-        type: 'client-request',
-        rpcId: randomUUID(),
-        method,
-        payload: params === undefined ? {} : params,
-      });
-      const client = url.protocol === 'https:' ? https : http;
-      const req = client.request(
-        {
-          hostname: url.hostname,
-          port: url.port,
-          path: url.pathname + url.search,
-          method: 'POST',
-          agent: false, // 短连接：桥是低频转发方，不留 keep-alive 池
-          headers: {
-            'content-type': 'application/json',
-            'content-length': Buffer.byteLength(envelope),
-            connection: 'close',
-          },
-        },
-        (res: http.IncomingMessage) => {
-          const chunks: Buffer[] = [];
-          res.on('data', (c: Buffer) => chunks.push(c));
-          res.on('end', () => {
-            const raw = Buffer.concat(chunks).toString('utf8');
-            const status = res.statusCode ?? 0;
-            if (status !== 200) {
-              resolve({ status, body: { ok: false, error: { code: `http-${status}`, message: raw.slice(0, 200) || `kernel http ${status}` } } });
-              return;
-            }
-            let parsed: unknown = null;
-            try { parsed = raw ? JSON.parse(raw) : null; } catch { parsed = null; }
-            // server-response 解包：result.ok===true 取 value；ok===false 透传业务错误；
-            // 非 server-response 形状（个别窄路径直接回业务对象）按原值放行。
-            const outer = parsed as { type?: string; result?: { ok?: boolean; value?: unknown; error?: unknown } } | null;
-            if (outer && outer.type === 'server-response' && outer.result && typeof outer.result === 'object') {
-              if (outer.result.ok === true) resolve({ status: 200, body: { ok: true, value: outer.result.value } });
-              else resolve({ status: 200, body: { ok: false, error: outer.result.error ?? { code: 'unknown', message: 'unknown kernel error' } } });
-              return;
-            }
-            resolve({ status: 200, body: { ok: true, value: parsed } });
-          });
-          res.on('error', () => resolve({ status: 502, body: { error: 'forward stream failed' } }));
-        },
-      );
-      req.setTimeout(30_000, () => req.destroy(new Error('forward timeout')));
-      req.on('error', (error: Error) => resolve({ status: 502, body: { error: `forward failed: ${error.message}` } }));
-      req.end(envelope);
-    });
+  function hasPairedCookie(req: http.IncomingMessage): boolean {
+    const cookies = (req.headers.cookie ?? '').split(';').map((c) => c.trim());
+    return cookies.some((c) => c === 'dsh_mobile=1');
   }
 
-  async function handle(req: http.IncomingMessage, res: http.ServerResponse): Promise<void> {
-    const url = new URL(req.url ?? '/', `http://${req.headers.host ?? 'localhost'}`);
-    const path = url.pathname;
-    const readJson = async (): Promise<unknown> => {
-      const chunks: Buffer[] = [];
-      for await (const chunk of req) chunks.push(chunk as Buffer);
-      return JSON.parse(Buffer.concat(chunks).toString('utf8') || '{}');
-    };
+  /** 上游目标（host/port）。服务未运行返回 null。 */
+  function upstreamOf(): { host: string; port: number; origin: string } | null {
+    const base = getWebUrl();
+    if (!base) return null;
+    try {
+      const url = new URL(base);
+      return { host: url.hostname, port: Number(url.port) || (url.protocol === 'https:' ? 443 : 80), origin: url.origin };
+    } catch {
+      return null;
+    }
+  }
 
-    if (req.method === 'GET' && (path === '/' || path === '/app')) {
-      // 手机端续聊客户端（单文件静态页，随 sidecar 分发；docs/MOBILE-CLIENT-DEV-SPEC.md §5）。
-      const page = mobileClientPage();
-      res.writeHead(200, {
-        'content-type': 'text/html; charset=utf-8',
-        'cache-control': 'no-store',
-        'x-frame-options': 'DENY',
-        'content-security-policy': "default-src 'self' 'unsafe-inline'",
-        'content-length': Buffer.byteLength(page),
+  /** 请求头改写：Host/Origin 指向内核自身 origin（信任围栏视为同源）。 */
+  function proxyHeaders(req: http.IncomingMessage, origin: string): Record<string, string | string[] | undefined> {
+    const headers = { ...req.headers };
+    const target = new URL(origin);
+    headers.host = target.host;
+    if (typeof headers.origin === 'string' && headers.origin !== '') headers.origin = target.origin;
+    if (typeof headers.referer === 'string' && headers.referer !== '') {
+      try { headers.referer = new URL(new URL(headers.referer).pathname + new URL(headers.referer).search, origin).toString(); } catch { /* 保留原值 */ }
+    }
+    return headers;
+  }
+
+  function handle(req: http.IncomingMessage, res: http.ServerResponse): Promise<void> {
+    return (async () => {
+      const url = new URL(req.url ?? '/', `http://${req.headers.host ?? 'localhost'}`);
+      const pathName = url.pathname;
+
+      if (req.method === 'GET' && pathName === '/pair') {
+        if (pairing === null || !tokenEquals(url.searchParams.get('token') ?? '', pairing.token)) {
+          html(res, 403, '<h3>配对链接无效</h3><p>请在电脑端重新发起「连接手机」配对。</p>');
+          return;
+        }
+        if (Date.now() > pairing.expiresAt) {
+          html(res, 410, '<h3>配对已过期</h3><p>请在电脑端重新发起配对。</p>');
+          return;
+        }
+        html(res, 200, pairingWaitPage());
+        return;
+      }
+
+      if (req.method === 'GET' && pathName === '/api/pair-state') {
+        if (pairing === null || !tokenEquals(url.searchParams.get('token') ?? '', pairing.token)) {
+          json(res, 403, { error: 'invalid token' });
+          return;
+        }
+        const state = currentPairingState();
+        const headers: Record<string, string> = {
+          'content-type': 'application/json; charset=utf-8',
+          'cache-control': 'no-store',
+          'x-frame-options': 'DENY',
+        };
+        if (state === 'approved') {
+          // 配对成功即签发一年期 dsh_mobile 会话 cookie（移动端随后继访问携带）。
+          headers['set-cookie'] =
+            `dsh_mobile=1; Path=/; HttpOnly; SameSite=Strict; Max-Age=${COOKIE_MAX_AGE}`;
+        }
+        const payload = JSON.stringify({ state, expiresAt: pairing.expiresAt });
+        res.writeHead(200, headers);
+        res.end(payload);
+        return;
+      }
+
+      if (pathName === '/desktop/decide' || pathName === '/desktop/disconnect') {
+        if (!isLoopback(req.socket?.remoteAddress)) {
+          json(res, 403, { error: 'loopback only' });
+          return;
+        }
+        if (pathName === '/desktop/decide') {
+          if (pairing === null || pairing.decided !== null) {
+            json(res, 409, { error: 'no pending pairing' });
+            return;
+          }
+          const chunks: Buffer[] = [];
+          for await (const chunk of req) chunks.push(chunk as Buffer);
+          let body: { approved?: unknown };
+          try {
+            body = JSON.parse(Buffer.concat(chunks).toString('utf8') || '{}') as { approved?: unknown };
+          } catch {
+            json(res, 400, { error: 'invalid json body' });
+            return;
+          }
+          pairing.decided = body.approved === true;
+          log(`phone bridge: pairing ${pairing.decided ? 'approved' : 'rejected'} by desktop`);
+          json(res, 200, { ok: true, approved: pairing.decided });
+          return;
+        }
+        rotatePairing();
+        log('phone bridge: disconnected; pairing token rotated');
+        json(res, 200, { ok: true });
+        return;
+      }
+
+      // ---- 以下全部走代理（需 dsh_mobile cookie）----
+      if (!hasPairedCookie(req)) {
+        html(res, 401, gatePage());
+        return;
+      }
+      const upstream = upstreamOf();
+      if (!upstream) {
+        json(res, 503, { error: 'harness web service is not running' });
+        return;
+      }
+      // 内核 Web 恒为回环 http（boot-server 以 --host 127.0.0.1 拉起）。
+      const upstreamReq = http.request(
+        {
+          host: upstream.host,
+          port: upstream.port,
+          path: (req.url ?? '/'),
+          method: req.method,
+          headers: proxyHeaders(req, upstream.origin),
+        },
+        (up: http.IncomingMessage) => {
+          const contentType = String(up.headers['content-type'] ?? '');
+          const wantsGzip = (req.headers['accept-encoding'] ?? '').includes('gzip');
+          const isUnaryJson =
+            req.method === 'POST' && pathName.startsWith('/api/') && contentType.includes('application/json');
+          if (isUnaryJson && wantsGzip) {
+            const headers = { ...up.headers };
+            delete headers['content-length'];
+            delete headers['content-encoding'];
+            res.writeHead(up.statusCode ?? 200, { ...headers, 'content-encoding': 'gzip', vary: 'accept-encoding' });
+            up.pipe(zlib.createGzip()).pipe(res);
+          } else if (!isUnaryJson && contentType.includes('text/html') && up.headers['content-encoding'] === undefined) {
+            // HTML 页面：注入 crypto.randomUUID polyfill（见 RANDOMUUID_POLYFILL 注释）。
+            const chunks: Buffer[] = [];
+            up.on('data', (chunk) => chunks.push(chunk as Buffer));
+            up.on('end', () => {
+              let body = Buffer.concat(chunks).toString('utf8');
+              const headMatch = /<head[^>]*>/i.exec(body);
+              const injectAt = headMatch ? (headMatch.index + headMatch[0].length) : 0;
+              body = body.slice(0, injectAt) + RANDOMUUID_POLYFILL + body.slice(injectAt);
+              const payload = Buffer.from(body, 'utf8');
+              const headers = { ...up.headers };
+              headers['content-length'] = String(Buffer.byteLength(payload));
+              res.writeHead(up.statusCode ?? 200, headers);
+              res.end(payload);
+            });
+          } else {
+            res.writeHead(up.statusCode ?? 200, up.headers);
+            up.pipe(res);
+          }
+        },
+      );
+      upstreamReq.setTimeout(120_000, () => upstreamReq.destroy(new Error('proxy timeout')));
+      upstreamReq.on('error', (error: Error) => {
+        if (!res.headersSent) {
+          json(res, 502, { error: `proxy failed: ${error.message}` });
+        } else {
+          res.destroy();
+        }
       });
-      res.end(page);
-      return;
-    }
-
-    if (req.method === 'GET' && path === '/pair') {
-      if (pairing === null || !tokenEquals(url.searchParams.get('token') ?? '', pairing.token)) {
-        res.writeHead(403, { 'content-type': 'text/html; charset=utf-8' });
-        res.end('<h3>配对链接无效</h3><p>请在电脑端重新发起「连接手机」配对。</p>');
-        return;
-      }
-      if (Date.now() > pairing.expiresAt) {
-        res.writeHead(410, { 'content-type': 'text/html; charset=utf-8' });
-        res.end('<h3>配对已过期</h3><p>请在电脑端重新发起配对。</p>');
-        return;
-      }
-      const page = pairingWaitPage();
-      res.writeHead(200, {
-        'content-type': 'text/html; charset=utf-8',
-        'cache-control': 'no-store',
-        'x-frame-options': 'DENY',
-        'content-length': Buffer.byteLength(page),
-      });
-      res.end(page);
-      return;
-    }
-
-    if (req.method === 'GET' && path === '/api/pair-state') {
-      if (pairing === null || !tokenEquals(url.searchParams.get('token') ?? '', pairing.token)) {
-        json(res, 403, { error: 'invalid token' });
-        return;
-      }
-      const state = currentPairingState();
-      const headers: Record<string, string> = {
-        'content-type': 'application/json; charset=utf-8',
-        'cache-control': 'no-store',
-        'x-frame-options': 'DENY',
-      };
-      if (state === 'approved') {
-        // 配对成功即签发一年期 dsh_mobile 会话 cookie（移动端随后继访问携带）。
-        headers['set-cookie'] =
-          `dsh_mobile=1; Path=/; HttpOnly; SameSite=Strict; Max-Age=${COOKIE_MAX_AGE}`;
-      }
-      const payload = JSON.stringify({ state, expiresAt: pairing.expiresAt });
-      res.writeHead(200, headers);
-      res.end(payload);
-      return;
-    }
-
-    if (req.method === 'POST' && path === '/api/rpc') {
-      const cookies = (req.headers.cookie ?? '').split(';').map((c) => c.trim());
-      if (!cookies.some((c) => c === 'dsh_mobile=1')) {
-        json(res, 401, { error: 'not paired' });
-        return;
-      }
-      let body: { method?: unknown; params?: unknown; payload?: unknown };
+      req.pipe(upstreamReq);
+    })().catch((error: unknown) => {
       try {
-        body = (await readJson()) as { method?: unknown; params?: unknown; payload?: unknown };
+        json(res, 500, { error: error instanceof Error ? error.message : String(error) });
       } catch {
-        json(res, 400, { error: 'invalid json body' });
-        return;
+        res.destroy();
       }
-      if (typeof body.method !== 'string' || !RPC_ALLOWLIST.has(body.method)) {
-        json(res, 400, { error: 'method not allowed' });
-        return;
-      }
-      const forwarded = await forwardRpc(body.method, body.params !== undefined ? body.params : body.payload);
-      json(res, forwarded.status, forwarded.body);
-      return;
-    }
-
-    if (path === '/desktop/decide' || path === '/desktop/disconnect') {
-      if (!isLoopback(req.socket?.remoteAddress)) {
-        json(res, 403, { error: 'loopback only' });
-        return;
-      }
-      if (path === '/desktop/decide') {
-        if (pairing === null || pairing.decided !== null) {
-          json(res, 409, { error: 'no pending pairing' });
-          return;
-        }
-        let body: { approved?: unknown };
-        try {
-          body = (await readJson()) as { approved?: unknown };
-        } catch {
-          json(res, 400, { error: 'invalid json body' });
-          return;
-        }
-        pairing.decided = body.approved === true;
-        log(`phone bridge: pairing ${pairing.decided ? 'approved' : 'rejected'} by desktop`);
-        json(res, 200, { ok: true, approved: pairing.decided });
-        return;
-      }
-      rotatePairing();
-      log('phone bridge: disconnected; pairing token rotated');
-      json(res, 200, { ok: true });
-      return;
-    }
-
-    json(res, 404, { error: 'not found' });
+    });
   }
 
   return {
@@ -397,13 +366,63 @@ export function createPhoneBridge(options: PhoneBridgeOptions) {
       rotatePairing();
       return new Promise((resolve, reject) => {
         const s = http.createServer((req, res) => {
-          handle(req, res).catch((error: unknown) => {
-            try {
-              json(res, 500, { error: error instanceof Error ? error.message : String(error) });
-            } catch {
-              res.destroy();
-            }
+          void handle(req, res);
+        });
+        // WebSocket 升级透传（dsh 前端用 WS 连 events.mux/host）：需配对 cookie；
+        // Host/Origin 同样改写，双向 pipe 不缓冲。
+        s.on('upgrade', (req, socket, head) => {
+          if (!hasPairedCookie(req)) {
+            socket.write('HTTP/1.1 401 Unauthorized\r\nconnection: close\r\n\r\n');
+            socket.destroy();
+            return;
+          }
+          const upstream = upstreamOf();
+          if (!upstream) {
+            socket.destroy();
+            return;
+          }
+          const upstreamReq = http.request({
+            host: upstream.host,
+            port: upstream.port,
+            path: req.url,
+            method: req.method,
+            headers: {
+              ...proxyHeaders(req, upstream.origin),
+              connection: 'Upgrade',
+              upgrade: 'websocket',
+            },
           });
+          upstreamReq.on('upgrade', (upRes, upSocket, upHead) => {
+            socket.write(
+              `HTTP/1.1 101 Switching Protocols\r\n${
+                Object.entries(upRes.headers)
+                  .map(([key, value]) => `${key}: ${value}`)
+                  .join('\r\n')
+              }\r\n\r\n`,
+            );
+            // 上游 101 后已到达的初始数据必须写回【浏览器】方向（误写上游会丢帧断流）。
+            if (upHead.length > 0) socket.write(upHead);
+            liveWsSockets.add(socket as net.Socket);
+            liveWsSockets.add(upSocket as net.Socket);
+            const drop = (): void => {
+              liveWsSockets.delete(socket as net.Socket);
+              liveWsSockets.delete(upSocket as net.Socket);
+            };
+            socket.on('close', drop);
+            upSocket.on('close', drop);
+            socket.pipe(upSocket).pipe(socket);
+            socket.on('error', () => upSocket.destroy());
+            upSocket.on('error', () => socket.destroy());
+          });
+          // 上游拒绝（如 426 Upgrade Required）：把状态码透传给浏览器并关闭。
+          upstreamReq.on('response', (upRes) => {
+            socket.write(`HTTP/1.1 ${upRes.statusCode} ${upRes.statusMessage ?? ''}\r\n\r\n`);
+            socket.end();
+            upRes.resume();
+          });
+          upstreamReq.on('error', () => socket.destroy());
+          if (head.length > 0) upstreamReq.write(head);
+          upstreamReq.end();
         });
         s.on('error', (error) => reject(error));
         s.listen(0, '0.0.0.0', () => {
@@ -415,7 +434,7 @@ export function createPhoneBridge(options: PhoneBridgeOptions) {
           server = s;
           port = address.port;
           lanUrl = `http://${lanAddress()}:${port}`;
-          log(`phone bridge: listening on ${lanUrl} (pairing token TTL 5min)`);
+          log(`phone bridge: listening on ${lanUrl} (pairing token TTL 5min, full-UI proxy)`);
           resolve({ url: `${lanUrl}/pair?token=${pairing?.token ?? ''}`, port });
         });
       });
@@ -432,8 +451,11 @@ export function createPhoneBridge(options: PhoneBridgeOptions) {
           resolve();
           return;
         }
-        // 断开全部 keep-alive 连接，否则 server.close() 会一直等待空闲连接。
+        // 断开全部 keep-alive 连接 + 显式销毁活跃 WS 代理 socket（升级后的
+        // socket 脱离 http.Server 连接计数，close/closeAllConnections 不覆盖）。
         if (typeof s.closeAllConnections === 'function') s.closeAllConnections();
+        for (const sock of liveWsSockets) sock.destroy();
+        liveWsSockets.clear();
         s.close(() => resolve());
       });
     },

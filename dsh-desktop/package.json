@@ -1,7 +1,7 @@
 {
   "name": "dsh-desktop",
   "productName": "Deepseek Harness EAC",
-  "version": "5.1.0",
+  "version": "5.2.0",
   "description": "DeepSeek Harness (dsh) 开箱即用的 Windows 桌面客户端：内置 dsh CLI 与 Node 运行时，一键启动 Web UI",
   "author": "DSH Desktop",
   "license": "MIT",
@@ -46,7 +46,8 @@
     "nanoid": "^3.3.18",
     "pino": "~8.21.0",
     "schemastery": "^3.18.0",
-    "unzipper": "^0.12.3"
+    "unzipper": "^0.12.3",
+    "web-push": "^3.6.7"
   },
   "devDependencies": {
     "@types/node": "24.13.3",
