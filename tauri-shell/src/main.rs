@@ -1177,16 +1177,82 @@ fn open_recovery_center_window(app: &tauri::AppHandle) -> bool {
     true
 }
 
-async fn handle_conn(stream: TcpStream, state: BridgeState, app: tauri::AppHandle) -> std::io::Result<()> {
-    // 先窥探请求头：决定 WS 升级还是极简 HTTP。（peek 取 &self，不消耗流）
-    let (req_path, wants_upgrade) = {
-        let mut buf = [0u8; 2048];
-        let n = stream.peek(&mut buf).await?;
-        let head = String::from_utf8_lossy(&buf[..n]).to_string();
+/// 已读请求头回放流：handle_conn 先循环读完整请求头做升级判断，读走的字节
+/// 经此流原样喂回 accept_async / http_serve，避免字节丢失。
+struct PrefixedIo {
+    prefix: Vec<u8>,
+    pos: usize,
+    inner: TcpStream,
+}
+
+impl tokio::io::AsyncRead for PrefixedIo {
+    fn poll_read(
+        mut self: std::pin::Pin<&mut Self>,
+        cx: &mut std::task::Context<'_>,
+        buf: &mut tokio::io::ReadBuf<'_>,
+    ) -> std::task::Poll<std::io::Result<()>> {
+        if self.pos < self.prefix.len() {
+            let n = std::cmp::min(buf.remaining(), self.prefix.len() - self.pos);
+            buf.put_slice(&self.prefix[self.pos..self.pos + n]);
+            self.pos += n;
+            return std::task::Poll::Ready(Ok(()));
+        }
+        std::pin::Pin::new(&mut self.inner).poll_read(cx, buf)
+    }
+}
+
+impl tokio::io::AsyncWrite for PrefixedIo {
+    fn poll_write(
+        mut self: std::pin::Pin<&mut Self>,
+        cx: &mut std::task::Context<'_>,
+        buf: &[u8],
+    ) -> std::task::Poll<std::io::Result<usize>> {
+        std::pin::Pin::new(&mut self.inner).poll_write(cx, buf)
+    }
+    fn poll_flush(
+        mut self: std::pin::Pin<&mut Self>,
+        cx: &mut std::task::Context<'_>,
+    ) -> std::task::Poll<std::io::Result<()>> {
+        std::pin::Pin::new(&mut self.inner).poll_flush(cx)
+    }
+    fn poll_shutdown(
+        mut self: std::pin::Pin<&mut Self>,
+        cx: &mut std::task::Context<'_>,
+    ) -> std::task::Poll<std::io::Result<()>> {
+        std::pin::Pin::new(&mut self.inner).poll_shutdown(cx)
+    }
+}
+
+async fn handle_conn(mut stream: TcpStream, state: BridgeState, app: tauri::AppHandle) -> std::io::Result<()> {
+    // 完整读取请求头（读到空行）再判断 WS 升级：单次 peek 只拿"当下可读"的
+    // 字节，浏览器内核的 WS 握手头分段到达时会漏掉 Upgrade 头 → 误判为普通
+    // HTTP 回 200（浏览器报 Unexpected response code: 200 / close 1006，窗口
+    // 四按钮的 win.* 桥调用随之 30s 超时无响应）——G3 握手检测修复。
+    let (req_path, wants_upgrade, head_bytes) = {
+        use tokio::io::AsyncReadExt;
+        let mut consumed: Vec<u8> = Vec::with_capacity(1024);
+        let mut chunk = [0u8; 1024];
+        loop {
+            let n = stream.read(&mut chunk).await?;
+            if n == 0 {
+                break;
+            }
+            consumed.extend_from_slice(&chunk[..n]);
+            if consumed.len() > 64 * 1024 {
+                break; // 头部异常超长，防御性放行
+            }
+            if consumed.windows(4).any(|w| w == b"\r\n\r\n") {
+                break;
+            }
+        }
+        let head = String::from_utf8_lossy(&consumed).to_string();
         let first = head.lines().next().unwrap_or("");
         let path = first.split_whitespace().nth(1).unwrap_or("/").to_string();
-        (path, head.to_lowercase().contains("upgrade: websocket"))
+        (path, head.to_lowercase().contains("upgrade: websocket"), consumed)
     };
+
+    // 已读头部回放给后续消费者（WS 升级握手 / http_serve 的头消费循环）。
+    let stream = PrefixedIo { prefix: head_bytes, pos: 0, inner: stream };
 
     if !wants_upgrade {
         return http_serve(stream, &req_path).await;
@@ -1497,7 +1563,10 @@ fn recovery_center_page() -> String {
     }
 }
 
-async fn http_serve(mut stream: TcpStream, path: &str) -> std::io::Result<()> {
+async fn http_serve<S>(mut stream: S, path: &str) -> std::io::Result<()>
+where
+    S: tokio::io::AsyncRead + tokio::io::AsyncWrite + Unpin,
+{
     eprintln!("[http] serve {}", path);
     // 真正消费请求头（读到空行）：未读数据残留会让连接以 RST 而非 FIN 收尾，
     // WebView2 视为响应中断并反复重试。
