@@ -1,0 +1,4 @@
+# dsh-phone — bundle patch: inserts the phone-bridge settings entry.
+- insert:
+    - id: dsh-phone
+      name: 'dsh-phone'

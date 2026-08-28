@@ -1,0 +1,30 @@
+{
+  "name": "@tencent-weixin/openclaw-weixin-cli",
+  "version": "2.1.4",
+  "description": "Lightweight installer for the OpenClaw Weixin channel plugin",
+  "license": "MIT",
+  "author": "Tencent",
+  "type": "module",
+  "bin": {
+    "weixin-installer": "./cli.mjs"
+  },
+  "files": [
+    "cli.mjs",
+    "lib/"
+  ],
+  "scripts": {},
+  "peerDependencies": {
+    "openclaw": ">=2026.3.0"
+  },
+  "peerDependenciesMeta": {
+    "openclaw": {
+      "optional": true
+    }
+  },
+  "devDependencies": {
+    "openclaw": "2026.3.22"
+  },
+  "engines": {
+    "node": ">=22"
+  }
+}

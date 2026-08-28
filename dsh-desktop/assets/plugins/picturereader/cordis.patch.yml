@@ -1,0 +1,4 @@
+# picturereader — bundle patch: inserts the image_scan plugin row.
+- insert:
+    - id: picturereader
+      name: 'picturereader'

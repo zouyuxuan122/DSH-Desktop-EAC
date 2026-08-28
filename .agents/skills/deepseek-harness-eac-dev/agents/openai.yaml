@@ -1,0 +1,6 @@
+interface:
+  display_name: "Deepseek Harness EAC 开发"
+  short_description: "面向 EAC 全仓库开发、维护、测试与发布的项目规范"
+  default_prompt: "使用 $deepseek-harness-eac-dev 按项目架构和验证规范完成这项开发任务。"
+policy:
+  allow_implicit_invocation: true

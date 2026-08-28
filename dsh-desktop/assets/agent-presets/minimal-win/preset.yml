@@ -1,0 +1,3 @@
+name: 极简模式_win
+description: 基于官方极简模式，将 bash 工具替换为 Windows PowerShell，提供 pwsh 与 str_replace_editor 双工具编码 Agent。
+order: 5

@@ -1,0 +1,2 @@
+name: Warmup Better Replay
+description: Like Warmup Better, but the first round's chain of thought and reply replay the recorded warmup output instead of calling the real model; the next round runs with the full Standard catalog.

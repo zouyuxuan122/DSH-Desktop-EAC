@@ -1,0 +1,2 @@
+name: Warmup Better
+description: Like Pristine, but the warmup round asks the model to warm up its chain-of-thought as long as possible and list self-reminders before the real prompt arrives.

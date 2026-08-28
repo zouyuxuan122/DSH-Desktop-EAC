@@ -1,0 +1,43 @@
+{
+  "name": "@deepseek-ai/dsh-stt",
+  "version": "0.1.0",
+  "private": true,
+  "description": "语音识别（STT）插件：本地 sherpa-onnx 识别 + 自定义唤醒词 + 防误听，识别文本回填输入框（仅识别，不做 TTS）",
+  "type": "module",
+  "main": "src/index.js",
+  "exports": {
+    ".": "./src/index.js",
+    "./client": "./client.js",
+    "./cordis.patch.yml": "./cordis.patch.yml",
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "src",
+    "client.js",
+    "cordis.patch.yml",
+    "README.md",
+    "LICENSE"
+  ],
+  "dependencies": {
+    "sherpa-onnx-node": "^1.13.6"
+  },
+  "dsh": {
+    "client": {
+      "inject": ["slots", "locale", "settingsScope"],
+      "platform": "web"
+    }
+  },
+  "license": "MIT",
+  "keywords": [
+    "dsh",
+    "dsh-plugin",
+    "deepseek-harness",
+    "stt",
+    "speech",
+    "voice",
+    "asr",
+    "wakeword",
+    "sherpa",
+    "whisper"
+  ]
+}

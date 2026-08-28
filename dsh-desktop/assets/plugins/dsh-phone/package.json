@@ -1,0 +1,23 @@
+{
+  "name": "dsh-phone",
+  "version": "0.1.0",
+  "private": true,
+  "description": "DSH 手机连接（接口预留，手机端开发中）：LAN 扫码配对 + 白名单 RPC + 占位页",
+  "type": "module",
+  "main": "lib/index.js",
+  "exports": {
+    ".": { "default": "./lib/index.js" },
+    "./client": { "default": "./lib/client.js" },
+    "./cordis.patch.yml": "./cordis.patch.yml",
+    "./package.json": "./package.json"
+  },
+  "license": "MIT",
+  "files": ["lib", "qrcode.js", "cordis.patch.yml", "package.json"],
+  "dsh": {
+    "bundle": { "patch": "./cordis.patch.yml" },
+    "client": { "platform": "web" }
+  },
+  "peerDependencies": {
+    "@deepseek-ai/dsh-settings": "^0.1.0-rc.6"
+  }
+}

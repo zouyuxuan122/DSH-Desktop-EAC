@@ -1,0 +1,33 @@
+[stage] 目标平台 win32；清理旧装配目录
+[stage] 编译 TypeScript（tsc 就地产物）
+[stage] sidecar 产物
+[stage] dsh-desktop 根模块 + lib/desktop + scripts + package.json
+[stage] vnext 隔离体系（lib 模块 + shared 协议 + 原生 .node）
+[stage] assets（114MB：38 插件 + 10 皮肤 + 图标）
+[stage] vendor node/npm 运行时
+[stage] 生产 node_modules（npm ci --omit=dev，首次较慢）
+
+> dsh-desktop@5.1.0 postinstall
+> npm run build && node scripts/patch-deps.js || exit 0
+
+
+> dsh-desktop@5.1.0 build
+> tsc -p tsconfig.json
+
+
+added 552 packages in 56s
+[stage] 重放 dsh-desktop 锚点补丁（patch-deps）
+[patch-deps] 已补丁 picker-native：worker 退出上报 exit code / signal
+[patch-deps] 已补丁 settings-general：设置弹窗左栏可滚动，底部条目不再被裁掉
+[patch-deps] 已补丁可选升级字段：dsh-tool-pwsh
+[patch-deps] 已补丁可选升级字段：dsh-tool-fs
+[patch-deps] 已补丁可选升级字段：dsh-tool-bash
+[patch-deps] 已补丁 agent-preset：第三方模式收进二级菜单
+[patch-deps] 已补丁主 bundle：二级菜单悬停保持 + 高度/宽度自适应
+[patch-deps] 已补丁主 bundle：菜单项悬停离开延迟关闭（鼠标可跨间隙滑入二级菜单）
+[patch-deps] 已补丁主 bundle：菜单根 pointerleave 延迟关闭（二级菜单不再被立即收起）
+[patch-deps] 已补丁主 bundle：菜单项悬停进入清关闭定时器（移回二级菜单保持）
+[patch-deps] 已补丁主 bundle：submenu 项两行布局不再被裁剪
+[stage] 已回填 dsh-tool-bash 的 vendored 修复
+[stage] 完成：G:\Deepseek-Harness-EAC-main\tauri-shell\staged-resources
+[stage] WebView2Loader.dll 已装配: tauri-shell\staged-resources\WebView2Loader.dll

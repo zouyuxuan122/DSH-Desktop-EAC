@@ -1,0 +1,88 @@
+{
+  "name": "dsh-dafeiyu",
+  "version": "0.1.0-alpha.6",
+  "description": "A desktop-native BigFish companion driven by DeepSeek Harness session events.",
+  "author": "QCYTSN",
+  "type": "module",
+  "main": "src/index.js",
+  "exports": {
+    ".": "./src/index.js",
+    "./client": "./lib/client.js",
+    "./protocol": "./src/protocol.js",
+    "./reducer": "./src/companion-reducer.js",
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "src/",
+    "lib/client.js",
+    "runtime/helper.py",
+    "runtime/animation_model.py",
+    "runtime/layout_store.py",
+    "runtime/__init__.py",
+    "runtime/bin/win32-x64/dsh-dafeiyu-helper.exe",
+    "scripts/build-helper.ps1",
+    "assets/pet/",
+    "assets/pet-manifest.json",
+    "docs/",
+    "cordis.patch.yml",
+    "requirements.txt",
+    "README.md",
+    "README_EN.md",
+    "CHANGELOG.md",
+    "ASSET_LICENSE.md",
+    "LICENSE"
+  ],
+  "os": [
+    "win32"
+  ],
+  "cpu": [
+    "x64"
+  ],
+  "engines": {
+    "node": ">=22.19"
+  },
+  "dependencies": {
+    "@deepseek-ai/schemastery": "^3.18.1"
+  },
+  "scripts": {
+    "test": "node --test --test-timeout=10000 test/assets.test.js test/config-endpoint.test.js test/protocol.test.js test/status-copy.test.js test/reducer.test.js test/helper-lifecycle.test.js test/helper-restart.test.js test/plugin-integration.test.js",
+    "test:helper": "node --test test/helper-lifecycle.test.js",
+    "test:python": "py -3 -m unittest discover -s runtime/tests -t .",
+    "test:ui": "node test/fixtures/ui-acceptance.js",
+    "helper:headless": "py -3 runtime/helper.py --headless",
+    "helper:visual": "py -3 runtime/helper.py",
+    "build:helper:windows": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/build-helper.ps1"
+  },
+  "dsh": {
+    "client": {
+      "inject": [
+        "@deepseek-ai/dsh-client-ui-settings-plugins"
+      ],
+      "platform": "web"
+    },
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    }
+  },
+  "keywords": [
+    "deepseek-harness",
+    "dsh-plugin",
+    "desktop-pet",
+    "agent-companion"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/QCYTSN/dsh-dafeiyu.git"
+  },
+  "bugs": {
+    "url": "https://github.com/QCYTSN/dsh-dafeiyu/issues"
+  },
+  "homepage": "https://github.com/QCYTSN/dsh-dafeiyu#readme",
+  "publishConfig": {
+    "access": "public"
+  },
+  "license": "SEE LICENSE IN ASSET_LICENSE.md",
+  "devDependencies": {
+    "playwright-core": "^1.62.1"
+  }
+}

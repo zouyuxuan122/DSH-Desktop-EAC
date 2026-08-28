@@ -1,0 +1,248 @@
+# Release (Tauri)：推送 v* 标签或手动触发时构建 Tauri 壳（NSIS 安装包 + 便携 zip），
+# 与 Electron 链路的 release.yml 并行共存（M3 冻结期；Electron 移除后可合并）。
+#
+# ⚠️ R6 备注：本仓库当前「本地构建、绝不 push」，此 workflow 尚未在线上实跑过。
+#    首次推送后需人工盯跑一轮，重点核对：
+#      - Rust 工具链版本与 tauri v2 的 MSRV 兼容
+#      - stage-resources.mjs 的 npm ci 在 CI 缓存下的行为
+#      - NSIS 打包时长（本机实测 5-10 分钟，runner 上预留超时）
+name: Release Tauri
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      version:
+        description: '版本号，例如 5.0.0'
+        required: true
+        type: string
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-tauri-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  release-tauri:
+    name: 构建 Tauri 壳并发布（Windows x64）
+    runs-on: windows-latest
+    timeout-minutes: 90
+    defaults:
+      run:
+        working-directory: dsh-desktop
+    steps:
+      - name: 检出代码（标签指向的提交）
+        uses: actions/checkout@v4
+
+      - name: 从标签/输入提取版本号
+        id: tag
+        shell: bash
+        run: |
+          if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
+            raw="${{ github.event.inputs.version }}"
+          else
+            raw="${GITHUB_REF_NAME}"
+          fi
+
+          if [[ "$raw" =~ ^v?([0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?(\+[0-9A-Za-z.-]+)?)$ ]]; then
+            version="${BASH_REMATCH[1]}"
+          else
+            echo "::error::'$raw' 不是有效的版本号（期望形如 5.0.0 或 5.0.0-rc.1）"
+            exit 1
+          fi
+
+          if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
+            tag="v${version}"
+          else
+            tag="${GITHUB_REF_NAME}"
+          fi
+
+          echo "tag=${tag}"         >> "$GITHUB_OUTPUT"
+          echo "version=${version}" >> "$GITHUB_OUTPUT"
+          echo "标签: ${tag} -> 版本号: ${version}"
+
+      - name: 安装 Node.js（含 npm 缓存）
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: dsh-desktop/package-lock.json
+
+      - name: 安装 Rust 工具链（stable）
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: 缓存 cargo 注册表与构建产物
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~\.cargo\registry
+            ~\.cargo\git
+            tauri-shell\target
+          key: dsh-tauri-win-x64-${{ hashFiles('tauri-shell/Cargo.lock') }}
+          restore-keys: |
+            dsh-tauri-win-x64-
+
+      - name: 安装依赖
+        working-directory: dsh-desktop
+        run: npm ci
+
+      - name: 获取内置运行时（node.exe + npm CLI）
+        run: npm run fetch-runtime
+
+      - name: 将标签版本号写入 package.json
+        run: npm version ${{ steps.tag.outputs.version }} --no-git-tag-version --allow-same-version
+
+      - name: 将标签版本号写入 tauri.conf.json
+        working-directory: tauri-shell
+        run: node -e "const fs=require('fs');const f='tauri.conf.json';const c=JSON.parse(fs.readFileSync(f,'utf8'));c.version='${{ steps.tag.outputs.version }}';fs.writeFileSync(f,JSON.stringify(c,null,2)+'\n')"
+
+      - name: 运行测试
+        run: npm test
+
+      - name: 构建 Rust 原生模块（supervisor + snapshot，供 stage-resources 装配）
+        run: npm run build:native && npm run build:native -- snapshot
+
+      - name: 装配打包资源（staged-resources：sidecar + dsh-desktop 运行树）
+        # tauri-shell 与 dsh-desktop 是仓库根下的兄弟目录（R6 静态自查修正）
+        run: node ../tauri-shell/stage-resources.mjs
+
+      - name: 构建 Tauri（release + NSIS）
+        working-directory: tauri-shell
+        run: npx -y @tauri-apps/cli@2 build
+
+      - name: 同步版本号进安装包名并打便携 zip
+        working-directory: tauri-shell
+        run: node make-portable.mjs --out target/release/portable
+
+      - name: 创建 GitHub Release 并上传产物
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.tag.outputs.tag }}
+          name: ${{ steps.tag.outputs.tag }}
+          generate_release_notes: true
+          files: |
+            tauri-shell/target/release/bundle/nsis/*.exe
+            tauri-shell/target/release/portable/Deepseek-Harness-EAC-*-portable.zip
+            tauri-shell/target/release/portable/SHA256SUMS.txt
+
+  release-tauri-linux:
+    name: 构建 Tauri 壳并发布（Ubuntu 22.04 x64）
+    runs-on: ubuntu-22.04
+    timeout-minutes: 120
+    defaults:
+      run:
+        working-directory: dsh-desktop
+    steps:
+      - name: 检出代码（标签指向的提交）
+        uses: actions/checkout@v4
+
+      - name: 从标签/输入提取版本号
+        id: tag
+        shell: bash
+        run: |
+          if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
+            raw="${{ github.event.inputs.version }}"
+          else
+            raw="${GITHUB_REF_NAME}"
+          fi
+          if [[ "$raw" =~ ^v?([0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?(\+[0-9A-Za-z.-]+)?)$ ]]; then
+            version="${BASH_REMATCH[1]}"
+          else
+            echo "::error::'$raw' 不是有效的版本号"
+            exit 1
+          fi
+          if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then tag="v${version}"; else tag="${GITHUB_REF_NAME}"; fi
+          echo "tag=${tag}" >> "$GITHUB_OUTPUT"
+          echo "version=${version}" >> "$GITHUB_OUTPUT"
+
+      - name: 安装 Linux 桌面构建依赖
+        working-directory: ${{ github.workspace }}
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf
+
+      - name: 安装 Node.js（含 npm 缓存）
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: dsh-desktop/package-lock.json
+
+      - name: 安装 Rust 工具链（stable）
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: 安装依赖并获取 Linux runtime
+        run: npm ci && npm run fetch-runtime
+
+      - name: 写入发布版本号
+        run: npm version ${{ steps.tag.outputs.version }} --no-git-tag-version --allow-same-version
+
+      - name: 将版本号写入 Tauri 配置
+        working-directory: tauri-shell
+        run: node -e "const fs=require('fs');const f='tauri.conf.json';const c=JSON.parse(fs.readFileSync(f,'utf8'));c.version='${{ steps.tag.outputs.version }}';fs.writeFileSync(f,JSON.stringify(c,null,2)+'\n')"
+
+      - name: 运行测试和 Linux native 验证
+        run: |
+          npm run typecheck
+          npm test
+          npm run clippy:native
+          npm run clippy:native -- snapshot
+          npm run test:native
+          npm run test:native -- snapshot
+          npm run build:native
+          npm run build:native -- snapshot
+
+      - name: 装配并审计 Linux 运行树
+        working-directory: ${{ github.workspace }}
+        run: |
+          node tauri-shell/stage-resources.mjs --target=linux
+          node tauri-shell/audit-linux-bundle.mjs tauri-shell/staged-resources
+
+      - name: 构建 deb 和 AppImage
+        working-directory: tauri-shell
+        run: npx -y @tauri-apps/cli@2 build --bundles deb,appimage --ci
+
+      - name: 解包并审计最终 Linux 产物
+        working-directory: ${{ github.workspace }}
+        shell: bash
+        run: |
+          audit_tree() {
+            local tree="$1"
+            local resources
+            resources="$(dirname "$(find "$tree" -type d -name dsh-desktop -print -quit)")"
+            test -d "$resources/dsh-desktop"
+            node tauri-shell/audit-linux-bundle.mjs "$resources" "$tree"
+          }
+          audit_tmp="$(mktemp -d)"
+          trap 'rm -rf "$audit_tmp"' EXIT
+          deb="$(find tauri-shell/target/release/bundle/deb -maxdepth 1 -type f -name '*.deb' -print -quit)"
+          appimage="$(find tauri-shell/target/release/bundle/appimage -maxdepth 1 -type f -name '*.AppImage' -print -quit)"
+          test -n "$deb" && test -n "$appimage"
+          dpkg-deb -x "$deb" "$audit_tmp/deb"
+          audit_tree "$audit_tmp/deb"
+          chmod +x "$appimage"
+          appimage="$(readlink -f "$appimage")"
+          mkdir "$audit_tmp/appimage"
+          (cd "$audit_tmp/appimage" && "$appimage" --appimage-extract >/dev/null)
+          audit_tree "$audit_tmp/appimage/squashfs-root"
+
+      - name: 生成 Linux SHA-256 清单
+        working-directory: tauri-shell
+        run: |
+          find target/release/bundle/deb target/release/bundle/appimage -maxdepth 1 -type f \( -name '*.deb' -o -name '*.AppImage' \) -print0 \
+            | sort -z | xargs -0 sha256sum > target/release/bundle/SHA256SUMS-linux-x64.txt
+
+      - name: 创建 GitHub Release 并上传 Linux 产物
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.tag.outputs.tag }}
+          name: ${{ steps.tag.outputs.tag }}
+          generate_release_notes: true
+          files: |
+            tauri-shell/target/release/bundle/deb/*.deb
+            tauri-shell/target/release/bundle/appimage/*.AppImage
+            tauri-shell/target/release/bundle/SHA256SUMS-linux-x64.txt

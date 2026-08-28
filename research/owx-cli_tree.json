@@ -1,0 +1,84 @@
+{
+	"type": "npm",
+	"name": "@tencent-weixin/openclaw-weixin-cli",
+	"tags": {
+		"latest": "2.1.4"
+	},
+	"versions": [
+		{
+			"version": "2.1.4",
+			"links": {
+				"self": "https://data.jsdelivr.com/v1/packages/npm/@tencent-weixin/openclaw-weixin-cli@2.1.4",
+				"entrypoints": "https://data.jsdelivr.com/v1/packages/npm/@tencent-weixin/openclaw-weixin-cli@2.1.4/entrypoints",
+				"stats": "https://data.jsdelivr.com/v1/stats/packages/npm/@tencent-weixin/openclaw-weixin-cli@2.1.4"
+			}
+		},
+		{
+			"version": "2.1.3",
+			"links": {
+				"self": "https://data.jsdelivr.com/v1/packages/npm/@tencent-weixin/openclaw-weixin-cli@2.1.3",
+				"entrypoints": "https://data.jsdelivr.com/v1/packages/npm/@tencent-weixin/openclaw-weixin-cli@2.1.3/entrypoints",
+				"stats": "https://data.jsdelivr.com/v1/stats/packages/npm/@tencent-weixin/openclaw-weixin-cli@2.1.3"
+			}
+		},
+		{
+			"version": "2.1.2",
+			"links": {
+				"self": "https://data.jsdelivr.com/v1/packages/npm/@tencent-weixin/openclaw-weixin-cli@2.1.2",
+				"entrypoints": "https://data.jsdelivr.com/v1/packages/npm/@tencent-weixin/openclaw-weixin-cli@2.1.2/entrypoints",
+				"stats": "https://data.jsdelivr.com/v1/stats/packages/npm/@tencent-weixin/openclaw-weixin-cli@2.1.2"
+			}
+		},
+		{
+			"version": "2.1.1",
+			"links": {
+				"self": "https://data.jsdelivr.com/v1/packages/npm/@tencent-weixin/openclaw-weixin-cli@2.1.1",
+				"entrypoints": "https://data.jsdelivr.com/v1/packages/npm/@tencent-weixin/openclaw-weixin-cli@2.1.1/entrypoints",
+				"stats": "https://data.jsdelivr.com/v1/stats/packages/npm/@tencent-weixin/openclaw-weixin-cli@2.1.1"
+			}
+		},
+		{
+			"version": "2.0.1",
+			"links": {
+				"self": "https://data.jsdelivr.com/v1/packages/npm/@tencent-weixin/openclaw-weixin-cli@2.0.1",
+				"entrypoints": "https://data.jsdelivr.com/v1/packages/npm/@tencent-weixin/openclaw-weixin-cli@2.0.1/entrypoints",
+				"stats": "https://data.jsdelivr.com/v1/stats/packages/npm/@tencent-weixin/openclaw-weixin-cli@2.0.1"
+			}
+		},
+		{
+			"version": "1.0.3",
+			"links": {
+				"self": "https://data.jsdelivr.com/v1/packages/npm/@tencent-weixin/openclaw-weixin-cli@1.0.3",
+				"entrypoints": "https://data.jsdelivr.com/v1/packages/npm/@tencent-weixin/openclaw-weixin-cli@1.0.3/entrypoints",
+				"stats": "https://data.jsdelivr.com/v1/stats/packages/npm/@tencent-weixin/openclaw-weixin-cli@1.0.3"
+			}
+		},
+		{
+			"version": "1.0.2",
+			"links": {
+				"self": "https://data.jsdelivr.com/v1/packages/npm/@tencent-weixin/openclaw-weixin-cli@1.0.2",
+				"entrypoints": "https://data.jsdelivr.com/v1/packages/npm/@tencent-weixin/openclaw-weixin-cli@1.0.2/entrypoints",
+				"stats": "https://data.jsdelivr.com/v1/stats/packages/npm/@tencent-weixin/openclaw-weixin-cli@1.0.2"
+			}
+		},
+		{
+			"version": "1.0.1",
+			"links": {
+				"self": "https://data.jsdelivr.com/v1/packages/npm/@tencent-weixin/openclaw-weixin-cli@1.0.1",
+				"entrypoints": "https://data.jsdelivr.com/v1/packages/npm/@tencent-weixin/openclaw-weixin-cli@1.0.1/entrypoints",
+				"stats": "https://data.jsdelivr.com/v1/stats/packages/npm/@tencent-weixin/openclaw-weixin-cli@1.0.1"
+			}
+		},
+		{
+			"version": "1.0.0",
+			"links": {
+				"self": "https://data.jsdelivr.com/v1/packages/npm/@tencent-weixin/openclaw-weixin-cli@1.0.0",
+				"entrypoints": "https://data.jsdelivr.com/v1/packages/npm/@tencent-weixin/openclaw-weixin-cli@1.0.0/entrypoints",
+				"stats": "https://data.jsdelivr.com/v1/stats/packages/npm/@tencent-weixin/openclaw-weixin-cli@1.0.0"
+			}
+		}
+	],
+	"links": {
+		"stats": "https://data.jsdelivr.com/v1/stats/packages/npm/@tencent-weixin/openclaw-weixin-cli"
+	}
+}

@@ -1,0 +1,10 @@
+        Info Looking up installed tauri packages to check mismatched versions...
+   Compiling dsh-eac-tauri-shell v0.1.0 (G:\Deepseek-Harness-EAC-main\tauri-shell)
+    Finished `release` profile [optimized] target(s) in 1m 07s
+       Built application at: G:\Deepseek-Harness-EAC-main\tauri-shell\target\release\dsh-eac-shell.exe
+        Info Patching G:\Deepseek-Harness-EAC-main\tauri-shell\target\release\dsh-eac-shell.exe with bundle type information: nsis
+        Info Target: x64
+     Running makensis to produce G:\Deepseek-Harness-EAC-main\tauri-shell\target\release\bundle\nsis\Deepseek Harness EAC_5.1.0_x64-setup.exe
+    Finished 1 bundle at:
+        G:\Deepseek-Harness-EAC-main\tauri-shell\target\release\bundle\nsis\Deepseek Harness EAC_5.1.0_x64-setup.exe
+

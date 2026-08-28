@@ -1,0 +1,31 @@
+{
+  "$schema": "https://raw.githubusercontent.com/microsoft/TypeScript/main/src/compiler/configSchema.json",
+  // Wave 0 构建策略（HANDOVER-TS-MIGRATION.md §4）：tsc 直出、产物就地。
+  // 源码 = 同目录 .ts（唯一事实源），编译产物 = 同名 .js（gitignore，勿手改）。
+  // 这样 require 路径 / electron-builder.yml 精确清单 / 测试 import 全部零改动，
+  // 只有契约测试在文件转换时把读取路径从 .js 切到 .ts。
+  "compilerOptions": {
+    "target": "ES2023",
+    "lib": ["ES2023"],
+    "module": "commonjs",
+    "types": ["node"],
+    "strict": true,
+    "esModuleInterop": true,
+    "skipLibCheck": true,
+    "forceConsistentCasingInFileNames": true,
+    "noEmitOnError": true,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
+    "noFallthroughCasesInSwitch": true,
+    // vnext-absorb 对齐重构版严格度（保留 commonjs + 就地产出，勿切 nodenext）：
+    // noUncheckedIndexedAccess / exactOptionalPropertyTypes / noImplicitOverride。
+    // 刻意不启用 erasableSyntaxOnly：项目 Wave 0 约定 import x = require() 直译
+    // （emit 与手写 require 逐行一致），且测试 import 编译产物 .js、无需 type-stripping。
+    "noUncheckedIndexedAccess": true,
+    "exactOptionalPropertyTypes": true,
+    "noImplicitOverride": true
+  },
+  // 只纳入已转换的 .ts；allowJs 保持关闭——未转换的 .js 是手写事实源，
+  // 绝不允许被编译器触碰或覆盖（TS5055 保护 + 打包清单防呆）。
+  "include": ["lib/**/*.ts", "shared/**/*.ts", "../tauri-shell/sidecar/**/*.ts", "scripts/**/*.ts", "*.ts"]
+}

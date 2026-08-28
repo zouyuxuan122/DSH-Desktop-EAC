@@ -1,0 +1,43 @@
+{
+  "name": "cc-weixin",
+  "version": "0.2.0",
+  "type": "module",
+  "description": "在微信里使用 Claude Code Agent — 基于腾讯官方 iLink Bot API",
+  "keywords": [
+    "wechat",
+    "weixin",
+    "claude",
+    "bot",
+    "ilink",
+    "agent"
+  ],
+  "author": "hao-ji-xing",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/hao-ji-xing/cc-weixin.git"
+  },
+  "bin": {
+    "cc-weixin": "./bin/cc-weixin"
+  },
+  "files": [
+    "bin/",
+    "cc-weixin.mjs",
+    "lib/"
+  ],
+  "scripts": {
+    "start": "node cc-weixin.mjs",
+    "login": "node cc-weixin.mjs --login"
+  },
+  "engines": {
+    "node": ">=22"
+  },
+  "dependencies": {
+    "@anthropic-ai/claude-agent-sdk": "^0.2.81",
+    "debug": "^4.4.3",
+    "dotenv": "^17.3.1",
+    "ink": "^6.8.0",
+    "qrcode": "^1.5.4",
+    "react": "^19.2.4"
+  }
+}

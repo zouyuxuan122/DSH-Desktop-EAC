@@ -1,0 +1,107 @@
+// bridge.ts（Tauri WebView2 桥）单侧表面契约。
+//
+// 背景：双壳时代 preload.js ↔ bridge.ts 键集一致性由本测试锁定（Bug #58 防
+// 事故）；Electron 冻结壳已退役（批次 C），preload.ts 删除后窗口桥只剩
+// bridge.ts——配套插件（dsh-better-sidebar 等）在此拿 window.dshDesktop。
+// 本测试保留「防解析器写歪致空树假绿」的锚点断言，并把 dshDesktop 顶层表面
+// 锁成必需清单，防止未来无意删掉配套插件依赖的方法。
+//
+// 允许的桥侧额外键：_call/_send/_onNotify/_onReady（桥内省，非 dshDesktop 面）。
+
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
+
+const root = join(dirname(fileURLToPath(import.meta.url)), '..');
+const bridge = readFileSync(join(root, '..', 'tauri-shell', 'sidecar', 'bridge.ts'), 'utf8');
+
+// 从「赋值起点」做花括号配对，收集相对深度 1（顶层键）与 2（命名空间内键）。
+// 跳过字符串/模板串/注释，避免内容里的冒号干扰。
+function extractKeyTree(src, marker) {
+  const start = src.indexOf(marker);
+  assert.ok(start >= 0, `marker not found: ${marker}`);
+  const braceStart = src.indexOf('{', start);
+  assert.ok(braceStart > start, 'object literal not found after marker');
+  let depth = 0;
+  let paren = 0; // 括号深度：参数表里的 TS 类型注解（changes: unknown）不是键
+  let i = braceStart;
+  let quote = null; // 当前所处的字符串引号（' " `）
+  let lastTop = null;
+  const tree = {};
+  const identRe = /[A-Za-z_$][\w$]*/y;
+  while (i < src.length) {
+    const c = src[i];
+    if (quote) {
+      if (c === '\\') { i += 2; continue; }
+      if (c === quote) quote = null;
+      i += 1;
+      continue;
+    }
+    if (c === "'" || c === '"' || c === '`') { quote = c; i += 1; continue; }
+    if (c === '/' && src[i + 1] === '/') {
+      const nl = src.indexOf('\n', i);
+      i = nl < 0 ? src.length : nl + 1;
+      continue;
+    }
+    if (c === '/' && src[i + 1] === '*') {
+      const end = src.indexOf('*/', i + 2);
+      i = end < 0 ? src.length : end + 2;
+      continue;
+    }
+    if (c === '{') { depth += 1; i += 1; continue; }
+    if (c === '}') {
+      depth -= 1;
+      if (depth === 0) break; // 对象结束
+      i += 1;
+      continue;
+    }
+    if (c === '(') { paren += 1; i += 1; continue; }
+    if (c === ')') { paren -= 1; i += 1; continue; }
+    // 键位置：标识符 + 可选空白 + ':'（跳过 "?." 与 "::" 等非键形态）。
+    if (/[A-Za-z_$]/.test(c)) {
+      identRe.lastIndex = i;
+      const m = identRe.exec(src);
+      if (m) {
+        let j = m[0].length + i;
+        while (j < src.length && /\s/.test(src[j])) j += 1;
+        if (src[j] === ':' && src[j + 1] !== ':' && paren === 0) {
+          const name = m[0];
+          if (depth === 1) {
+            tree[name] = [];
+            lastTop = name;
+          } else if (depth === 2 && lastTop) {
+            tree[lastTop].push(name);
+          }
+        }
+        i += m[0].length;
+        continue;
+      }
+    }
+    i += 1;
+  }
+  assert.ok(depth === 0, `unbalanced braces after ${marker}`);
+  return tree;
+}
+
+const bridgeTree = extractKeyTree(bridge, '(window as any).dshDesktop =');
+
+test('bridge dshDesktop exposes the required namespaces（preload 退役后的单侧契约）', () => {
+  // 基线锚点：防止解析器写歪导致解析出空树「假绿」。
+  const tops = Object.keys(bridgeTree).filter((k) => !k.startsWith('_'));
+  for (const need of ['appVersion', 'windowControls', 'menu', 'getInfo', 'refreshBalance',
+    'restartService', 'floatWindow', 'guard', 'pluginWizard', 'pluginManager', 'pluginUpdates',
+    'imagePaste', 'balancePrices', 'balanceModels', 'revertFiles', 'openPath', 'openExternal',
+    'copyText', 'getPathForFile', 'recovery', 'rescue']) {
+    assert.ok(tops.includes(need), `bridge missing ${need}`);
+  }
+  assert.ok(bridgeTree.windowControls.length >= 5, 'windowControls subkeys parsed');
+  assert.ok(bridgeTree.rescue.length >= 7, 'rescue subkeys parsed');
+});
+
+test('bridge keeps the introspection escape hatch for shell pages', () => {
+  for (const k of ['_call', '_onReady']) {
+    assert.ok(k in bridgeTree, `bridge introspection key missing: ${k}`);
+  }
+});

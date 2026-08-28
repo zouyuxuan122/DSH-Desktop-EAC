@@ -1,0 +1,13 @@
+{
+  "name": "sample-sdk-plugin",
+  "version": "1.0.0",
+  "description": "VNext Phase 2 SDK V1 示例插件：演示工具注册（参数校验）、上下文贡献、设置命名空间与事件订阅。运行于独立 Extension Host 进程（Job Object 围栏），零侵入 Core Profile。",
+  "type": "commonjs",
+  "main": "index.js",
+  "dsh": {
+    "extension": {
+      "permissions": {}
+    }
+  },
+  "license": "MIT"
+}
