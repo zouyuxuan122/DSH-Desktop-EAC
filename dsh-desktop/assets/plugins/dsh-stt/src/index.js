@@ -27,10 +27,18 @@ const MODELS_ROOT = join(homedir(), '.dsh', 'models', 'dsh-stt');
 const CONFIG_FILE = join(homedir(), '.dsh', 'dsh-stt.json');
 
 // ── 模型清单（下载源可被 config.downloadUrls 覆盖为镜像）─────────────
+// sources 按序回退：GitHub release 主源国内常连不上，失败自动切 hf-mirror
+// （HuggingFace 国内镜像，2026-08 实测 200/239MB 可下）。两种源形态：
+//   · 字符串 → tar.bz2 整包（下载 + 解压，files 从包里挑）
+//   · { fileUrl } → 单文件直链（files 逐个下载到模型目录，带 .part 原子落盘）
+// 手动覆盖 config.downloadUrls 优先级最高（key: asr，值单条整包 URL）。
 const DEFAULT_MODELS = {
   asr: {
     name: 'sherpa-onnx-sense-voice-zh-en-ja-ko-yue-2024-07-17',
-    url: 'https://github.com/k2-fsa/sherpa-onnx/releases/download/asr-models/sherpa-onnx-sense-voice-zh-en-ja-ko-yue-2024-07-17.tar.bz2',
+    urls: [
+      'https://github.com/k2-fsa/sherpa-onnx/releases/download/asr-models/sherpa-onnx-sense-voice-zh-en-ja-ko-yue-2024-07-17.tar.bz2',
+      { fileUrl: 'https://hf-mirror.com/csukuangfj/sherpa-onnx-sense-voice-zh-en-ja-ko-yue-2024-07-17/resolve/main' },
+    ],
     files: ['model.int8.onnx', 'tokens.txt'],
   },
 };
@@ -240,8 +248,16 @@ export function pickFields(obj, keys) {
   return out;
 }
 
-function resolveUrl(key) {
-  return config.downloadUrls?.[key] || DEFAULT_MODELS[key].url;
+function resolveSources(key) {
+  const def = DEFAULT_MODELS[key];
+  const sources = [];
+  // 手动覆盖（config.downloadUrls.asr）优先级最高，按 tar.bz2 整包处理
+  if (config.downloadUrls?.[key]) sources.push({ tarball: config.downloadUrls[key] });
+  for (const u of def.urls) {
+    if (typeof u === 'string') sources.push({ tarball: u });
+    else sources.push(u);
+  }
+  return sources;
 }
 
 function downloadFile(url, dest, onProgress, expectedSize) {
@@ -298,6 +314,47 @@ function extractTarball(tarball, key) {
   rmSync(workDir, { recursive: true, force: true });
 }
 
+// 单文件直链源（{ fileUrl, fileMap } 形态）：逐文件下载到模型目录，无需解压。
+// 进度跨文件累计（模型 ~239MB + tokens ~316KB）：单文件百分比会在文件切换时
+// 从 100% 回跳 0%，累计后进度条单调递增。
+async function downloadLooseFiles(source, key) {
+  const def = DEFAULT_MODELS[key];
+  const finalDir = modelDir(key);
+  mkdirSync(finalDir, { recursive: true });
+  const fileMap = source.fileMap || {};
+  let carried = 0;   // 已完成文件的累计字节数（进度跨文件单调递增）
+  for (const f of def.files) {
+    const url = fileMap[f] || (source.fileUrl + '/' + f);
+    // 先下 .part，完成后改名：直链中途断掉时 modelDir 不会留半截正式文件被
+    // modelReady 误判为已就绪（整包源靠解压后拷贝，天然原子）。
+    const dest = join(finalDir, f + '.part');
+    const finalPath = join(finalDir, f);
+    let downloaded = false;
+    for (let attempts = 0; attempts < 4 && !downloaded; attempts++) {
+      try {
+        const r = await downloadFile(url, dest, (p) => {
+          const done = carried + p.done;
+          const total = carried + (p.total || 0);
+          downloadProgress[key] = {
+            done, total,
+            pct: total ? Math.round((done / total) * 100) : 0,
+          };
+        });
+        downloaded = !!r.done;
+      } catch (err) {
+        if (attempts >= 3) throw err;
+      }
+    }
+    if (!downloaded) throw new Error('模型文件下载不完整: ' + f);
+    // 最小尺寸防呆：坏源返回 200 + HTML 错误页时拒收（onnx ~239MB / tokens ~316KB）
+    const MIN_SIZE = { 'model.int8.onnx': 100 * 1024 * 1024, 'tokens.txt': 1024 };
+    const size = statSync(dest).size;
+    if (size < (MIN_SIZE[f] || 0)) throw new Error('模型文件异常（过小 ' + size + 'B）: ' + f);
+    carried += size;
+    renameSync(dest, finalPath);
+  }
+}
+
 async function downloadModel(key) {
   if (modelReady(key)) return { ok: true, already: true };
   if (activeDownloads.has(key)) return { ok: false, error: 'downloading' };
@@ -310,29 +367,49 @@ async function downloadModel(key) {
     // 换模型时清空旧模型目录：防 findFileInTree 匹配到旧文件 + 腾空间
     rmSync(modelDir(key), { recursive: true, force: true });
     mkdirSync(modelDir(key), { recursive: true });
-    const tarball = join(MODELS_ROOT, key + '.tar.bz2');
-    // 下载（断点续传循环直到文件完整）；下载完成后解压一次（不再循环重试解压）
-    let downloaded = false;
-    for (let attempts = 0; attempts < 12 && !downloaded; attempts++) {
+    // 源按序回退：主源连续失败后自动切下一个（镜像），最后统一报错
+    const sources = resolveSources(key);
+    let lastErr = null;
+    for (const source of sources) {
+      const tarball = join(MODELS_ROOT, key + '.tar.bz2');
       try {
-        const r = await downloadFile(resolveUrl(key), tarball, (p) => {
-          downloadProgress[key] = {
-            done: p.done, total: p.total,
-            pct: p.total ? Math.round((p.done / p.total) * 100) : 0,
-          };
-        }, def.size);
-        downloaded = !!r.done;
+        if (source.fileUrl || source.fileMap) {
+          // 单文件直链源：逐文件下载（断点续传，每文件最多 4 次）
+          await downloadLooseFiles(source, key);
+        } else {
+          // tar.bz2 整包源：下载（断点续传循环）→ 解压一次
+          let downloaded = false;
+          for (let attempts = 0; attempts < 8 && !downloaded; attempts++) {
+            try {
+              const r = await downloadFile(source.tarball, tarball, (p) => {
+                downloadProgress[key] = {
+                  done: p.done, total: p.total,
+                  pct: p.total ? Math.round((p.done / p.total) * 100) : 0,
+                };
+              }, def.size);
+              downloaded = !!r.done;
+            } catch (err) {
+              lastErr = err;
+              if (attempts >= 7) throw err;
+            }
+          }
+          if (!downloaded) throw new Error('模型下载不完整');
+          extractTarball(tarball, key);
+          rmSync(tarball, { force: true });
+        }
+        if (!modelReady(key)) throw new Error('模型文件不完整');
+        modelsState[key] = 'ready';
+        downloadProgress[key] = { done: 1, total: 1, pct: 100 };
+        return { ok: true };
       } catch (err) {
-        if (attempts >= 11) throw err;
+        lastErr = err;
+        // 该源失败：清理残留（tar 包/不完整文件）后尝试下一个源
+        try { rmSync(tarball, { force: true }); } catch {}
+        rmSync(modelDir(key), { recursive: true, force: true });
+        mkdirSync(modelDir(key), { recursive: true });
       }
     }
-    if (!downloaded) throw new Error('模型下载不完整');
-    extractTarball(tarball, key);
-    rmSync(tarball, { force: true });
-    if (!modelReady(key)) throw new Error('模型文件不完整');
-    modelsState[key] = 'ready';
-    downloadProgress[key] = { done: 1, total: 1, pct: 100 };
-    return { ok: true };
+    throw lastErr || new Error('所有下载源均失败');
   } catch (err) {
     modelsState[key] = 'error';
     return { ok: false, error: err.message };

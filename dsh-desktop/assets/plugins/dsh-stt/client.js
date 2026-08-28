@@ -56,6 +56,12 @@ window.__ModuleLoader__.load({
       modelError: "下载失败",
       downloadModels: "下载模型",
       modelNeeded: "模型未就绪，请先在设置中下载",
+      modelGuide: "语音识别模型（约 230MB）尚未下载，点击「立即下载」开始（支持断点续传，国内自动切换镜像源）",
+      modelGuideDownload: "立即下载",
+      modelGuideHide: "暂不",
+      modelDownloadingBar: "下载中 {pct}%（可离开此页，后台继续）",
+      modelDownloadFailed: "下载失败：{err}。可点击重试或换网络环境",
+      micModelNeeded: "识别模型未下载 — 点击查看下载引导",
       micDenied: "无法访问麦克风，请在系统设置中允许",
       micTimeout: "麦克风无响应，请重试",
       noSpeak: "没听清，请重说",
@@ -96,6 +102,12 @@ window.__ModuleLoader__.load({
       modelError: "Download failed",
       downloadModels: "Download model",
       modelNeeded: "Model not ready — download it in settings first",
+      modelGuide: "The speech model (~230MB) is not downloaded yet. Click 'Download now' to start (resumable; mirrors used automatically in CN networks)",
+      modelGuideDownload: "Download now",
+      modelGuideHide: "Later",
+      modelDownloadingBar: "Downloading {pct}% (continues in background)",
+      modelDownloadFailed: "Download failed: {err}. Retry or switch network",
+      micModelNeeded: "Model not downloaded — click for download guide",
       micDenied: "Microphone access denied",
       micTimeout: "Microphone timed out, retry",
       noSpeak: "Could not hear clearly, please repeat",
@@ -125,6 +137,12 @@ window.__ModuleLoader__.load({
       ".__stt_micBtnStandby{background:var(--dsw-alias-state-business-primary);color:#fff;animation:__stt_pulse 1.6s ease-in-out infinite}" +
       ".__stt_micBtnRecognizing{background:var(--dsw-alias-state-warn-primary,#e0a800);color:#fff;animation:__stt_pulse 1s ease-in-out infinite}" +
       ".__stt_micBtnArmed{box-shadow:0 0 0 2px var(--dsw-alias-state-success-primary,#2ea043)}" +
+      ".__stt_micBtnMissing{color:var(--dsw-alias-label-quaternary,#9aa0a6);opacity:.55}" +
+      ".__stt_micBtnMissing:hover{background:var(--dsw-alias-interactive-bg-hover)}" +
+      ".__stt_guide{display:flex;align-items:center;gap:10px;border:1px solid var(--dsw-alias-border-l2);border-left:3px solid var(--dsw-alias-state-warn-primary,#e0a800);background:var(--dsw-alias-bg-layer-3);border-radius:10px;padding:8px 12px;margin-bottom:8px;font-size:12px;color:var(--dsw-alias-label-primary)}" +
+      ".__stt_guideBar{height:4px;border-radius:2px;background:var(--dsw-alias-border-l2);overflow:hidden;flex:1}" +
+      ".__stt_guideBar > div{height:100%;background:var(--dsw-alias-state-business-primary);transition:width .3s linear}" +
+      ".__stt_guideBarFail > div{background:var(--dsw-alias-state-error-primary)}" +
       ".__stt_spinner{width:14px;height:14px;border:2px solid rgba(255,255,255,.35);border-top-color:#fff;border-radius:50%;animation:__stt_spin .8s linear infinite}" +
       "@keyframes __stt_pulse{0%,100%{transform:scale(1)}50%{transform:scale(1.15)}}" +
       "@keyframes __stt_spin{to{transform:rotate(360deg)}}" +
@@ -379,6 +397,7 @@ window.__ModuleLoader__.load({
       ],
       models: {}, download: {}, engine: null, error: null,
       recognized: "", sent: false, lastError: null,
+      showGuide: false, downloadError: null,
     };
     var listeners = [];
     function setState(patch) {
@@ -786,31 +805,60 @@ window.__ModuleLoader__.load({
     }
 
     // ── 麦克风按钮（点按切换待机）────────────────────────────
+    // 第五态：模型未就绪（missing/error）→ 灰化 + 麦克风加斜线（禁用形），
+    // 悬停提示「识别模型未下载」；点击不启动麦克风，改为在输入框上方展开引导条。
+    // 词典访问统一走 tt(key)：slot 渲染不传 props.t，直接用 zh 对象兜底。
     var MicButton = function (props) {
       var stt = useSttState();
       if (props.inputActions) moduleInputActions = props.inputActions;
+      var tt = function (k) { return props.t ? props.t(k) : zh[k]; };
+      var modelState = (stt.models && stt.models.asr) || 'missing';
+      var modelNotReady = stt.engine !== 'ready' && modelState !== 'ready';
 
       function onToggle() {
-        if (stt.engine !== 'ready') { setState({ lastError: 'modelNeeded', recognized: '', sent: false }); return; }
+        if (modelNotReady) {
+          setState({ showGuide: true, lastError: 'modelNeeded', recognized: '', sent: false });
+          return;
+        }
         if (stt.micOn) stopMic();
         else startMic();
       }
 
       // 四态：关闭(透明)/待机(蓝底)/激活(蓝底+绿细环)/识别(黄底+环共存)
       var cls = "__stt_micBtn ";
-      var title = zh.micOff;
-      if (stt.micOn) {
+      var title = tt('micOff');
+      if (modelNotReady) {
+        cls += '__stt_micBtnMissing';
+        title = tt('micModelNeeded');
+      } else if (stt.micOn) {
         if (stt.phase === 'recognizing') {
           cls += '__stt_micBtnRecognizing';
-          title = zh.micRecognizing;
+          title = tt('micRecognizing');
           if (stt.gate.state === 'armed') cls += ' __stt_micBtnArmed';
         } else if (stt.gate.state === 'armed') {
           cls += '__stt_micBtnStandby __stt_micBtnArmed';
-          title = zh.micInput;
+          title = tt('micInput');
         } else {
           cls += '__stt_micBtnStandby';
-          title = zh.micStandby;
+          title = tt('micStandby');
         }
+      }
+
+      // 未就绪图标：麦克风 + 左上到右下斜线（经典禁用形）
+      var icon;
+      if (modelNotReady) {
+        icon = h("svg", { width: 16, height: 16, viewBox: "0 0 24 24", fill: "none", stroke: "currentColor", strokeWidth: 2, strokeLinecap: "round", strokeLinejoin: "round" },
+          h("path", { d: "M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3z" }),
+          h("path", { d: "M19 10v2a7 7 0 0 1-14 0v-2" }),
+          h("line", { x1: 12, y1: 19, x2: 12, y2: 22 }),
+          h("line", { x1: 3, y1: 3, x2: 21, y2: 21 }));
+      } else if (stt.phase === 'recognizing') {
+        icon = h("span", { className: "__stt_spinner" });
+      } else {
+        icon = h("svg", { width: 16, height: 16, viewBox: "0 0 24 24", fill: "none", stroke: "currentColor", strokeWidth: 2, strokeLinecap: "round", strokeLinejoin: "round" },
+          h("path", { d: "M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3z" }),
+          h("path", { d: "M19 10v2a7 7 0 0 1-14 0v-2" }),
+          h("line", { x1: 12, y1: 19, x2: 12, y2: 22 }));
       }
 
       return h("button", {
@@ -819,12 +867,56 @@ window.__ModuleLoader__.load({
         title: title,
         "aria-label": title,
         onClick: onToggle,
-      }, stt.phase === 'recognizing' ? h("span", { className: "__stt_spinner" })
-        : h("svg", { width: 16, height: 16, viewBox: "0 0 24 24", fill: "none", stroke: "currentColor", strokeWidth: 2, strokeLinecap: "round", strokeLinejoin: "round" },
-          h("path", { d: "M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3z" }),
-          h("path", { d: "M19 10v2a7 7 0 0 1-14 0v-2" }),
-          h("line", { x1: 12, y1: 19, x2: 12, y2: 22 })
-        ));
+      }, icon);
+    };
+
+    // ── 模型引导条（输入框上方 / 设置卡内共用）───────────────
+    // 模型未就绪时展示：文案 + 下载按钮；下载中显示进度条（轮询 status 已有，
+    // useSttState 订阅触发刷新）；失败显示原因 + 重试。可「暂不」收起。
+    // 词典访问统一走 tt(key)：composer.dock slot 不传 t，zh 对象兜底。
+    var ModelGuideBar = function (props) {
+      var stt = useSttState();
+      var tt = function (k) { return props.t ? props.t(k) : zh[k]; };
+      var modelState = (stt.models && stt.models.asr) || 'missing';
+      var dl = stt.download && stt.download.asr;
+      if (modelState === 'ready') return null;
+      if (!stt.showGuide && !props.always) return null;
+
+      function startDownload() {
+        setState({ downloadError: null });
+        fetch('/api/dsh-stt/download', { method: 'POST', body: '{}', headers: { 'Content-Type': 'application/json' } })
+          .then(function (res) { return res.json(); })
+          .then(function (r) {
+            // r.ok=false 且 error=downloading 是 host 端并发去重，不是失败
+            if (r && !r.ok) {
+              var first = r.results && r.results[0] || {};
+              if (first.error !== 'downloading') setState({ downloadError: first.error || 'unknown' });
+            }
+            refreshStatus();
+          })
+          .catch(function (err) { setState({ downloadError: err && err.message || String(err) }); });
+      }
+
+      var body;
+      if (modelState === 'downloading') {
+        var pct = dl && dl.pct != null ? dl.pct : 0;
+        body = h("div", { className: "__stt_row", style: { flex: 1 } },
+          h("span", null, tt('modelDownloadingBar').replace('{pct}', pct)),
+          h("div", { className: "__stt_guideBar", style: { maxWidth: 220 } },
+            h("div", { style: { width: Math.max(2, pct) + '%' } })));
+      } else if (modelState === 'error') {
+        body = h("div", { className: "__stt_row", style: { flex: 1, flexWrap: 'wrap' } },
+          h("span", { className: "__stt_error", style: { flex: 1, minWidth: 0 } },
+            tt('modelDownloadFailed').replace('{err}', (stt.downloadError || dl && dl.error || '').slice(0, 80))),
+          h("button", { className: "__stt_btn __stt_btnPrimary", onClick: startDownload }, tt('modelGuideDownload')));
+      } else {
+        body = h("div", { className: "__stt_row", style: { flex: 1, flexWrap: 'wrap' } },
+          h("span", { style: { flex: 1, minWidth: 0 } }, tt('modelGuide')),
+          h("button", { className: "__stt_btn __stt_btnPrimary", onClick: startDownload }, tt('modelGuideDownload')));
+      }
+      return h("div", { className: "__stt_guide", role: "status" },
+        body,
+        h("button", { className: "__stt_btn", onClick: function () { setState({ showGuide: false }); } }, tt('modelGuideHide')));
     };
 
     // ── 设置卡片 ─────────────────────────────────────────────
@@ -933,10 +1025,13 @@ window.__ModuleLoader__.load({
           state.lastError && h("span", { className: "__stt_error" }, t(state.lastError) || state.lastError),
           state.recognized && h("span", { className: "__stt_ok" }, (state.sent ? t('micSent') : '') + ": " + state.recognized.slice(0, 30))),
         h(SettingRow, { label: t("model") },
-          h("div", { className: "__stt_modelRow" },
-            h("span", { className: "__stt_modelName" }, "ASR"),
-            h("span", { className: "__stt_modelState" }, modelLabel),
-            h("button", { className: "__stt_btn", onClick: downloadModel, disabled: modelState === 'ready' }, t("downloadModels")))));
+          h("div", null,
+            h("div", { className: "__stt_modelRow" },
+              h("span", { className: "__stt_modelName" }, "ASR"),
+              h("span", { className: "__stt_modelState" }, modelLabel),
+              h("button", { className: "__stt_btn", onClick: downloadModel, disabled: modelState === 'ready' }, t("downloadModels"))),
+            // 模型未就绪：设置卡内常显引导条（进度/失败原因/重试）
+            modelState !== 'ready' && h(ModelGuideBar, { t: t, always: true }))));
     };
 
     // ── 插件体 ───────────────────────────────────────────────
@@ -947,6 +1042,12 @@ window.__ModuleLoader__.load({
 
       ctx.slots.inject("conversation.input.right", function () {
         return ctx.slots.register({ name: "conversation.input.right", id: "dsh-stt", order: 100 }, MicButton);
+      });
+
+      // 模型引导条：挂在输入框 dock 区（占整行，位于麦克风按钮附近）。
+      // 模型就绪时组件自身返回 null，不占任何空间。
+      ctx.slots.inject("conversation.composer.dock", function () {
+        return ctx.slots.register({ name: "conversation.composer.dock", id: "dsh-stt-guide", order: 60 }, ModelGuideBar);
       });
 
       ctx.slots.inject("settings.section", function () {
