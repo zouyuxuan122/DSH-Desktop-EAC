@@ -48,11 +48,15 @@ function capture(command: string, args: string[]): string {
   return (result.stdout ?? '').trim();
 }
 
-/** 解析 pnpm 的 JS 入口（npm 全局 root 下的 pnpm/bin/pnpm.cjs）。 */
+/** 解析 pnpm 的 JS 入口，优先使用 CI 显式提供的 PNPM_HOME。 */
 function resolvePnpmEntry(): { entry: string; version: string } {
-  const entry = path.join(capture('npm', ['root', '-g']), 'pnpm', 'bin', 'pnpm.cjs');
-  if (!fs.existsSync(entry)) {
-    throw new Error(`找不到 pnpm 的 JS 入口（${entry}）。请先 npm install -g pnpm@<内核钉住的版本>`);
+  const prefix = process.env.PNPM_HOME || capture('npm', ['config', 'get', 'prefix']);
+  const candidates = process.platform === 'win32'
+    ? [path.join(prefix, 'pnpm', 'bin', 'pnpm.cjs'), path.join(prefix, 'node_modules', 'pnpm', 'bin', 'pnpm.cjs')]
+    : [path.join(prefix, 'pnpm', 'bin', 'pnpm.cjs'), path.join(prefix, 'lib', 'node_modules', 'pnpm', 'bin', 'pnpm.cjs')];
+  const entry = candidates.find((candidate) => fs.existsSync(candidate));
+  if (!entry) {
+    throw new Error(`找不到 pnpm 的 JS 入口（${candidates.join(', ')}）。请先 npm install -g pnpm@<内核钉住的版本>`);
   }
   const version = capture(process.execPath, [entry, '--version']);
   return { entry, version };

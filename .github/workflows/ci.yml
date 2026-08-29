@@ -86,7 +86,6 @@ jobs:
       - name: 准备内核依赖缓存
         run: |
           npm install --global pnpm@11.7.0
-          npm exec --yes --package typescript@7.0.2 -- tsc -p tsconfig.json
           node scripts/fetch-kernel.js
 
       - name: 安装依赖
@@ -146,7 +145,6 @@ jobs:
       - name: 安装依赖并获取 Linux runtime
         run: |
           npm install --global pnpm@11.7.0
-          npm exec --yes --package typescript@7.0.2 -- tsc -p tsconfig.json
           node scripts/fetch-kernel.js
           npm ci && npm run fetch-runtime
 
