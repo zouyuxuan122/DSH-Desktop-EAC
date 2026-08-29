@@ -88,6 +88,7 @@ jobs:
           npm install --global pnpm@11.7.0
           node scripts/fetch-kernel.js
           node scripts/pack-kernel-dependency.js
+          node -e "const fs=require('fs'); if (!fs.existsSync('vendor/kernel/0.1.2-alpha.1/deepseek-ai-schemastery-3.18.1.tgz')) throw new Error('schemastery tarball missing after staging')"
           node scripts/refresh-kernel-lock.js
 
       - name: 安装依赖
@@ -149,6 +150,7 @@ jobs:
           npm install --global pnpm@11.7.0
           node scripts/fetch-kernel.js
           node scripts/pack-kernel-dependency.js
+          node -e "const fs=require('fs'); if (!fs.existsSync('vendor/kernel/0.1.2-alpha.1/deepseek-ai-schemastery-3.18.1.tgz')) throw new Error('schemastery tarball missing after staging')"
           node scripts/refresh-kernel-lock.js
           npm ci && npm run fetch-runtime
 
