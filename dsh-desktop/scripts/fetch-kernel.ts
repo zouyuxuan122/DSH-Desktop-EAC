@@ -118,13 +118,14 @@ function main(): void {
   );
   fs.writeFileSync(packTs, pack);
 
-  // 补丁 2：tarball.ts 的 tar 盘符问题（win32 加 --force-local）。
+  // 补丁 2：使用相对归档路径，兼容 Windows BSD tar 与 GNU tar。
   const tarballTs = path.join(src, 'scripts', 'release', 'tarball.ts');
   let tarball = fs.readFileSync(tarballTs, 'utf8');
   const tarAnchors = ["capture('tar', ['-tzf', tarball])", "capture('tar', ['-xOzf', tarball, 'package/package.json'])"];
   for (const anchor of tarAnchors) {
     if (!tarball.includes(anchor)) throw new Error(`tarball.ts 锚点未命中: ${anchor}`);
-    tarball = tarball.replace(anchor, anchor.replace("capture('tar', [", "capture('tar', [...(process.platform === 'win32' ? ['--force-local'] : []), "));
+    const replacement = anchor.replace('tarball])', "relative(process.cwd(), tarball)])");
+    tarball = tarball.replace("import { capture } from './process.ts'", "import path from 'node:path'\nimport { capture } from './process.ts'\nconst { relative } = path").replace(anchor, replacement);
   }
   fs.writeFileSync(tarballTs, tarball);
 

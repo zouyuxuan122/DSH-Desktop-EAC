@@ -94,14 +94,15 @@ function main() {
         throw new Error('pack.ts 锚点未命中，上游脚本已变化，需人工评估补丁');
     pack = pack.replace("import { isEntry, runConcurrent } from './process.ts'", "import { pnpmInvocation } from '../pnpm-invocation.ts'\nimport { isEntry, runConcurrent } from './process.ts'").replace(packAnchor, "const invocation = pnpmInvocation(['--dir', member.directory, 'pack', '--pack-destination', destination])\n  await runConcurrent(invocation.command, invocation.args)");
     fs.writeFileSync(packTs, pack);
-    // 补丁 2：tarball.ts 的 tar 盘符问题（win32 加 --force-local）。
+    // 补丁 2：使用相对归档路径，兼容 Windows BSD tar 与 GNU tar。
     const tarballTs = path.join(src, 'scripts', 'release', 'tarball.ts');
     let tarball = fs.readFileSync(tarballTs, 'utf8');
     const tarAnchors = ["capture('tar', ['-tzf', tarball])", "capture('tar', ['-xOzf', tarball, 'package/package.json'])"];
     for (const anchor of tarAnchors) {
         if (!tarball.includes(anchor))
             throw new Error(`tarball.ts 锚点未命中: ${anchor}`);
-        tarball = tarball.replace(anchor, anchor.replace("capture('tar', [", "capture('tar', [...(process.platform === 'win32' ? ['--force-local'] : []), "));
+        const replacement = anchor.replace('tarball])', "relative(process.cwd(), tarball)])");
+        tarball = tarball.replace("import { capture } from './process.ts'", "import path from 'node:path'\nimport { capture } from './process.ts'\nconst { relative } = path").replace(anchor, replacement);
     }
     fs.writeFileSync(tarballTs, tarball);
     // git init：lefthook postinstall 等 git 探针在无仓库目录会失败。
