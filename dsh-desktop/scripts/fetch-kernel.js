@@ -39,10 +39,15 @@ function capture(command, args) {
 }
 /** 解析 pnpm 的 JS 入口，优先使用 CI 显式提供的 PNPM_HOME。 */
 function resolvePnpmEntry() {
-    const prefix = process.env.PNPM_HOME || capture('npm', ['config', 'get', 'prefix']);
-    const candidates = process.platform === 'win32'
-        ? [path.join(prefix, 'pnpm', 'bin', 'pnpm.cjs'), path.join(prefix, 'node_modules', 'pnpm', 'bin', 'pnpm.cjs')]
-        : [path.join(prefix, 'pnpm', 'bin', 'pnpm.cjs'), path.join(prefix, 'lib', 'node_modules', 'pnpm', 'bin', 'pnpm.cjs')];
+    const prefix = process.env.PNPM_HOME;
+    const candidates = prefix === undefined ? [] : [
+        path.join(prefix, 'pnpm', 'bin', 'pnpm.cjs'),
+        path.join(prefix, 'node_modules', 'pnpm', 'bin', 'pnpm.cjs'),
+    ];
+    const command = process.platform === 'win32' ? 'where' : 'which';
+    const located = capture(command, ['pnpm']).split(/\r?\n/)[0];
+    const binDir = path.dirname(located.replace(/\.cmd$/i, ''));
+    candidates.push(path.join(binDir, 'node_modules', 'pnpm', 'bin', 'pnpm.cjs'), path.join(binDir, '..', 'lib', 'node_modules', 'pnpm', 'bin', 'pnpm.cjs'));
     const entry = candidates.find((candidate) => fs.existsSync(candidate));
     if (!entry) {
         throw new Error(`找不到 pnpm 的 JS 入口（${candidates.join(', ')}）。请先 npm install -g pnpm@<内核钉住的版本>`);
@@ -108,10 +113,11 @@ function main() {
         ? ['--ssl-no-revoke', '-fsSL', `https://api.github.com/repos/${REPO}/git/ref/tags/${tag}`]
         : ['-fsSL', `https://api.github.com/repos/${REPO}/git/ref/tags/${tag}`]);
     const commitSha = JSON.parse(refJson).object.sha;
+    const tempDir = process.platform === 'win32' ? path.join(WORK, 'tmp') : fs.mkdtempSync(path.join(os.tmpdir(), 'dsh-kernel-'));
     const baseEnv = {
         npm_execpath: pnpm.entry,
-        TEMP: path.join(WORK, 'tmp'),
-        TMP: path.join(WORK, 'tmp'),
+        TEMP: tempDir,
+        TMP: tempDir,
         DSH_CLIENT_COMMIT_HASH: commitSha.slice(0, 7).toLowerCase(),
     };
     fs.mkdirSync(path.join(WORK, 'tmp'), { recursive: true });
