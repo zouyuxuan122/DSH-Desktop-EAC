@@ -87,6 +87,7 @@ jobs:
         run: |
           npm install --global pnpm@11.7.0
           node scripts/fetch-kernel.js
+          npm install --package-lock-only --ignore-scripts --no-audit --no-fund
 
       - name: 安装依赖
         run: npm ci
@@ -146,6 +147,7 @@ jobs:
         run: |
           npm install --global pnpm@11.7.0
           node scripts/fetch-kernel.js
+          npm install --package-lock-only --ignore-scripts --no-audit --no-fund
           npm ci && npm run fetch-runtime
 
       - name: 类型检查与全量测试
