@@ -72,16 +72,20 @@ class FakeElement {
 function matchSimpleSelector(selector, element) {
   for (const raw of String(selector).split(',')) {
     const part = raw.trim();
-    const m = /^\[([A-Za-z-]+)(?:="([^"]*)")?\]$/.exec(part);
+    const m = /^\[([A-Za-z-]+)(?:(\^)?="([^"]*)")?\]$/.exec(part);
     if (m === null) continue;
     const actual = element.attributes.get(m[1]);
-    if (m[2] === undefined) {
+    if (m[3] === undefined) {
       if (actual !== undefined) return true;
-    } else if (actual === m[2]) {
+    } else if (m[2] === '^' ? typeof actual === 'string' && actual.startsWith(m[3]) : actual === m[3]) {
       return true;
     }
   }
   return /[,[]/.test(selector) ? null : false;
+}
+
+function appendSettingsSlot(root) {
+  root.append(new FakeElement({ attrs: { 'data-slot': 'settings.general' } }));
 }
 
 function setupHarness(seeds) {
@@ -133,6 +137,7 @@ test('settings scroll fix marks overflow targets and cleans up its lifecycle', (
     width: 900,
     height: 620,
   });
+  appendSettingsSlot(settingsRoot);
   const scrollable = new FakeElement({
     width: 620,
     height: 320,
@@ -187,6 +192,7 @@ test('含会话树的 role=dialog 大框同样被拒（dialog 分支守卫）', 
     width: 900,
     height: 620,
   });
+  appendSettingsSlot(dialogRoot);
   const conversationBody = new FakeElement({ attrs: { 'data-conversation-scroll': '' } });
   const overflowInside = new FakeElement({
     width: 620,
@@ -212,6 +218,7 @@ test('设置弹层内的 data-phase 条目（plugin-inventory 形态）不再令
     width: 900,
     height: 620,
   });
+  appendSettingsSlot(panelRoot);
   const navScrollable = new FakeElement({
     width: 188,
     height: 200,
