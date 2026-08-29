@@ -126,7 +126,7 @@ function main(): void {
   for (const anchor of tarAnchors) {
     if (!tarball.includes(anchor)) throw new Error(`tarball.ts 锚点未命中: ${anchor}`);
     const replacement = anchor.replace('tarball])', "relative(process.cwd(), tarball)])");
-    tarball = tarball.replace("import { capture } from './process.ts'", "import path from 'node:path'\nimport { capture } from './process.ts'\nconst { relative } = path").replace(anchor, replacement);
+    tarball = tarball.replace(anchor, replacement);
   }
   fs.writeFileSync(tarballTs, tarball);
 
