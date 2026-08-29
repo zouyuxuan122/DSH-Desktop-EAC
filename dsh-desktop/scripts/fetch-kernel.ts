@@ -98,7 +98,6 @@ function main(): void {
 
   console.log('fetch-kernel: 解包');
   const tarArgs = ['-xzf', tgzPath];
-  if (process.platform === 'win32') tarArgs.unshift('--force-local');
   run('tar', tarArgs, WORK);
   const srcDir = fs.readdirSync(WORK).find((e) => e.startsWith('deepseek-harness-') && fs.statSync(path.join(WORK, e)).isDirectory());
   if (!srcDir) throw new Error('解包后找不到源码目录');
