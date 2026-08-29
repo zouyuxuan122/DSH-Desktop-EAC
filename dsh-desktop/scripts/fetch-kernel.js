@@ -97,6 +97,7 @@ function main() {
     // 补丁 2：使用相对归档路径，兼容 Windows BSD tar 与 GNU tar。
     const tarballTs = path.join(src, 'scripts', 'release', 'tarball.ts');
     let tarball = fs.readFileSync(tarballTs, 'utf8');
+    tarball = tarball.replace("import { capture } from './process.ts'", "import path from 'node:path'\nimport { capture } from './process.ts'\nconst { relative } = path");
     const tarAnchors = ["capture('tar', ['-tzf', tarball])", "capture('tar', ['-xOzf', tarball, 'package/package.json'])"];
     for (const anchor of tarAnchors) {
         if (!tarball.includes(anchor))
