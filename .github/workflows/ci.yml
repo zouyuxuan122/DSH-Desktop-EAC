@@ -87,7 +87,7 @@ jobs:
         run: |
           npm install --global pnpm@11.7.0
           node scripts/fetch-kernel.js
-          npm pack @deepseek-ai/schemastery@3.18.1 --pack-destination vendor/kernel/0.1.2-alpha.1
+          node scripts/pack-kernel-dependency.js
           node scripts/refresh-kernel-lock.js
 
       - name: 安装依赖
@@ -148,7 +148,7 @@ jobs:
         run: |
           npm install --global pnpm@11.7.0
           node scripts/fetch-kernel.js
-          npm pack @deepseek-ai/schemastery@3.18.1 --pack-destination vendor/kernel/0.1.2-alpha.1
+          node scripts/pack-kernel-dependency.js
           node scripts/refresh-kernel-lock.js
           npm ci && npm run fetch-runtime
 

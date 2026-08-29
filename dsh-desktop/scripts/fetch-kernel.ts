@@ -57,6 +57,7 @@ function resolvePnpmEntry(): { entry: string; version: string } {
   ];
   const command = process.platform === 'win32' ? 'where' : 'which';
   const located = capture(command, ['pnpm']).split(/\r?\n/)[0];
+  if (located === undefined || located === '') throw new Error('PATH 中找不到 pnpm');
   const binDir = path.dirname(located.replace(/\.cmd$/i, ''));
   candidates.push(
     path.join(binDir, 'node_modules', 'pnpm', 'bin', 'pnpm.cjs'),
