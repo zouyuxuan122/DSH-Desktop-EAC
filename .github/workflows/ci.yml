@@ -88,7 +88,7 @@ jobs:
           npm install --global pnpm@11.7.0
           node scripts/fetch-kernel.js
           npm pack @deepseek-ai/schemastery@3.18.1 --pack-destination vendor/kernel/0.1.2-alpha.1
-          npm install --package-lock-only --ignore-scripts --no-audit --no-fund
+          node scripts/refresh-kernel-lock.js
 
       - name: 安装依赖
         run: npm ci
@@ -149,7 +149,7 @@ jobs:
           npm install --global pnpm@11.7.0
           node scripts/fetch-kernel.js
           npm pack @deepseek-ai/schemastery@3.18.1 --pack-destination vendor/kernel/0.1.2-alpha.1
-          npm install --package-lock-only --ignore-scripts --no-audit --no-fund
+          node scripts/refresh-kernel-lock.js
           npm ci && npm run fetch-runtime
 
       - name: 类型检查与全量测试
