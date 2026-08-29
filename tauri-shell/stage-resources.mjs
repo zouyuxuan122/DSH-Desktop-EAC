@@ -294,6 +294,7 @@ if (existsSync(path.join(dd, 'vendor', 'npm'))) {
 const kernelCache = path.join(dd, 'vendor', 'kernel');
 if (existsSync(kernelCache)) {
   cpSync(kernelCache, path.join(staged, 'dsh-desktop', 'vendor', 'kernel'), { recursive: true });
+  rmSync(path.join(staged, 'dsh-desktop', 'vendor', 'kernel', '.build'), { recursive: true, force: true });
   console.log('[stage] vendor/kernel 内核 tarball 缓存已拷贝（package.json file: 依赖解析用）');
 } else {
   throw new Error('[stage] vendor/kernel 缺失：先运行 npm run fetch-kernel 重建内核缓存');
