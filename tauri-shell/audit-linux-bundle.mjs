@@ -85,7 +85,8 @@ export function auditLinuxBundle(root, options = {}) {
     } else if (machine !== null && machine !== 62) {
       errors.push(`Linux native payload is not x86_64 ELF (e_machine=${machine}): ${rel}`);
     }
-    if (!rel.startsWith('dsh-desktop/vendor/kernel/') && !rel.startsWith('dsh-desktop/node_modules/')) {
+    const isThirdPartyModule = rel.includes('dsh-desktop/node_modules/') || rel.includes('dsh-desktop/vendor/kernel/');
+    if (!isThirdPartyModule) {
       if (forbiddenPaths.some((needle) => containsBytes(file, needle))) {
         errors.push(`local build path embedded in Linux bundle: ${rel}`);
       }
