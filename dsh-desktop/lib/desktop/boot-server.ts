@@ -67,21 +67,18 @@ export function setIsRestarting(v: boolean): void { restartingServer = v; }
 function logsDir(): string { return path.join(ctx.getUserDataDir(), 'logs'); }
 function dshWebLogPath(): string { return path.join(logsDir(), 'dsh-web.log'); }
 
-// 0.1.2 暗雷自愈（凭据版式）：内核 credentials-local 只认 version:1 +
-// refs:/records: 版式，两种历史形态会被拒启 → 每次启动必死（/died 页）：
-//   a) 全新建库路径把顶层 version 写成 YAML 字符串 "1"（读取严格 ===1）；
-//   b) rc.2 时代的扁平文件（顶层直接放标量凭据，"pre-release flat layout"）。
-// 这里在拉起内核前做文本级自愈：a) 引号 version 规整为数字；b) 扁平文件的
-// 标量顶层条目收进 refs:、records: 块原样保留在根（语义对齐内核
-// renderFlatLayoutMigration，且绝不触碰任何密钥值）；形态看不懂就不动，
-// 交内核报错路径展示。失败不阻塞启动。
+// 0.1.2 暗雷自愈（凭据版式）：当前 credentials-local 要求顶层
+// version 为 YAML 字符串 "1"，且使用 refs:/records: 版式。旧版桌面端会把
+// version 改成数字 1，导致每次启动都被严格校验拒绝。这里在拉起内核前规范
+// version 的 YAML 标量类型，并保留可识别的旧版扁平格式迁移；形态看不懂则不动，
+// 交由内核报错路径展示。失败不阻塞启动。
 function healCredentialsVersion(): void {
   try {
     const home = childEnv().DSH_HOME || path.join(os.homedir(), '.dsh');
     const file = path.join(home, '.credentials.yaml');
     if (!fs.existsSync(file)) return;
     const text = fs.readFileSync(file, 'utf8');
-    let fixed = text.replace(/^([ \t]*)version:[ \t]*["']1["'][ \t]*$/m, '$1version: 1');
+    let fixed = text.replace(/^([ \t]*)version:[ \t]*(?:1|['"]1['"])[ \t]*$/m, '$1version: "1"');
     if (!/^([ \t]*)version:[ \t]*\S/m.test(fixed)) {
       const scalar: string[] = [];
       const rest: string[] = [];
@@ -96,12 +93,12 @@ function healCredentialsVersion(): void {
         break;
       }
       if (recognizable && scalar.length > 0) {
-        fixed = 'version: 1\nrefs:\n' + scalar.map((l) => '  ' + l).join('\n') + '\n' + rest.join('\n').replace(/\n*$/, '\n');
+        fixed = 'version: "1"\nrefs:\n' + scalar.map((l) => '  ' + l).join('\n') + '\n' + rest.join('\n').replace(/\n*$/, '\n');
       }
     }
     if (fixed !== text) {
       fs.writeFileSync(file, fixed);
-      ctx.log('dsh', '已自愈 .credentials.yaml 版式（0.1.2 只认 version:1 + refs:/records:；引号 version 或 rc.2 扁平文件会被拒启）');
+      ctx.log('dsh', '已自愈 .credentials.yaml 版式（credentials-local 要求 version: "1" + refs:/records:）');
     }
   } catch { /* 自愈失败交由内核报错路径展示 */ }
 }

@@ -1,5 +1,10 @@
 # Changelog — Deepseek Harness EAC（揽尽万象 · Embracing All Creation）
 
+## 未发布
+
+- 修复 0.1.2 凭据迁移将 `.credentials.yaml` 的 `version` 写成数字，导致 `credentials-local` 严格校验失败；统一写为字符串 `"1"`。
+- 修复桌面启动回归，传递 `--no-open`，避免每轮启动额外打开浏览器窗口。
+
 DeepSeek Harness（dsh）的 Windows 桌面客户端：内置独立 Node 运行时与 dsh CLI，
 一键启动 Web UI。
 版本路径：0.1.0（基础壳）→ 0.2.0（伴侣插件体系 + 自更新 + 会话工具链）→

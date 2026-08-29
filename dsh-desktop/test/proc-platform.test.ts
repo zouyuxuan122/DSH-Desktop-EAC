@@ -14,12 +14,18 @@ import {
 
 const root = join(fileURLToPath(new URL('..', import.meta.url)));
 
-test('boot-server applies the platform process-group spawn options', () => {
+test('boot-server uses platform process-group options and suppresses browser launch', () => {
   const source = readFileSync(join(root, 'lib', 'desktop', 'boot-server.ts'), 'utf8');
   assert.match(source, /\.\.\.childProcessSpawnOptions\(\)/);
-  assert.doesNotMatch(source, /['"]--no-open['"]/);
+  assert.match(source, /['"]--no-open['"]/);
   assert.deepEqual(childProcessSpawnOptions('linux'), { detached: true });
   assert.deepEqual(childProcessSpawnOptions('win32'), { detached: false });
+});
+
+test('credential compatibility preserves the string version required by credentials-local', () => {
+  const source = readFileSync(join(root, 'lib', 'desktop', 'boot-server.ts'), 'utf8');
+  assert.match(source, /version: "1"/);
+  assert.doesNotMatch(source, /\$1version: 1/);
 });
 
 test('POSIX DSH process-group termination reaps a spawned descendant', { skip: process.platform === 'win32' }, async () => {
