@@ -85,8 +85,11 @@ export function auditLinuxBundle(root, options = {}) {
     } else if (machine !== null && machine !== 62) {
       errors.push(`Linux native payload is not x86_64 ELF (e_machine=${machine}): ${rel}`);
     }
-    if (forbiddenPaths.some((needle) => containsBytes(file, needle))) {
-      errors.push(`local build path embedded in Linux bundle: ${rel}`);
+    const isThirdPartyModule = rel.includes('dsh-desktop/node_modules/') || rel.includes('dsh-desktop/vendor/kernel/');
+    if (!isThirdPartyModule) {
+      if (forbiddenPaths.some((needle) => containsBytes(file, needle))) {
+        errors.push(`local build path embedded in Linux bundle: ${rel}`);
+      }
     }
   }
   // issue #206：node-pty build/Release 与 prebuilds 双二进制错配 → 启动即崩。

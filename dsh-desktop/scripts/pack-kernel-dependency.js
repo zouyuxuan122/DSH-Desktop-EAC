@@ -1,0 +1,16 @@
+'use strict';
+const cp = require('node:child_process');
+const fs = require('node:fs');
+const path = require('node:path');
+const dest = path.join(__dirname, '..', 'vendor', 'kernel', '0.1.2-alpha.1');
+fs.mkdirSync(dest, { recursive: true });
+const result = cp.spawnSync(process.platform === 'win32' ? 'npm.cmd' : 'npm', ['pack', '@deepseek-ai/schemastery@3.18.1', '--pack-destination', dest, '--json'], { encoding: 'utf8', shell: process.platform === 'win32', stdio: ['ignore', 'pipe', 'inherit'] });
+if (result.error) throw result.error;
+if (result.status !== 0) process.exit(result.status || 1);
+const records = JSON.parse(result.stdout.trim());
+const file = records[0] && records[0].filename;
+if (!file) throw new Error('npm pack 未返回 tarball 文件名');
+const actual = path.resolve(dest, file);
+const expected = path.join(dest, 'deepseek-ai-schemastery-3.18.1.tgz');
+if (actual !== expected) fs.renameSync(actual, expected);
+console.log(`已准备 ${expected}`);

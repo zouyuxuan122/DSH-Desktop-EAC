@@ -48,11 +48,24 @@ function capture(command: string, args: string[]): string {
   return (result.stdout ?? '').trim();
 }
 
-/** 解析 pnpm 的 JS 入口（npm 全局 root 下的 pnpm/bin/pnpm.cjs）。 */
+/** 解析 pnpm 的 JS 入口，优先使用 CI 显式提供的 PNPM_HOME。 */
 function resolvePnpmEntry(): { entry: string; version: string } {
-  const entry = path.join(capture('npm', ['root', '-g']), 'pnpm', 'bin', 'pnpm.cjs');
-  if (!fs.existsSync(entry)) {
-    throw new Error(`找不到 pnpm 的 JS 入口（${entry}）。请先 npm install -g pnpm@<内核钉住的版本>`);
+  const prefix = process.env.PNPM_HOME;
+  const candidates = prefix === undefined ? [] : [
+    path.join(prefix, 'pnpm', 'bin', 'pnpm.cjs'),
+    path.join(prefix, 'node_modules', 'pnpm', 'bin', 'pnpm.cjs'),
+  ];
+  const command = process.platform === 'win32' ? 'where' : 'which';
+  const located = capture(command, ['pnpm']).split(/\r?\n/)[0];
+  if (located === undefined || located === '') throw new Error('PATH 中找不到 pnpm');
+  const binDir = path.dirname(located.replace(/\.cmd$/i, ''));
+  candidates.push(
+    path.join(binDir, 'node_modules', 'pnpm', 'bin', 'pnpm.cjs'),
+    path.join(binDir, '..', 'lib', 'node_modules', 'pnpm', 'bin', 'pnpm.cjs'),
+  );
+  const entry = candidates.find((candidate) => fs.existsSync(candidate));
+  if (!entry) {
+    throw new Error(`找不到 pnpm 的 JS 入口（${candidates.join(', ')}）。请先 npm install -g pnpm@<内核钉住的版本>`);
   }
   const version = capture(process.execPath, [entry, '--version']);
   return { entry, version };
@@ -86,7 +99,6 @@ function main(): void {
 
   console.log('fetch-kernel: 解包');
   const tarArgs = ['-xzf', tgzPath];
-  if (process.platform === 'win32') tarArgs.unshift('--force-local');
   run('tar', tarArgs, WORK);
   const srcDir = fs.readdirSync(WORK).find((e) => e.startsWith('deepseek-harness-') && fs.statSync(path.join(WORK, e)).isDirectory());
   if (!srcDir) throw new Error('解包后找不到源码目录');
@@ -106,13 +118,15 @@ function main(): void {
   );
   fs.writeFileSync(packTs, pack);
 
-  // 补丁 2：tarball.ts 的 tar 盘符问题（win32 加 --force-local）。
+  // 补丁 2：使用相对归档路径，兼容 Windows BSD tar 与 GNU tar。
   const tarballTs = path.join(src, 'scripts', 'release', 'tarball.ts');
   let tarball = fs.readFileSync(tarballTs, 'utf8');
+  tarball = tarball.replace("import { capture } from './process.ts'", "import path from 'node:path'\nimport { capture } from './process.ts'\nconst { relative } = path");
   const tarAnchors = ["capture('tar', ['-tzf', tarball])", "capture('tar', ['-xOzf', tarball, 'package/package.json'])"];
   for (const anchor of tarAnchors) {
     if (!tarball.includes(anchor)) throw new Error(`tarball.ts 锚点未命中: ${anchor}`);
-    tarball = tarball.replace(anchor, anchor.replace("capture('tar', [", "capture('tar', [...(process.platform === 'win32' ? ['--force-local'] : []), "));
+    const replacement = anchor.replace('tarball])', "relative(process.cwd(), tarball)])");
+    tarball = tarball.replace(anchor, replacement);
   }
   fs.writeFileSync(tarballTs, tarball);
 
@@ -124,10 +138,11 @@ function main(): void {
     : ['-fsSL', `https://api.github.com/repos/${REPO}/git/ref/tags/${tag}`]);
   const commitSha = JSON.parse(refJson).object.sha as string;
 
+  const tempDir = process.platform === 'win32' ? path.join(WORK, 'tmp') : fs.mkdtempSync(path.join(os.tmpdir(), 'dsh-kernel-'));
   const baseEnv: StepEnv = {
     npm_execpath: pnpm.entry,
-    TEMP: path.join(WORK, 'tmp'),
-    TMP: path.join(WORK, 'tmp'),
+    TEMP: tempDir,
+    TMP: tempDir,
     DSH_CLIENT_COMMIT_HASH: commitSha.slice(0, 7).toLowerCase(),
   };
   fs.mkdirSync(path.join(WORK, 'tmp'), { recursive: true });

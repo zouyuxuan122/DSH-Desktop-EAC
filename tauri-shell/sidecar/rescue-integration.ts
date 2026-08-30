@@ -243,10 +243,6 @@ export function buildZipCommand(
     : null;
 }
 
-// 恢复中心「导出日志」（原 assets/recovery.html 语义，旧页已退役）：由 L2 用
-// Node archiver 直接打包（macOS 保留 ditto），不再经 shell 解析路径；目标
-// 桌面（OneDrive 重定向感知），失败回退 userDataDir/diagnostics-exports。
-// 完成后路径经菜单 toast 反馈，不再自动打开目录（打开属 L1 原生动作）。
 async function runArchiveCommand(command: { program: string; args: string[] }): Promise<void> {
   await new Promise<void>((resolve, reject) => {
     const child = cp.spawn(command.program, command.args, { windowsHide: true, stdio: 'ignore' });
@@ -301,6 +297,10 @@ export async function createLogsArchive(
     Promise.resolve(archive.finalize()).catch((error: Error) => finish(error));
   });
 }
+
+
+// 恢复中心「导出日志」（原 assets/recovery.html 语义，旧页已退役）：
+// 日志内容由 L2 打包；打开文件或目录仍由 L1 的原生动作负责。
 async function exportLogs(): Promise<Record<string, unknown>> {
   try {
     const logsDir = path.join(H.userDataDir, 'logs');

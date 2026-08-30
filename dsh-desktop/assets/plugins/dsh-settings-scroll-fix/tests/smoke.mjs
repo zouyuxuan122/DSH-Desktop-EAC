@@ -4,12 +4,15 @@ import { resolve } from 'node:path'
 import vm from 'node:vm'
 
 class FakeElement {
-  constructor({ text = '', role = '', width = 640, height = 480, clientHeight = height, scrollHeight = height } = {}) {
+  constructor({ text = '', role = '', width = 640, height = 480, clientHeight = height, scrollHeight = height, ariaModal = '', dataSlot = '' } = {}) {
     this.nodeType = 1
     this.textContent = text
     this.parentElement = null
     this.children = []
-    this.attributes = new Map(role === '' ? [] : [['role', role]])
+    this.attributes = new Map()
+    if (role !== '') this.attributes.set('role', role)
+    if (ariaModal !== '') this.attributes.set('aria-modal', ariaModal)
+    if (dataSlot !== '') this.attributes.set('data-slot', dataSlot)
     this.dataset = {}
     this.clientHeight = clientHeight
     this.scrollHeight = scrollHeight
@@ -36,13 +39,26 @@ class FakeElement {
     if (selector === '[role="dialog"]') return this.getAttribute('role') === 'dialog'
     return /input|textarea|select|pre|code|contenteditable/.test(selector) ? false : false
   }
-  querySelectorAll() { return this.children.flatMap(child => [child, ...child.querySelectorAll('*')]) }
+  querySelector(selector) {
+    if (selector.startsWith('[data-slot^="settings."]')) {
+      if (this.getAttribute('data-slot')?.startsWith('settings.')) return this
+      for (const child of this.children) {
+        const found = child.querySelector(selector)
+        if (found) return found
+      }
+      return null
+    }
+    return null
+  }
+  querySelectorAll(selector) { return this.children.flatMap(child => [child, ...child.querySelectorAll('*')]) }
   remove() { this.removed = true }
 }
 
-const root = new FakeElement({ text: '设置 通用 模型 插件', role: 'dialog', width: 900, height: 620 })
+const root = new FakeElement({ text: '设置 通用 模型 插件', role: 'dialog', ariaModal: 'true', width: 900, height: 620 })
+const settingsChild = new FakeElement({ dataSlot: 'settings.section' })
+root.append(settingsChild)
 const scrollable = new FakeElement({ width: 620, height: 320, clientHeight: 320, scrollHeight: 900 })
-root.append(scrollable)
+settingsChild.append(scrollable)
 const styleElement = new FakeElement()
 const listeners = new Map()
 
@@ -53,6 +69,16 @@ const document = {
   querySelector(selector) { return selector.startsWith('style[') && !styleElement.removed ? null : null },
   querySelectorAll(selector) {
     if (selector.includes('data-dsh-settings-root')) return [root]
+    if (selector.includes('[role="dialog"][aria-modal="true"]')) return [root]
+    if (selector.startsWith('[data-slot^="settings."]')) {
+      const results = []
+      const walk = (el) => {
+        if (el.getAttribute('data-slot')?.startsWith('settings.')) results.push(el)
+        for (const child of el.children) walk(child)
+      }
+      walk(root)
+      return results
+    }
     return []
   },
   createElement(name) { assert.equal(name, 'style'); return styleElement },

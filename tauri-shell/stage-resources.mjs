@@ -307,6 +307,7 @@ if (existsSync(npmCache)) {
 const kernelCache = path.join(dd, 'vendor', 'kernel');
 if (existsSync(kernelCache)) {
   cpSync(kernelCache, path.join(staged, 'dsh-desktop', 'vendor', 'kernel'), { recursive: true });
+  rmSync(path.join(staged, 'dsh-desktop', 'vendor', 'kernel', '.build'), { recursive: true, force: true });
   console.log('[stage] vendor/kernel 内核 tarball 缓存已拷贝（package.json file: 依赖解析用）');
 } else {
   throw new Error('[stage] vendor/kernel 缺失：先运行 npm run fetch-kernel 重建内核缓存');
@@ -315,7 +316,7 @@ if (existsSync(kernelCache)) {
 console.log('[stage] 生产 node_modules（npm ci --omit=dev，首次较慢）');
 const nmDest = path.join(staged, 'dsh-desktop', 'node_modules');
 if (!keepStagedNm) {
-  execSync('npm ci --omit=dev --no-audit --no-fund', { cwd: path.join(staged, 'dsh-desktop'), stdio: 'inherit' });
+  execSync('npm ci --omit=dev --ignore-scripts --no-audit --no-fund', { cwd: path.join(staged, 'dsh-desktop'), stdio: 'inherit' });
 }
 
 if (targetPlatform === 'linux') {

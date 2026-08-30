@@ -83,6 +83,14 @@ jobs:
           restore-keys: |
             dsh-cargo-win-x64-
 
+      - name: 准备内核依赖缓存
+        run: |
+          npm install --global pnpm@11.7.0
+          node scripts/fetch-kernel.js
+          node scripts/pack-kernel-dependency.js
+          node -e "const fs=require('fs'); if (!fs.existsSync('vendor/kernel/0.1.2-alpha.1/deepseek-ai-schemastery-3.18.1.tgz')) throw new Error('schemastery tarball missing after staging')"
+          node scripts/refresh-kernel-lock.js
+
       - name: 安装依赖
         run: npm ci
 
@@ -138,7 +146,13 @@ jobs:
         uses: dtolnay/rust-toolchain@stable
 
       - name: 安装依赖并获取 Linux runtime
-        run: npm ci && npm run fetch-runtime
+        run: |
+          npm install --global pnpm@11.7.0
+          node scripts/fetch-kernel.js
+          node scripts/pack-kernel-dependency.js
+          node -e "const fs=require('fs'); if (!fs.existsSync('vendor/kernel/0.1.2-alpha.1/deepseek-ai-schemastery-3.18.1.tgz')) throw new Error('schemastery tarball missing after staging')"
+          node scripts/refresh-kernel-lock.js
+          npm ci && npm run fetch-runtime
 
       - name: 类型检查与全量测试
         run: npm run typecheck && npm test
