@@ -21,6 +21,12 @@ build/*
 !build/icon.ico
 !build/icon.png
 !build/installer.nsh
+!build/ide-installer.nsh
+# IDE / 便携版组装产物（数百 MB，经 GitHub Release 分发，不入库）
+dist-ide/
+dist-portable/
+# 扩展本地编辑器配置
+vscode/.vscode/
 # 内置社区插件的 vendor / 自包含运行时依赖 / 离线数据必须随仓库分发，
 # 否则克隆后构建出的安装包会复现“插件命名空间不可用”（vendor 缺失）
 # 与“tdai-memory 无法启动”（sqlite-vec / jieba / BM25 语料缺失）
