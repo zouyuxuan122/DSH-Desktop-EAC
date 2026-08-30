@@ -1,10 +1,10 @@
 // src/extension.ts — 插件入口：装配各模块、注册命令、监听配置变更
 import * as vscode from 'vscode';
-import { join, dirname } from 'node:path';
+import { join } from 'node:path';
 import { homedir } from 'node:os';
 import { mkdirSync } from 'node:fs';
 import { initI18n, t } from './i18n';
-import { readConfig, type DshConfig } from './config';
+import { readConfig, resolveRepoRoot, type DshConfig } from './config';
 import { probeService } from './service/detect';
 import { ServiceManager, defaultDshHome, type ManagerOptions } from './service/manager';
 import { bundledNodeExe, bundledDshBin } from './service/process';
@@ -85,10 +85,10 @@ function resolveDshHome(config: DshConfig): string {
   return config.dshHome || process.env.DSH_HOME || defaultDshHome();
 }
 
-/** 仓库根目录：vscode/ 扩展子目录的上一级（desktop-core.js / assets / node_modules / vendor 所在）。
- *  环境变量 DSH_EAC_REPO_ROOT 可覆盖（测试/便携场景：扩展部署在无空格路径时指向真实仓库根）。 */
+/** 仓库根目录解析（env DSH_EAC_REPO_ROOT → <extensionPath>/runtime → 扩展目录上一级）。
+ *  内置 IDE 模式（扩展作为内置扩展分发、运行时捆绑在 runtime/ 内）无需任何环境变量。 */
 function repoRootFromContext(context: vscode.ExtensionContext): string {
-  return process.env.DSH_EAC_REPO_ROOT || dirname(context.extensionPath);
+  return resolveRepoRoot(context.extensionPath);
 }
 
 export async function activate(context: vscode.ExtensionContext): Promise<void> {

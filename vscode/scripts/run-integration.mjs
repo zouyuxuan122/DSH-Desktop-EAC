@@ -16,7 +16,11 @@ import { tmpdir } from 'node:os';
 import { execSync } from 'node:child_process';
 
 const extensionRoot = process.cwd();
-const repoRoot = join(extensionRoot, '..');
+// 便携包验证模式：DSH_EAC_PORTABLE=1 时用 dist-portable/Deepseek-Harness-EAC 作为仓库根
+// （完全模拟目标电脑：插件 + 便携资产，而非开发仓库）
+const repoRoot = process.env.DSH_EAC_PORTABLE
+  ? join(extensionRoot, '..', 'dist-portable', 'Deepseek-Harness-EAC')
+  : join(extensionRoot, '..');
 
 // 无空格部署目录（Windows 扩展宿主加载路径截断问题的规避）
 const DEPLOY_ROOT = 'D:\\eac-vscode-test';

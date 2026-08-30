@@ -66,3 +66,64 @@ test('host 固定为回环地址（安全边界）', () => {
   const { config } = normalizeConfig({});
   assert.equal(config.host, '127.0.0.1');
 });
+
+// —— resolveRepoRoot（仓库根解析：env → <extensionPath>/runtime → dirname）——
+
+import { resolveRepoRoot } from '../src/config';
+import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from 'node:fs';
+import { join, dirname } from 'node:path';
+import { tmpdir } from 'node:os';
+
+function makeSandbox(): string {
+  const dir = mkdtempSync(join(tmpdir(), 'dsh-eac-root-'));
+  return dir;
+}
+
+test('resolveRepoRoot：DSH_EAC_REPO_ROOT 环境变量最高优先', () => {
+  const dir = makeSandbox();
+  try {
+    const env = { DSH_EAC_REPO_ROOT: join(dir, 'x') };
+    // 无论 extensionPath 下是否已有 runtime，env 一律生效
+    const result = resolveRepoRoot(join(dir, 'pkg'), env);
+    assert.equal(result, join(dir, 'x'));
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('resolveRepoRoot：内置 IDE 模式解析 <extensionPath>/runtime（含 desktop-core.js）', () => {
+  const dir = makeSandbox();
+  try {
+    const extPath = join(dir, 'pkg');
+    mkdirSync(join(extPath, 'runtime'), { recursive: true });
+    writeFileSync(join(extPath, 'runtime', 'desktop-core.js'), 'x');
+    const result = resolveRepoRoot(extPath, {});
+    assert.equal(result, join(extPath, 'runtime'));
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('resolveRepoRoot：runtime 存在但缺 desktop-core.js 不算（判据不满足）', () => {
+  const dir = makeSandbox();
+  try {
+    const extPath = join(dir, 'pkg');
+    mkdirSync(join(extPath, 'runtime'), { recursive: true });
+    const result = resolveRepoRoot(extPath, {});
+    assert.equal(result, dirname(extPath));
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('resolveRepoRoot：开发仓库模式回退 dirname(extensionPath)', () => {
+  const dir = makeSandbox();
+  try {
+    const extPath = join(dir, 'pkg');
+    mkdirSync(extPath, { recursive: true });
+    const result = resolveRepoRoot(extPath, {});
+    assert.equal(result, dirname(extPath));
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});

@@ -127,6 +127,46 @@ npm run dist                   # 构建 NSIS 安装包，输出到 dist/
 npm test                       # 运行回归测试套件（259 项）
 ```
 
+
+## Deepseek Harness EAC IDE（内置插件版独立 IDE）
+
+在 vscode-plugin 分支上，可以把 `vscode/` 扩展与 dsh 运行时组装成一个**内置插件的独立 IDE**
+（类似 Trae）：基于 VS Code 1.134 底座，插件作为内置扩展（`resources/app/extensions/dsh-eac-vscode`）、
+运行时资产捆绑在扩展目录内（`runtime/`，含 desktop-core / dsh 内核 / 内置 Node），启动即用、无需安装扩展。
+
+### 组装（三条命令）
+
+```powershell
+npm run ide              # scripts/make-ide.cjs —— 组装 dist-ide/Deepseek-Harness-EAC-IDE + zip
+npm run ide:installer    # scripts/build-ide-installer.cjs —— 产出 NSIS 安装器
+npm run verify:ide       # vscode/scripts/verify-ide.mjs —— 对产出的 IDE 跑端到端验证
+```
+
+底座来源（make-ide.cjs 自动探测，可用 IDE_BASE_ZIP 指定）：
+- `vscode-fork/` 的 gulp 构建产物（`VSCode-win32-x64-1.134.0.zip`，完整源码级 fork：exe 名为
+  applicationName、编译鲸鱼图标、product.json 全品牌）；或
+- 官方 VS Code 1.134 二进制（无 MSVC 机器上的等效路径：product.json 运行时补丁改名，exe/图标保持官方）。
+
+> 本机（C 盘满、无 MSVC）暂走官方二进制底座，功能与内置插件完全一致，仅 exe 名为 Code.exe。
+> vscode-fork 已打完全部品牌补丁（product.json + 图标 + 内置扩展注入逻辑），具备 MSVC 的机器上
+> `cd vscode-fork && npm ci && npm run gulp vscode-win32-x64` 即可产出全品牌 fork 底座。
+
+### 安装器说明（长路径处理）
+
+运行时闭包内含超过 260 字符的深路径（如 chromium-bidi 的 `out/Default/gen/...`，插件运行必需），
+NSIS 无法直接打包 → 安装器采用「NSIS + runtime.7z」混合方案：7za 将 runtime 打成 runtime.7z，
+NSIS 安装时解压回原位（7-Zip 原生支持长路径），卸载用 PowerShell 递归删除。
+
+### 验证矩阵
+
+| 验证 | 结果 |
+|---|---|
+| 仓库根回归 `npm test` | 286/286 通过 |
+| 扩展单测 `vscode/ npm test` | 60/60 通过 |
+| 扩展集成测试 `vscode/ npm run integration`（真实 VS Code，独立扩展形态） | 通过 |
+| IDE 端到端 `npm run verify:ide`（内置扩展 + 捆绑运行时 + 真实 dsh 服务） | 通过 |
+| GUI 冒烟（启动 IDE：标题栏/活动栏/DSH 面板/模型选择器） | 通过 |
+
 > 网络受限时：Electron 二进制镜像 `$env:ELECTRON_MIRROR='https://npmmirror.com/mirrors/electron/'`（可 `npm run electron:fetch` 手动补拉）；打包工具链镜像 `$env:ELECTRON_BUILDER_BINARIES_MIRROR='https://npmmirror.com/mirrors/electron-builder-binaries/'`。
 
 ## 架构

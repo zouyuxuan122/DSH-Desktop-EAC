@@ -1,7 +1,9 @@
 // src/config.ts — dshEac.* 设置项读取与规范化
-// 纯函数（normalizeConfig）不依赖 vscode，可直接单测；
+// 纯函数（normalizeConfig / resolveRepoRoot）不依赖 vscode，可直接单测；
 // readConfig 是 vscode 设置的薄封装，供 extension.ts 使用。
 import * as vscode from 'vscode';
+import { join, dirname } from 'node:path';
+import { existsSync } from 'node:fs';
 
 /** 用户可配置的原始值（可能缺失/非法） */
 export interface RawDshConfig {
@@ -148,4 +150,21 @@ export function readConfig(): { config: DshConfig; errors: string[] } {
     openInBrowser: ws.get<boolean>('openInBrowser'),
     workspaceRootIndex: ws.get<number>('workspaceRootIndex'),
   });
+}
+
+/**
+ * 解析扩展运行所需的「仓库根」目录（desktop-core.js / assets / node_modules / vendor 所在）。
+ * 解析顺序（高 → 低）：
+ *   1. 环境变量 DSH_EAC_REPO_ROOT —— 测试/便携场景显式指向真实仓库根；
+ *   2. <extensionPath>/runtime —— 内置 IDE 模式：扩展作为 VS Code 内置扩展分发时，
+ *      运行时资产（desktop-core + dsh 内核 + vendor/node）捆绑在扩展目录内自解析，
+ *      无需任何环境变量（以 desktop-core.js 存在为判据）；
+ *   3. dirname(extensionPath) —— 开发仓库模式：vscode/ 扩展子目录的上一级即仓库根。
+ */
+export function resolveRepoRoot(extensionPath: string, env: NodeJS.ProcessEnv = process.env): string {
+  const fromEnv = env.DSH_EAC_REPO_ROOT;
+  if (fromEnv) return fromEnv;
+  const bundled = join(extensionPath, 'runtime');
+  if (existsSync(join(bundled, 'desktop-core.js'))) return bundled;
+  return dirname(extensionPath);
 }
