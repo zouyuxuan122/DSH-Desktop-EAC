@@ -44,7 +44,7 @@ function headerValue(headers: Record<string, unknown> | null | undefined, name: 
   return Array.isArray(v) ? v[0] : v;
 }
 
-const DEFAULT_REPOS = { github: 'zouyuxuan122/Deepseek-Harness-EAC', gitee: 'zouyuxuan122/Deepseek-Harness-EAC' };
+const DEFAULT_REPOS = { github: 'zouyuxuan122/DSH-Desktop-EAC', gitee: 'zouyuxuan122/DSH-Desktop-EAC' };
 const REPO_SLUG = /^[A-Za-z0-9_.-]{1,64}\/[A-Za-z0-9_.-]{1,64}$/;
 const MIN_VALID_BYTES = 64 * 1024 * 1024; // 完整安装包远大于 64MB，防止把错误页当 exe
 const GITHUB_DOWNLOAD_PROXY_DEFAULT = 'https://gh.geekertao.top/';

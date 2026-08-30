@@ -68,13 +68,17 @@ export function setIsRestarting(v: boolean): void { restartingServer = v; }
 function logsDir(): string { return path.join(ctx.getUserDataDir(), 'logs'); }
 function dshWebLogPath(): string { return path.join(logsDir(), 'dsh-web.log'); }
 
-// 0.1.2 暗雷自愈（凭据版式）：当前 credentials-local 要求顶层
-// version 为 YAML 字符串 "1"，且使用 refs:/records: 版式（PR #256 实证：
-// 旧版桌面端把 version 写成数字 1 会被严格校验拒绝 → 启动必死）。这里在
-// 拉起内核前规范 version 的 YAML 标量类型，并保留可识别的旧版扁平格式
-// 迁移；标量行 value 匹配多字符串（单字符 \S 时真实 API key 永不命中
-// 扁平迁移分支，5.3.0 起潜伏）；形态看不懂则不动，交由内核报错路径展示。
-// 失败不阻塞启动。
+// 0.1.2 暗雷自愈（凭据版式）：本仓库 vendored 内核的 credentials-local
+// 【严格读数字 version 1】（dsh-credentials-local parseCredentialsDocument:
+// `fields["version"] !== 1` 即拒，字符串 "1" 一样死——装机实测
+// 「declares version "1"; this build reads version 1」启动必死）。
+// 这里在拉起内核前把两种危险形态规整为 version: 1（数字）：
+//   a) 引号 version（"1"/'1'）→ 规整为数字 1（PR #256 方向与本地内核相反，
+//      合并时曾误采，装机冒烟抓出后改回）；
+//   b) rc.2 时代的扁平文件（顶层标量 + records:）→ 迁移为 version/refs 包裹；
+//      标量行 value 匹配多字符串（单字符 \S 时真实 API key 永不命中扁平
+//      迁移分支，5.3.0 起潜伏——用户实测 3 个 key 的扁平文件拒启事故）。
+// 形态看不懂则不动，交由内核报错路径展示。失败不阻塞启动。
 /**
  * .credentials.yaml 版式自愈（导出供单测）。
  */
@@ -84,7 +88,7 @@ export function healCredentialsVersion(): void {
     const file = path.join(home, '.credentials.yaml');
     if (!fs.existsSync(file)) return;
     const text = fs.readFileSync(file, 'utf8');
-    let fixed = text.replace(/^([ \t]*)version:[ \t]*(?:1|['"]1['"])[ \t]*$/m, '$1version: "1"');
+    let fixed = text.replace(/^([ \t]*)version:[ \t]*(?:1|['"]1['"])[ \t]*$/m, '$1version: 1');
     if (!/^([ \t]*)version:[ \t]*\S/m.test(fixed)) {
       const scalar: string[] = [];
       const rest: string[] = [];
@@ -101,13 +105,13 @@ export function healCredentialsVersion(): void {
         break;
       }
       if (recognizable && scalar.length > 0) {
-        fixed = 'version: "1"\nrefs:\n' + scalar.map((l) => '  ' + l).join('\n') + '\n' + rest.join('\n').replace(/\n*$/, '\n');
+        fixed = 'version: 1\nrefs:\n' + scalar.map((l) => '  ' + l).join('\n') + '\n' + rest.join('\n').replace(/\n*$/, '\n');
       }
     }
     if (fixed !== text) {
       // .credentials.yaml 截断 = 凭据全丢：必须原子写。
       writeFileAtomic(file, fixed);
-      ctx.log('dsh', '已自愈 .credentials.yaml 版式（credentials-local 要求 version: "1" + refs:/records:）');
+      ctx.log('dsh', '已自愈 .credentials.yaml 版式（本仓库内核 credentials-local 严格读数字 version: 1 + refs:/records:）');
     }
   } catch { /* 自愈失败交由内核报错路径展示 */ }
 }

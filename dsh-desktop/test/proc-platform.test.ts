@@ -27,10 +27,13 @@ test('boot-server uses platform process-group options and suppresses browser lau
   assert.deepEqual(childProcessSpawnOptions('win32'), { detached: false });
 });
 
-test('credential compatibility preserves the string version required by credentials-local', () => {
+test('credential compatibility normalizes to the digit version read by the local kernel', () => {
+  // 本仓库 vendored 内核 parseCredentialsDocument: `fields["version"] !== 1`
+  // 即拒（字符串 "1" 一样死，装机实测「declares version "1"」启动必死）。
+  // PR #256 的字符串方向与本地内核相反，合并时曾误采——此钉子防回归。
   const source = readFileSync(join(root, 'lib', 'desktop', 'boot-server.ts'), 'utf8');
-  assert.match(source, /version: "1"/);
-  assert.doesNotMatch(source, /\$1version: 1/);
+  assert.match(source, /\$1version: 1/);
+  assert.doesNotMatch(source, /\$1version: "1"/);
 });
 
 test('POSIX DSH process-group termination reaps a spawned descendant', { skip: process.platform === 'win32' }, async () => {

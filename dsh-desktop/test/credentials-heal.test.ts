@@ -1,10 +1,11 @@
 // healCredentialsVersion 单测（5.3.3 批次二补齐）：凭据版式自愈是
 // 「升级后启动卡死」级功能，此前只有手动冒烟、零单测。
-// 0.1.2 内核 credentials-local 要求顶层 version 为 YAML 字符串 "1"
-// （PR #256 契约：旧版桌面端写成数字 1 会被严格校验拒绝 → 启动必死）：
-//   · 数字 version（1）→ 规整为 "1"；
-//   · rc.2 扁平文件（顶层标量 + records:）→ 迁移为 version: "1"/refs 包裹；
-//   · 正常 version: "1" 文件不动；
+// 本仓库 vendored 内核 credentials-local【严格读数字 version 1】
+// （parseCredentialsDocument: `fields["version"] !== 1` 即拒——字符串 "1"
+// 一样死，PR #256 方向与本地内核相反，装机实测后改回）：
+//   · 引号 version（"1"/'1'）→ 规整为数字 1；
+//   · rc.2 扁平文件（顶层标量 + records:）→ 迁移为 version: 1/refs 包裹；
+//   · 正常 version: 1 文件不动；
 //   · 不认识的版式（奇异行）不动（宁可让内核报错也不要写坏凭据）。
 import { test } from 'node:test';
 import assert from 'node:assert';
@@ -44,25 +45,25 @@ function initBoot(home: string): void {
   });
 }
 
-test('digit version is normalized to quoted "1" (PR #256 contract)', () => {
+test('quoted version is normalized to bare digit 1 (local kernel contract)', () => {
   const { home, credFile } = makeHome();
   try {
-    writeFileSync(credFile, 'version: 1\nrefs:\n  main: sk-a\nrecords:\n  - id: r1\n');
+    writeFileSync(credFile, 'version: "1"\nrefs:\n  main: sk-a\nrecords:\n  - id: r1\n');
     initBoot(home);
     boot.healCredentialsVersion();
     const out = readFileSync(credFile, 'utf8');
-    assert.match(out, /^version: "1"$/m);
-    assert.ok(!/^version: 1$/m.test(out), 'digit version must be gone');
+    assert.match(out, /^version: 1$/m);
+    assert.ok(!out.includes('"1"'), 'quoted version must be gone (kernel rejects string "1")');
     assert.match(out, /^  main: sk-a$/m, 'refs untouched');
   } finally {
     rmSync(home, { recursive: true, force: true });
   }
 });
 
-test('already-quoted version: "1" file is left untouched', () => {
+test('digit version: 1 file is left untouched', () => {
   const { home, credFile } = makeHome();
   try {
-    const original = 'version: "1"\nrefs:\n  main: sk-a\nrecords:\n  - id: r1\n';
+    const original = 'version: 1\nrefs:\n  main: sk-ok\nrecords:\n  - id: r1\n';
     writeFileSync(credFile, original);
     initBoot(home);
     boot.healCredentialsVersion();
@@ -72,14 +73,14 @@ test('already-quoted version: "1" file is left untouched', () => {
   }
 });
 
-test('rc.2 flat layout migrates into version/refs envelope (string "1")', () => {
+test('rc.2 flat layout migrates into version/refs envelope', () => {
   const { home, credFile } = makeHome();
   try {
     writeFileSync(credFile, 'main: sk-flat\nsecond: sk-two\nrecords:\n  - id: r1\n');
     initBoot(home);
     boot.healCredentialsVersion();
     const out = readFileSync(credFile, 'utf8');
-    assert.match(out, /^version: "1"$/m);
+    assert.match(out, /^version: 1$/m);
     assert.match(out, /^refs:\n  main: sk-flat\n  second: sk-two\n/m, 'scalars indented under refs');
     assert.match(out, /^records:\n  - id: r1\n/m, 'records block preserved');
   } finally {
@@ -87,27 +88,18 @@ test('rc.2 flat layout migrates into version/refs envelope (string "1")', () => 
   }
 });
 
-test('multi-char API key scalars are recognized in flat layout (5.3.3 fix kept)', () => {
+test('multi-char API key scalars are recognized in flat layout (user incident regression)', () => {
+  // 用户实测事故：3 个真实 key 的扁平文件拒启——单字符 \S 时多字符 key
+  // 不被识别为标量行，扁平迁移分支永不触发。
   const { home, credFile } = makeHome();
   try {
-    writeFileSync(credFile, 'main: sk-abcdefghijklmnop1234567890\nrecords:\n  - id: r1\n');
+    writeFileSync(credFile, 'DEEPSEEK_API_KEY: sk-DUMMYDEEPSEEKKEY0123456789abcdef\nROUTER_API_KEY: sk-DUMMYROUTERKEY-w3u59m\nrecords:\n  - id: r1\n');
     initBoot(home);
     boot.healCredentialsVersion();
     const out = readFileSync(credFile, 'utf8');
-    assert.match(out, /^  main: sk-abcdefghijklmnop1234567890$/m, 'multi-char scalar must migrate');
-  } finally {
-    rmSync(home, { recursive: true, force: true });
-  }
-});
-
-test('healthy version: "1" file is left untouched', () => {
-  const { home, credFile } = makeHome();
-  try {
-    const original = 'version: "1"\nrefs:\n  main: sk-ok\nrecords:\n  - id: r1\n';
-    writeFileSync(credFile, original);
-    initBoot(home);
-    boot.healCredentialsVersion();
-    assert.equal(readFileSync(credFile, 'utf8'), original);
+    assert.match(out, /^version: 1$/m);
+    assert.match(out, /^  DEEPSEEK_API_KEY: sk-DUMMYDEEPSEEKKEY0123456789abcdef$/m, 'multi-char scalar must migrate');
+    assert.match(out, /^  ROUTER_API_KEY: sk-DUMMYROUTERKEY-w3u59m$/m);
   } finally {
     rmSync(home, { recursive: true, force: true });
   }
