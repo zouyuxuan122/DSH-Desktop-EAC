@@ -1,0 +1,36 @@
+[package]
+name = "dsh-eac-launcher"
+version = "1.0.0"
+description = "DSH EAC Launcher — 多实例 DSH EAC 桌面启动器"
+authors = ["dsh-eac"]
+edition = "2021"
+rust-version = "1.77"
+
+[lib]
+name = "dsh_eac_launcher_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = [] }
+tauri-plugin-dialog = "2"
+tauri-plugin-opener = "2"
+tauri-plugin-single-instance = "2"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+reqwest = { version = "0.12", default-features = false, features = ["native-tls", "stream", "json", "gzip"] }
+futures-util = "0.3"
+tokio = { version = "1", features = ["sync", "time", "rt"] }
+zip = { version = "2", default-features = false, features = ["deflate"] }
+sha2 = "0.10"
+hex = "0.4"
+dirs = "6"
+
+[profile.release]
+panic = "abort"
+codegen-units = 1
+lto = true
+opt-level = "s"
+strip = true

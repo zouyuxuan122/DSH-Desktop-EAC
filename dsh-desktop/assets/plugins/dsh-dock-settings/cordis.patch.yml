@@ -1,8 +1,0 @@
-# dsh-dock-settings bundle patch: Skills & MCP management. The host half
-# registers the /api/dsh-dock HTTP route (skills listing, MCP row
-# read/write over the profile cordis.patch.yml); the client half adds a
-# "Skills & MCP" section to the Web UI settings page.
-
-- insert:
-    - id: dock-settings
-      name: 'dsh-dock-settings'

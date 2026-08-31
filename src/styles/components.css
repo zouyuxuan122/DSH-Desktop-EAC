@@ -1,0 +1,599 @@
+/* 组件：按钮 / 芯片 / 输入 / 进度 / 行 / 弹层 / 提示 */
+
+/* 主按钮：胶囊形，米黄底幕从下滑入，文字同步反色 */
+.btn {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 9px 20px;
+  font-family: var(--font-ui);
+  font-size: 12.5px;
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  color: var(--paper);
+  background: transparent;
+  border: 1px solid var(--line-strong);
+  border-radius: 999px;
+  cursor: pointer;
+  overflow: hidden;
+  white-space: nowrap;
+  isolation: isolate;
+  box-shadow: var(--hi);
+  transition: color var(--d-mid) var(--e-out), border-color var(--d-mid) var(--e-out),
+    transform var(--d-fast) var(--e-out), box-shadow var(--d-mid) var(--e-out);
+}
+.btn::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: var(--paper);
+  transform: translateY(101%);
+  transition: transform var(--d-mid) var(--e-inout);
+  z-index: -1;
+}
+.btn > * {
+  position: relative;
+  z-index: 1;
+}
+.btn:hover {
+  color: var(--accent-contrast);
+  border-color: var(--accent);
+  box-shadow: 0 12px 32px -12px rgba(236, 228, 207, 0.35), var(--hi);
+}
+.btn:hover::before {
+  transform: translateY(0);
+}
+.btn:active {
+  transform: scale(0.97);
+}
+.btn:disabled {
+  opacity: 0.35;
+  pointer-events: none;
+}
+.btn.solid {
+  background: var(--accent);
+  color: var(--accent-contrast);
+  border-color: transparent;
+  font-weight: 700;
+  box-shadow: var(--elev-1), inset 0 1px 0 rgba(255, 255, 255, 0.45);
+}
+.btn.solid::before {
+  background: var(--accent-hover);
+}
+.btn.solid::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: -60%;
+  width: 45%;
+  background: linear-gradient(105deg, transparent, rgba(255, 255, 255, 0.35), transparent);
+  transform: skewX(-12deg);
+  transition: left 0.55s var(--e-out);
+  z-index: 1;
+  pointer-events: none;
+}
+.btn.solid:hover::after {
+  left: 135%;
+}
+.btn.solid:hover {
+  color: var(--accent-contrast);
+  box-shadow: 0 14px 38px -12px rgba(236, 228, 207, 0.42), inset 0 1px 0 rgba(255, 255, 255, 0.45);
+}
+.btn.ghost {
+  border-color: transparent;
+}
+.btn.ghost:hover {
+  border-color: var(--line-strong);
+  color: var(--accent-contrast);
+}
+.btn.danger:hover {
+  color: #fff;
+  border-color: var(--danger);
+  box-shadow: 0 12px 32px -12px rgba(229, 72, 77, 0.45);
+}
+.btn.danger:hover::before {
+  background: var(--danger);
+}
+.btn.small {
+  padding: 5px 14px;
+  font-size: 11px;
+}
+.btn .ico {
+  width: 13px;
+  height: 13px;
+}
+
+/* 键盘焦点（借鉴参考站） */
+button:focus-visible,
+a:focus-visible,
+input:focus-visible {
+  outline: 2px solid currentColor;
+  outline-offset: 3px;
+  border-radius: 3px;
+}
+
+/* 芯片 */
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-family: var(--font-mono);
+  font-size: 9.5px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  padding: 3px 10px;
+  border: 1px solid var(--line-strong);
+  border-radius: 4px;
+  color: var(--paper-dim);
+  background: linear-gradient(180deg, rgba(236, 228, 207, 0.05), rgba(236, 228, 207, 0.01));
+  box-shadow: var(--hi);
+  white-space: nowrap;
+}
+.chip.solid {
+  background: var(--accent);
+  color: var(--accent-contrast);
+  border-color: transparent;
+  font-weight: 600;
+  box-shadow: var(--elev-1), inset 0 1px 0 rgba(255, 255, 255, 0.4);
+}
+.chip.on {
+  border-color: var(--paper-dim);
+  color: var(--paper);
+}
+
+/* 输入 */
+.input,
+.select {
+  background: transparent;
+  border: none;
+  border-bottom: 1px solid var(--line-strong);
+  color: var(--paper);
+  font-family: var(--font-mono);
+  font-size: 12.5px;
+  padding: 8px 2px;
+  outline: none;
+  transition: border-color var(--d-mid) var(--e-out);
+  width: 100%;
+}
+.input:focus,
+.select:focus {
+  border-bottom-color: var(--paper);
+}
+.input::placeholder {
+  color: var(--paper-faint);
+}
+.select {
+  appearance: none;
+  cursor: pointer;
+}
+.select option {
+  background: var(--ink-1);
+  color: var(--paper);
+}
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.field label {
+  font-family: var(--font-mono);
+  font-size: 9.5px;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: var(--paper-faint);
+}
+
+/* 开关 */
+.switch {
+  width: 34px;
+  height: 18px;
+  border: 1px solid var(--line-strong);
+  border-radius: 10px;
+  position: relative;
+  cursor: pointer;
+  background: rgba(0, 0, 0, 0.25);
+  box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.4);
+  transition: background var(--d-mid) var(--e-out), border-color var(--d-mid) var(--e-out);
+  flex: none;
+}
+.switch i {
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: var(--paper-dim);
+  transition: transform var(--d-mid) var(--e-spring), background var(--d-mid) var(--e-out);
+}
+.switch.on {
+  background: var(--accent);
+  border-color: var(--accent);
+  box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.15);
+}
+.switch.on i {
+  transform: translateX(16px);
+  background: var(--accent-contrast);
+}
+
+/* 进度条：非线性流动 */
+.bar {
+  height: 3px;
+  background: var(--line);
+  position: relative;
+  overflow: hidden;
+  border-radius: 2px;
+}
+.bar > i {
+  position: absolute;
+  inset: 0 auto 0 0;
+  background: linear-gradient(90deg, var(--paper-dim), var(--paper));
+  width: 0%;
+  transition: width 420ms var(--e-out);
+  box-shadow: 0 0 8px rgba(236, 228, 207, 0.25);
+}
+.bar.indeterminate > i {
+  width: 34%;
+  animation: bar-flow 1.2s var(--e-inout) infinite;
+}
+@keyframes bar-flow {
+  0% {
+    left: -34%;
+  }
+  100% {
+    left: 100%;
+  }
+}
+
+/* 状态点 */
+.dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--paper-faint);
+  flex: none;
+}
+.dot.run {
+  background: var(--paper);
+  animation: pulse-dot 1.6s var(--e-inout) infinite;
+}
+.dot.ready {
+  background: var(--paper-dim);
+}
+.dot.err {
+  background: var(--danger);
+}
+.dot.installing {
+  background: transparent;
+  border: 1.5px solid var(--paper-dim);
+  animation: pulse-dot 1.2s var(--e-inout) infinite;
+}
+
+/* 实例卡片（规格表内容 + 立体卡片） */
+.inst-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding-top: 16px;
+}
+.inst-row {
+  position: relative;
+  display: grid;
+  grid-template-columns: 64px 1.4fr 1fr 190px 150px;
+  align-items: center;
+  gap: 18px;
+  padding: 20px 18px;
+  background: linear-gradient(180deg, var(--surface-2), var(--surface-1));
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  box-shadow: var(--elev-1), var(--hi);
+  cursor: pointer;
+  overflow: hidden;
+  transition: transform 0.5s var(--e-out), box-shadow 0.5s var(--e-out),
+    border-color var(--d-mid) var(--e-out), padding var(--d-mid) var(--e-out);
+}
+.inst-row::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 14px;
+  bottom: 14px;
+  width: 2px;
+  border-radius: 2px;
+  background: var(--paper);
+  transform: scaleY(0);
+  transform-origin: top;
+  transition: transform var(--d-mid) var(--e-out);
+}
+.inst-row:hover {
+  padding-left: 24px;
+  transform: translateY(-2px);
+  border-color: var(--line-strong);
+  box-shadow: var(--elev-2), var(--hi);
+}
+.inst-row:hover::before {
+  transform: scaleY(1);
+}
+.inst-row.active {
+  border-color: var(--paper-dim);
+}
+.inst-row.active::before {
+  transform: scaleY(1);
+}
+.inst-row .idx {
+  font-family: var(--font-serif);
+  font-style: italic;
+  font-size: 36px;
+  color: var(--paper-faint);
+  transition: color var(--d-mid) var(--e-out), transform var(--d-mid) var(--e-out);
+}
+.inst-row:hover .idx {
+  color: var(--paper-dim);
+  transform: translateX(3px);
+}
+.inst-row .name {
+  font-size: 16.5px;
+  font-weight: 640;
+  font-variation-settings: "wdth" 110;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+.inst-row .name .nm {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.inst-row .meta {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+.inst-row .meta .path {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--paper-dim);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.inst-row .status {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  letter-spacing: 0.08em;
+}
+.inst-row .ops {
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+  opacity: 0.45;
+  transform: translateX(6px);
+  transition: opacity var(--d-mid) var(--e-out), transform var(--d-mid) var(--e-out);
+}
+.inst-row:hover .ops,
+.inst-row.active .ops {
+  opacity: 1;
+  transform: none;
+}
+
+/* 弹层 */
+.overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 200;
+  background: color-mix(in srgb, var(--ink-0) 62%, transparent);
+  backdrop-filter: blur(6px);
+  display: grid;
+  place-items: center;
+  animation: fade var(--d-mid) var(--e-out) both;
+}
+@keyframes fade {
+  from {
+    opacity: 0;
+  }
+}
+.modal {
+  width: 400px;
+  background: linear-gradient(180deg, var(--surface-2), var(--surface-1));
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 26px;
+  animation: modal-pop var(--d-mid) var(--e-anticipate) both;
+  box-shadow: var(--elev-2), var(--hi);
+}
+@keyframes modal-pop {
+  from {
+    transform: scale(0.92) translateY(10px);
+    opacity: 0;
+  }
+}
+.modal h3 {
+  font-size: 16px;
+  font-weight: 640;
+  margin-bottom: 10px;
+}
+.modal p {
+  color: var(--paper-dim);
+  font-size: 12.5px;
+  margin-bottom: 22px;
+  line-height: 1.7;
+  word-break: break-all;
+}
+.modal .foot {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+}
+
+/* 提示堆栈 */
+.toasts {
+  position: fixed;
+  top: calc(var(--titlebar-h) + 12px);
+  right: 14px;
+  z-index: 400;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  pointer-events: none;
+}
+.toast {
+  pointer-events: auto;
+  min-width: 240px;
+  max-width: 360px;
+  background: var(--ink-2);
+  border: 1px solid var(--line);
+  border-left: 2px solid var(--paper);
+  padding: 10px 14px;
+  font-size: 12px;
+  color: var(--paper);
+  animation: toast-in var(--d-mid) var(--e-spring) both;
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.4);
+}
+.toast.err {
+  border-left-color: var(--danger);
+}
+.toast .t {
+  font-family: var(--font-mono);
+  font-size: 9px;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: var(--paper-faint);
+  margin-bottom: 3px;
+}
+.toast.leaving {
+  animation: toast-out var(--d-fast) var(--e-inout) both;
+}
+@keyframes toast-in {
+  from {
+    transform: translateX(30px);
+    opacity: 0;
+  }
+}
+@keyframes toast-out {
+  to {
+    transform: translateX(30px);
+    opacity: 0;
+  }
+}
+
+/* 详情抽屉 */
+.drawer {
+  position: fixed;
+  top: var(--titlebar-h);
+  right: 0;
+  bottom: 26px;
+  width: min(560px, 62%);
+  background: linear-gradient(180deg, var(--ink-1), var(--ink-0));
+  border-left: 1px solid var(--line);
+  z-index: 100;
+  display: flex;
+  flex-direction: column;
+  animation: drawer-in var(--d-slow) var(--e-out) both;
+  box-shadow: -30px 0 90px rgba(0, 0, 0, 0.5);
+}
+@keyframes drawer-in {
+  from {
+    transform: translateX(40px);
+    opacity: 0;
+    clip-path: inset(0 0 0 100%);
+  }
+}
+.drawer .d-head {
+  padding: 26px 28px 0;
+  flex: none;
+}
+.drawer .d-body {
+  flex: 1;
+  overflow-y: auto;
+  padding: 18px 28px 30px;
+}
+.drawer .d-tabs {
+  display: flex;
+  gap: 2px;
+  margin-top: 18px;
+  border-bottom: 1px solid var(--line);
+}
+.drawer .d-tab {
+  background: none;
+  border: none;
+  border-bottom: 1px solid transparent;
+  color: var(--paper-faint);
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  padding: 10px 14px;
+  cursor: pointer;
+  transition: color var(--d-fast) var(--e-out), border-color var(--d-fast) var(--e-out);
+  margin-bottom: -1px;
+}
+.drawer .d-tab:hover {
+  color: var(--paper-dim);
+}
+.drawer .d-tab.active {
+  color: var(--paper);
+  border-bottom-color: var(--paper);
+}
+
+/* 插件行 */
+.plug-row {
+  display: grid;
+  grid-template-columns: 40px 1fr auto;
+  gap: 14px;
+  align-items: center;
+  padding: 16px 2px;
+  border-bottom: 1px solid var(--line);
+  transition: padding-left var(--d-mid) var(--e-out);
+}
+.plug-row:hover {
+  padding-left: 8px;
+}
+.plug-row .idx {
+  font-family: var(--font-serif);
+  font-style: italic;
+  font-size: 22px;
+  color: var(--paper-faint);
+}
+.plug-row .p-name {
+  font-weight: 600;
+  font-size: 13.5px;
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+.plug-row .p-desc {
+  color: var(--paper-dim);
+  font-size: 12px;
+  margin-top: 3px;
+  line-height: 1.6;
+}
+
+/* KV 网格 */
+.kv {
+  display: grid;
+  grid-template-columns: 110px 1fr;
+  row-gap: 10px;
+  column-gap: 16px;
+  font-size: 12px;
+}
+.kv .k {
+  font-family: var(--font-mono);
+  font-size: 9.5px;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--paper-dim);
+  padding-top: 2px;
+}
+.kv .v {
+  color: var(--paper);
+  word-break: break-all;
+  user-select: text;
+}

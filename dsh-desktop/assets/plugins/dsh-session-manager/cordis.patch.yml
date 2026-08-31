@@ -1,4 +1,0 @@
-# dsh-session-manager bundle：组合挂载 Node half（空 apply，行为全在 client）
-- insert:
-    - id: dsh-session-manager
-      name: 'dsh-session-manager'

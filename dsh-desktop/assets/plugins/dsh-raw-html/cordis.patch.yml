@@ -1,6 +1,0 @@
-# dsh-raw-html bundle entry: inserts the EAC-managed client plugin.
-# HTML rendering uses conversation.chat.node assistant-step and does not
-# modify dsh-web-frontend dist bundles.
-- insert:
-    - id: dsh-raw-html
-      name: 'dsh-raw-html'

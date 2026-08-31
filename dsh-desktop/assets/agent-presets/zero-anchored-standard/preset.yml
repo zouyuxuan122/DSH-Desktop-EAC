@@ -1,3 +1,0 @@
-name: Zero-Anchored Standard (experimental)
-description: Inject one zero-tool anchor turn (fixed user message), then expose the full Standard tool catalog from the next turn on.
-order: 6

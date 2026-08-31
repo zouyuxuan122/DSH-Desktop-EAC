@@ -1,0 +1,255 @@
+/* ============================================================
+   EAC LAUNCHER · 设计系统「墨与纸」
+   黑白极简 · 工业编辑风 · 非线性动效
+   ============================================================ */
+
+:root {
+  /* 墨（暖黑容器）与纸（米黄文字）——米黄暖调 */
+  --ink-0: #131210;
+  --ink-1: #181713;
+  --ink-2: #201e19;
+  --ink-3: #2b2921;
+  --ink-4: #3a372c;
+
+  --paper: #ece4cf;
+  --paper-dim: #cac1a9;
+  --paper-faint: #9a937d;
+
+  --line: rgba(236, 228, 207, 0.12);
+  --line-strong: rgba(236, 228, 207, 0.28);
+  --line-faint: rgba(236, 228, 207, 0.06);
+
+  --danger: #e5484d;
+
+  /* 强调：米黄实心块 */
+  --accent: #ece4cf;
+  --accent-contrast: #1e1c15;
+  --accent-hover: #f8f2df;
+
+  /* 表面分层与立体（墨面） */
+  --surface-1: #1b1a15;
+  --surface-2: #24221b;
+  --elev-1: 0 1px 2px rgba(0, 0, 0, 0.5), 0 4px 14px rgba(0, 0, 0, 0.35);
+  --elev-2: 0 2px 8px rgba(0, 0, 0, 0.55), 0 16px 44px rgba(0, 0, 0, 0.45);
+  --hi: inset 0 1px 0 rgba(255, 252, 240, 0.05);
+  --grid-line: rgba(236, 228, 207, 0.035);
+
+  /* 非线性缓动系统 */
+  --e-out: cubic-bezier(0.16, 1, 0.3, 1);
+  --e-inout: cubic-bezier(0.83, 0, 0.17, 1);
+  --e-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
+  --e-anticipate: cubic-bezier(0.68, -0.4, 0.27, 1.35);
+
+  --d-fast: 160ms;
+  --d-mid: 320ms;
+  --d-slow: 520ms;
+  --d-epic: 760ms;
+
+  /* 字体 */
+  --font-display: "Archivo Variable", "Microsoft YaHei UI", "Microsoft YaHei", sans-serif;
+  --font-ui: "Archivo Variable", "Microsoft YaHei UI", "Microsoft YaHei", sans-serif;
+  --font-serif: "Instrument Serif", "STSong", "SimSun", serif;
+  --font-mono: "IBM Plex Mono", "Cascadia Mono", Consolas, monospace;
+
+  /* 尺寸 */
+  --titlebar-h: 40px;
+  --rail-w: 76px;
+  --radius: 3px;
+
+  color-scheme: dark;
+}
+
+[data-theme="light"] {
+  /* 米黄纸面 + 深墨文字 */
+  --ink-0: #f2ecdc;
+  --ink-1: #ebe3ce;
+  --ink-2: #e2d9c0;
+  --ink-3: #d4c9aa;
+  --ink-4: #c4b894;
+
+  --paper: #23201a;
+  --paper-dim: #514c3e;
+  --paper-faint: #7d7663;
+
+  --line: rgba(35, 32, 26, 0.14);
+  --line-strong: rgba(35, 32, 26, 0.32);
+  --line-faint: rgba(35, 32, 26, 0.07);
+
+  --accent: #2b2820;
+  --accent-contrast: #f2ecdc;
+  --accent-hover: #17150f;
+
+  /* 表面分层与立体（纸面） */
+  --surface-1: #eae2cc;
+  --surface-2: #e1d7bd;
+  --elev-1: 0 1px 2px rgba(60, 52, 35, 0.16), 0 4px 14px rgba(60, 52, 35, 0.12);
+  --elev-2: 0 2px 8px rgba(60, 52, 35, 0.18), 0 16px 44px rgba(60, 52, 35, 0.16);
+  --hi: inset 0 1px 0 rgba(255, 255, 255, 0.55);
+  --grid-line: rgba(35, 32, 26, 0.055);
+
+  color-scheme: light;
+}
+
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+html,
+body,
+#app {
+  height: 100%;
+  overflow: hidden;
+}
+
+/* 左上微光，增加纵深 */
+#app::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 0;
+  background: radial-gradient(
+    900px 520px at 18% -8%,
+    rgba(236, 228, 207, 0.05),
+    transparent 62%
+  );
+}
+[data-theme="light"] #app::before {
+  background: radial-gradient(
+    900px 520px at 18% -8%,
+    rgba(255, 252, 240, 0.6),
+    transparent 62%
+  );
+}
+
+/* 背景巨型 EAC 浮雕水印（内容层之下） */
+#app::after {
+  content: "EAC";
+  position: fixed;
+  right: -2vw;
+  bottom: -7vh;
+  font-family: var(--font-display);
+  font-variation-settings: "wdth" 125;
+  font-weight: 800;
+  font-size: 36vh;
+  line-height: 1;
+  letter-spacing: -0.03em;
+  color: transparent;
+  -webkit-text-stroke: 1.5px rgba(236, 228, 207, 0.045);
+  text-shadow:
+    0 1px 0 rgba(255, 252, 240, 0.035),
+    0 -1px 2px rgba(0, 0, 0, 0.55);
+  pointer-events: none;
+  z-index: 0;
+}
+[data-theme="light"] #app::after {
+  -webkit-text-stroke: 1.5px rgba(35, 32, 26, 0.07);
+  text-shadow:
+    0 1px 0 rgba(255, 255, 255, 0.75),
+    0 -1px 2px rgba(35, 32, 26, 0.18);
+}
+
+body {
+  background: var(--ink-0);
+  color: var(--paper);
+  font-family: var(--font-ui);
+  font-size: 14px;
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+  user-select: none;
+  cursor: default;
+}
+
+::selection {
+  background: var(--paper);
+  color: var(--ink-0);
+}
+
+input,
+textarea {
+  user-select: text;
+}
+
+/* 滚动条：发丝线风格 */
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: var(--line-strong);
+  border: 4px solid transparent;
+  background-clip: content-box;
+  border-radius: 8px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: var(--paper-faint);
+  border: 3px solid transparent;
+  background-clip: content-box;
+}
+
+/* 颗粒噪点覆层（印刷质感） */
+.grain::after {
+  content: "";
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 999;
+  opacity: 0.032;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2'/%3E%3C/filter%3E%3Crect width='160' height='160' filter='url(%23n)'/%3E%3C/svg%3E");
+  mix-blend-mode: overlay;
+}
+
+/* 减弱动效（用户设置 + 系统偏好） */
+.reduce-motion *,
+.reduce-motion *::before,
+.reduce-motion *::after {
+  animation-duration: 0.01ms !important;
+  animation-delay: 0ms !important;
+  transition-duration: 0.01ms !important;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+/* 通用小工具 */
+.mono {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.02em;
+}
+.dim {
+  color: var(--paper-dim);
+}
+.faint {
+  color: var(--paper-faint);
+}
+.hairline-b {
+  border-bottom: 1px solid var(--line);
+}
+.uppercase {
+  text-transform: uppercase;
+  letter-spacing: 0.14em;
+}
+
+@keyframes pulse-dot {
+  0%,
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.35;
+    transform: scale(0.8);
+  }
+}

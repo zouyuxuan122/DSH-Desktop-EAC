@@ -1,0 +1,19 @@
+<svg width="1024" height="1024" viewBox="0 0 1024 1024" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <clipPath id="tile">
+      <rect width="1024" height="1024" rx="216"/>
+    </clipPath>
+  </defs>
+  <g clip-path="url(#tile)">
+    <rect width="1024" height="1024" fill="#0B0B0C"/>
+    <!-- subtle grid hairlines -->
+    <rect x="0" y="170" width="1024" height="2" fill="#1C1C1E"/>
+    <rect x="0" y="852" width="1024" height="2" fill="#1C1C1E"/>
+    <!-- E monogram: three bars -->
+    <rect x="228" y="268" width="396" height="100" fill="#F4F4F2"/>
+    <rect x="228" y="462" width="300" height="100" fill="#F4F4F2"/>
+    <rect x="228" y="656" width="396" height="100" fill="#F4F4F2"/>
+    <!-- pulse block, offset right -->
+    <rect x="716" y="462" width="100" height="100" fill="#F4F4F2"/>
+  </g>
+</svg>

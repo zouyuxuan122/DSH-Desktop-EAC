@@ -1,9 +1,0 @@
-# dsh-side-session bundle patch
-#
-# 服务端子插件加载：web profile 启动时把本插件纳入 cordis 插件栈。
-# 客户端 bundle 由 package.json 的 dsh.client.inject 声明，host 自动加载
-# lib/client.js（window.__ModuleLoader__.load）。
-- insert:
-    - id: side-session
-      name: '@dsh-external/dsh-side-session'
-      config: {}

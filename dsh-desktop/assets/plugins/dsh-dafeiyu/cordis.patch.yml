@@ -1,9 +1,0 @@
-- insert:
-    - id: dsh-dafeiyu
-      name: dsh-dafeiyu
-      config:
-        enabled: true
-        scale: 1
-        activityLevel: normal
-        reducedMotion: false
-        includeSubagents: false

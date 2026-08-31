@@ -1,3 +1,0 @@
-name: Whoami Standard (experimental)
-description: Seed one fixed "你是谁" (who are you) self-introduction turn on an empty tool surface, then let the user's first real message proceed on the next turn with the promoted resident catalog unlocked.
-order: 7
