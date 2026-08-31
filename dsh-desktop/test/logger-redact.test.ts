@@ -79,6 +79,7 @@ if (logger && logger._testExports?.deepRedact) {
     ['ASIAIOSFODNN7EXAMPLE',      'ASIA***MPLE',        'AWS ASIA STS 前缀保留前 6 后 4'],
     ['sk-ant-1234567890abcdef',   'sk-an***cdef',       'sk-ant 前缀'],
     ['sk-or-abcdefghijklmnopqrs', 'sk-or***pqrs',       'sk-or OpenRouter'],
+    ['sk-orca-abcdefghijklmnopqrs', 'sk-orca***pqrs',   'sk-orca OrcaRouter'],
     ['ds-abcdefghijklmnopqrstuvw','ds-ab***tuvw',       'ds- Deepseek'],
     ['ghp_abcdefghijklmnopqrstuvwxyz1234567890', 'ghp_ab***7890', 'GitHub ghp_ 令牌'],
     ['SECxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx', 'SECxxx***xxxx', '钉钉 webhook sign=SEC... 前缀'],
