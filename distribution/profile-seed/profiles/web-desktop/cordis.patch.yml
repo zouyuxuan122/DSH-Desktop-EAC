@@ -15,6 +15,10 @@
     - id: better-sidebar
       name: 'dsh-better-sidebar'
 - insert:
+    - id: composer-dynamic-island
+      name: 'dsh-composer-dynamic-island'
+      config: {}
+- insert:
     - id: auto-compact
       name: 'dsh-auto-compact'
 - insert:

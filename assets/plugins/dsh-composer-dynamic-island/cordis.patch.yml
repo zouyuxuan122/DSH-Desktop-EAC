@@ -1,0 +1,6 @@
+# Insert the bundle root. It exports the complete Cordis plugin contract:
+# name / Config / apply, with no default export.
+- insert:
+    - id: composer-dynamic-island
+      name: 'dsh-composer-dynamic-island'
+      config: {}

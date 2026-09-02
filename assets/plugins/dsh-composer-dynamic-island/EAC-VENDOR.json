@@ -1,0 +1,16 @@
+{
+  "schemaVersion": 1,
+  "source": "https://github.com/says693/dsh-composer-dynamic-island",
+  "tag": "v2.1.0",
+  "commit": "2ccd12ff807c3bc983defd2177e15be1a416106f",
+  "upstreamClientSha256": "22ea2dff2002dfd012d54aec8fd3c91d1d62544d5f54c10de755bdb05fc20f78",
+  "vendoredClientSha256": "8a1cf97bde44a6dc9edc4483cf6ec61280814e45530ac6b6472aee227c14cd1a",
+  "vendoredClientSha256Encoding": "UTF-8 with LF line endings",
+  "localPatches": [
+    "cancel queued animation frames and reject layout after disposal",
+    "keep the island open while a descendant retains keyboard focus",
+    "remove aria-controls ownership of the empty visual backdrop",
+    "describe selection separately from viewport-dependent placement",
+    "correct the documented host entry path"
+  ]
+}

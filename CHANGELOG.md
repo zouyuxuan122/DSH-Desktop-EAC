@@ -16,6 +16,19 @@ DeepSeek Harness（dsh）的 Windows 桌面客户端：内置独立 Node 运行�
 4.4.0（修复设置页「Skills 与 MCP → 打开目录」失效）→
 4.5.0（本版：内核升级 0.1.1-rc.2 + 内置 dsh-market 社区插件市场）。
 
+## [AIO v1] — 2026-09-03
+
+### 新增：内置 Composer Dynamic Island 2.1.0
+- 从 `says693/dsh-composer-dynamic-island` 的 `v2.1.0`（`2ccd12ff`）引入
+  Composer 输入区灵动岛，并在 AIO 的 Electron、兼容核心与 Tauri sidecar
+  三条 companion 注册链中保持一致。
+- 默认写入 `web-desktop` profile；插件仍作为 companion overlay 挂载，不加入
+  profile bundles，避免包内 patch 与 overlay 产生重复 loader id。
+- 随包保留 MIT LICENSE、双语 README、Community v0.15 manifest、兼容说明和
+  GitHub tag 更新源；安装包验收覆盖资源资产、首启复制、patch 与内置标记。
+- 增量审计修复聚焦控件被 pointerleave 隐藏、卸载后排队 RAF 重写 DOM、空面板
+  `aria-controls` 误关联及文档入口漂移；小视口回退和原始 DOM 焦点顺序已明确披露。
+
 ## [4.5.0] — 2026-08-23
 
 ### 升级：内核 @deepseek-ai/dsh 0.1.0-rc.7 → 0.1.1-rc.2（上游最新 RC）

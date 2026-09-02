@@ -1,8 +1,43 @@
 # DSHEAC AIO v1 — Code and Release Audit
 
-日期：2026-09-01
+日期：2026-09-03
 
 范围：Tauri 2/Rust 壳、Node sidecar、NSIS、构建/验证脚本、profile seed 与发布资源。
+
+## 增量审计：Composer Dynamic Island 2.1.0
+
+来源固定为 `says693/dsh-composer-dynamic-island` tag `v2.1.0`、commit
+`2ccd12ff807c3bc983defd2177e15be1a416106f`。原始 Web 适配器 SHA-256 为
+`22ea2dff2002dfd012d54aec8fd3c91d1d62544d5f54c10de755bdb05fc20f78`；AIO
+修补后摘要记录在插件目录的 `EAC-VENDOR.json`，并由测试重新计算核对。
+
+确认的安全边界：
+
+- Community v0.15 manifest 不声明权限、合同、订阅或命令；host 入口无 DOM 副作用；
+- Web adapter 未使用网络、文件系统、剪贴板、媒体、定位、Cookie、IndexedDB、
+  `eval` 或 HTML 字符串注入；
+- 唯一持久化键为 `dsh-composer-dynamic-island-config-v1`，只保存配置标志和哈希化
+  控件 id，不读取或保存对话、模型配置、API key 或凭据；
+- 插件与 DSH Web 同进程同源运行，不构成沙箱，仍受宿主 CSP 与全局 API 风险边界影响。
+
+本次复现并修复：
+
+1. pointerleave 定时器未检查 `:focus-within`，会隐藏仍持有键盘焦点的控件；
+2. item click/初始布局排队的 RAF 未被记录，插件卸载后可重新写入属性和内联样式；
+3. 触发器 `aria-controls` 指向空视觉背景，错误表达 DOM ownership；
+4. 设置页把“已选择”直接表述为“岛内”，在小视口放不下回退原位时不准确；
+5. 兼容文档仍写旧的 `lib/host.js`，与实际 `lib/types/index.js` 不符。
+
+残余风险与验证边界：
+
+- `lib/client.js` 没有对应的可重建浏览器源码链；本次按 vendored artifact 逐行审计并
+  锁定摘要，但仍不能证明其由仓库源码确定性生成；
+- 全局 `MutationObserver` 监听 `document.body` 的 childList/subtree，复杂页面上的性能
+  与第三方插件组合仍需真实 DSH Web 回归；
+- 控件保持原 React 父节点，键盘/读屏顺序遵循原 DOM 而非视觉排列；小视口放不下的
+  已选控件会留在原工具栏；Team/Browser 子弹层仍需多尺寸交互验证；
+- 上游没有 npm lockfile，`npm audit` 无法执行；`pnpm audit` 又受本机代理协议错误
+  阻断，因此未把上游文档中的“0 漏洞”当作此次实时结论。
 
 ## 已确认并修复
 

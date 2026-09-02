@@ -16,7 +16,7 @@ const KEEP_SKINS = [
 ].sort();
 
 const KEEP_PLUGIN_DIRS = [
-  'dsh-auto-compact', 'dsh-balance', 'dsh-better-sidebar', 'dsh-market',
+  'dsh-auto-compact', 'dsh-balance', 'dsh-better-sidebar', 'dsh-composer-dynamic-island', 'dsh-market',
   'dsh-offpeak', 'dsh-plugin-manager', 'dsh-plugin-marketplace',
   'dsh-plugin-shield', 'dsh-skin-switch', 'dsh-undo-savepoint', 'dsh-webui-market',
 ].sort();
@@ -24,7 +24,7 @@ const KEEP_PLUGIN_DIRS = [
 // main.js COMPANION_PLUGINS 里保留的注册 id（含新补登记的 plugin-marketplace
 // 与 4.5.0 新增的 dsh-market）。
 const KEEP_PLUGIN_IDS = [
-  'auto-compact', 'balance', 'better-sidebar', 'dsh-market', 'dsh-market-plugin',
+  'auto-compact', 'balance', 'better-sidebar', 'composer-dynamic-island', 'dsh-market', 'dsh-market-plugin',
   'dsh-undo', 'offpeak', 'plugin-manager', 'plugin-marketplace', 'plugin-shield',
   'skin-switch',
 ].sort();
@@ -83,7 +83,7 @@ test('皮肤：dsh-skin-switch 不再引用 maid-atelier', () => {
   assert.ok(!/maid-atelier|srcMaid|licMaid|creditMaid|noticeMaid|repoMaid/.test(client));
 });
 
-test('插件：assets/plugins 恰为保留的 11 个目录', () => {
+test('插件：assets/plugins 恰为保留的 12 个目录', () => {
   const dirs = readdirSync(join(root, 'assets', 'plugins'), { withFileTypes: true })
     .filter((e) => e.isDirectory()).map((e) => e.name).sort();
   assert.deepEqual(dirs, KEEP_PLUGIN_DIRS);
@@ -92,7 +92,7 @@ test('插件：assets/plugins 恰为保留的 11 个目录', () => {
   }
 });
 
-test('插件：main.js COMPANION_PLUGINS 注册表恰为保留的 11 个 id', () => {
+test('插件：main.js COMPANION_PLUGINS 注册表恰为保留的 12 个 id', () => {
   const main = read('main.js');
   const m = main.match(/const COMPANION_PLUGINS = \[([\s\S]*?)\];/);
   assert.ok(m, 'main.js 中找不到 COMPANION_PLUGINS 定义');

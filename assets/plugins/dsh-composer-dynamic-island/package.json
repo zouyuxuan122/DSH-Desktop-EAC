@@ -1,0 +1,80 @@
+{
+  "name": "dsh-composer-dynamic-island",
+  "version": "2.1.0",
+  "description": "A compact DSH Web composer island that integrates button-style input extensions without user-defined positioning.",
+  "type": "module",
+  "main": "lib/types/index.js",
+  "types": "lib/types/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./lib/types/index.d.ts",
+      "import": "./lib/types/index.js"
+    },
+    "./host": {
+      "types": "./lib/types/index.d.ts",
+      "import": "./lib/types/index.js"
+    },
+    "./client": "./lib/client.js",
+    "./dsh-plugin.json": "./dsh-plugin.json",
+    "./cordis.patch.yml": "./cordis.patch.yml",
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "lib",
+    "docs",
+    "dsh-plugin.json",
+    "cordis.patch.yml",
+    "README.md",
+    "README.zh-CN.md",
+    "LICENSE"
+  ],
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    },
+    "client": {
+      "platform": "web"
+    }
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "check": "tsc -p tsconfig.json --noEmit && node --check lib/client.js",
+    "test": "node --test test/*.test.mjs",
+    "verify": "tsc -p tsconfig.json && tsc -p tsconfig.json --noEmit && node --check lib/client.js && node --test test/*.test.mjs && npm pack --dry-run"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/says693/dsh-composer-dynamic-island.git"
+  },
+  "homepage": "https://github.com/says693/dsh-composer-dynamic-island#readme",
+  "bugs": {
+    "url": "https://github.com/says693/dsh-composer-dynamic-island/issues"
+  },
+  "author": "says693",
+  "keywords": [
+    "deepseek-harness",
+    "dsh",
+    "dsh-plugin",
+    "dsh-web",
+    "composer",
+    "dynamic-island",
+    "input-extension"
+  ],
+  "dependencies": {
+    "@deepseek-ai/schemastery": "^3.18.1"
+  },
+  "peerDependencies": {
+    "@deepseek-ai/cordis": "^4.0.1"
+  },
+  "devDependencies": {
+    "@deepseek-ai/cordis": "^4.0.1",
+    "@types/node": "^22.0.0",
+    "linkedom": "^0.18.12",
+    "typescript": "^6.0.3"
+  },
+  "engines": {
+    "node": "^22.19 || >=24"
+  },
+  "packageManager": "pnpm@10.15.1",
+  "license": "MIT"
+}

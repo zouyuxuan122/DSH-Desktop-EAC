@@ -40,12 +40,13 @@ const DESKTOP_PROFILE_BUNDLES = ['@deepseek-ai/dsh-base', '@deepseek-ai/dsh-web-
 const DESKTOP_PROFILE = 'web-desktop';
 
 // 随插件/皮肤包一起拷贝到 profile 的许可与出处文件（存在才拷贝）。
-const EXTRA_PACKAGE_FILES = ['LICENSE', 'LICENSE.md', 'NOTICE', 'NOTICE.md', 'README.md', 'README.zh.md', 'THIRD-PARTY-NOTICES.md'];
+const EXTRA_PACKAGE_FILES = ['LICENSE', 'LICENSE.md', 'NOTICE', 'NOTICE.md', 'README.md', 'README.zh.md', 'README.zh-CN.md', 'THIRD-PARTY-NOTICES.md', 'EAC-VENDOR.json'];
 const COPY_STAMP = '.eac-copy-stamp.json';
 
 // 内置插件上游更新源（V4.3）：只登记「上游仍在 npm / GitHub 发布」的社区插件。
 const PLUGIN_UPDATE_SOURCES = {
   'better-sidebar': { npm: 'dsh-better-sidebar' },
+  'composer-dynamic-island': { github: 'says693/dsh-composer-dynamic-island' },
   'dsh-market-plugin': { npm: '@sanqi-normal/dsh-webui-market-plugin' },
   'dsh-undo': { github: 'lire1131/dsh-undo-savepoint' },
 };
@@ -103,6 +104,7 @@ function createDesktopCore(ctx) {
     { id: 'dsh-market-plugin', name: '@sanqi-normal/dsh-webui-market-plugin', dir: 'dsh-webui-market' },
     { id: 'plugin-marketplace', name: '@deepseek-ai/dsh-plugin-marketplace', dir: 'dsh-plugin-marketplace' },
     { id: 'better-sidebar', name: 'dsh-better-sidebar', dir: 'dsh-better-sidebar' },
+    { id: 'composer-dynamic-island', name: 'dsh-composer-dynamic-island', dir: 'dsh-composer-dynamic-island' },
     { id: 'auto-compact', name: 'dsh-auto-compact', dir: 'dsh-auto-compact' },
     { id: 'plugin-shield', name: 'dsh-plugin-shield', dir: 'dsh-plugin-shield' },
     { id: 'plugin-manager', name: '@deepseek-ai/dsh-plugin-manager' },
@@ -175,9 +177,9 @@ function createDesktopCore(ctx) {
         else copyFile(sub);
       }
     };
-    for (const f of ['package.json', 'skin.json', ...EXTRA_PACKAGE_FILES]) copyFile(f);
+    for (const f of ['package.json', 'skin.json', 'dsh-plugin.json', 'dsh.plugin.json', ...EXTRA_PACKAGE_FILES]) copyFile(f);
     for (const f of ['index.js', 'client.js', 'recall-inject.js', 'cordis.patch.yml']) copyFile(f);
-    for (const d of ['lib', 'preview', 'vendor', 'node_modules', 'data', 'assets', 'runtime', 'src', 'client']) copyDir(d);
+    for (const d of ['lib', 'docs', 'preview', 'vendor', 'node_modules', 'data', 'assets', 'runtime', 'src', 'client']) copyDir(d);
     return out;
   }
 
@@ -224,9 +226,10 @@ function createDesktopCore(ctx) {
     };
     // lib 整目录随包（配套插件可能有 logic.js 等额外模块，按清单拷会漏文件
     // 导致 dsh web 启动时 ERR_MODULE_NOT_FOUND）。
-    for (const f of ['package.json', 'skin.json', ...EXTRA_PACKAGE_FILES]) copyFile(f);
+    for (const f of ['package.json', 'skin.json', 'dsh-plugin.json', 'dsh.plugin.json', ...EXTRA_PACKAGE_FILES]) copyFile(f);
     for (const f of ['index.js', 'client.js', 'recall-inject.js', 'cordis.patch.yml']) copyFile(f);
     copyDir('lib');
+    copyDir('docs');
     copyDir('preview');
     copyDir('vendor');
     // 内置插件自带的嵌套 node_modules（vendored 运行时依赖）：pnpm 重写

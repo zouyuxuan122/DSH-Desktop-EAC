@@ -12,6 +12,17 @@
 | Node.js 与 npm CLI | `vendor/node`、`vendor/npm` | Node.js/npm 及其依赖各自许可证；发布前需保留上游 notices |
 | Microsoft Edge WebView2 离线安装器 | Tauri bundle 下载/嵌入 | 适用 Microsoft WebView2 分发条款，不受 MIT 覆盖 |
 
+## 内置插件
+
+| 组件 | 来源 | 许可证/状态 |
+| --- | --- | --- |
+| DSH Composer Dynamic Island 2.1.0 | `says693/dsh-composer-dynamic-island`，tag `v2.1.0`，commit `2ccd12ff807c3bc983defd2177e15be1a416106f` | MIT，`Copyright (c) 2026 says693`；LICENSE 与双语 README 随包保留 |
+
+该插件的 `lib/client.js` 是上游提交中的预构建 Web 适配器；AIO 对它应用了
+生命周期、焦点和可访问语义的局部修复。原始与 vendored SHA-256 及补丁摘要记录在
+`assets/plugins/dsh-composer-dynamic-island/EAC-VENDOR.json`。该记录用于来源审计，
+不代表官方 DSH 认证或独立安全沙箱。
+
 ## 内置皮肤
 
 `assets/skins` 中 9 款皮肤的 package metadata 标注 `BSD-3-Clause`：

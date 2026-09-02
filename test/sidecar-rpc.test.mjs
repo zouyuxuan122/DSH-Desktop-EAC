@@ -130,13 +130,19 @@ test('sidecar: profile 初始化 + 配套插件同步落盘', async () => {
     const patch = fs.readFileSync(path.join(profileDir, 'cordis.patch.yml'), 'utf8');
     assert.match(patch, /id: balance/);
     assert.match(patch, /id: plugin-manager/);
+    assert.match(patch, /id: composer-dynamic-island[\s\S]*?name: 'dsh-composer-dynamic-island'/);
     // 皮肤行默认禁用。
     assert.match(patch, /id: ui-skin-[\w-]+[\s\S]*?disabled: true/);
     // 内置清单标记已写。
     const marker = JSON.parse(fs.readFileSync(path.join(profileDir, '.dsh-builtin-plugins.json'), 'utf8'));
     assert.ok(marker.names.includes('@deepseek-ai/dsh-balance'));
+    assert.ok(marker.names.includes('dsh-composer-dynamic-island'));
     // 配套插件包已拷贝（余额插件）。
     assert.ok(fs.existsSync(path.join(profileDir, 'node_modules', '@deepseek-ai', 'dsh-balance', 'package.json')));
+    const islandRoot = path.join(profileDir, 'node_modules', 'dsh-composer-dynamic-island');
+    for (const rel of ['package.json', 'lib/client.js', 'dsh-plugin.json', 'docs/COMPATIBILITY.md', 'EAC-VENDOR.json']) {
+      assert.ok(fs.existsSync(path.join(islandRoot, rel)), `动态岛包缺少 ${rel}`);
+    }
   } finally {
     s.kill();
   }

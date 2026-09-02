@@ -156,6 +156,10 @@ try {
         (Join-Path $installRoot 'resources\node\node.exe'),
         (Join-Path $installRoot 'resources\npm\bin\npm-cli.js'),
         (Join-Path $installRoot 'resources\app\sidecar\dist\shell-host.js'),
+        (Join-Path $installRoot 'resources\app\assets\plugins\dsh-composer-dynamic-island\package.json'),
+        (Join-Path $installRoot 'resources\app\assets\plugins\dsh-composer-dynamic-island\lib\client.js'),
+        (Join-Path $installRoot 'resources\app\assets\plugins\dsh-composer-dynamic-island\dsh-plugin.json'),
+        (Join-Path $installRoot 'resources\app\assets\plugins\dsh-composer-dynamic-island\EAC-VENDOR.json'),
         (Join-Path $installRoot 'resources\profile-seed\profiles\web-desktop\node_modules\@dsh-external\dsh-webui\package.json'),
         (Join-Path $installRoot 'resources\profile-seed\profiles\web-desktop\node_modules\dsh-usage-skill\package.json')
     )
@@ -253,6 +257,28 @@ try {
         $missingPackages = @($requiredPackages | Where-Object { $_ -notin $dependencyNames })
         if ($missingPackages.Count -gt 0) { throw "Expected profile packages are missing: $($missingPackages -join ', ')" }
 
+        $islandProfileRoot = Join-Path $isolatedHome 'profiles\web-desktop\node_modules\dsh-composer-dynamic-island'
+        $requiredIslandFiles = @(
+            (Join-Path $islandProfileRoot 'package.json'),
+            (Join-Path $islandProfileRoot 'lib\client.js'),
+            (Join-Path $islandProfileRoot 'dsh-plugin.json'),
+            (Join-Path $islandProfileRoot 'docs\COMPATIBILITY.md'),
+            (Join-Path $islandProfileRoot 'EAC-VENDOR.json')
+        )
+        $missingIslandFiles = @($requiredIslandFiles | Where-Object { -not (Test-Path -LiteralPath $_) })
+        if ($missingIslandFiles.Count -gt 0) {
+            throw "Composer Dynamic Island was not copied into the first-run profile: $($missingIslandFiles -join ', ')"
+        }
+        $profilePatchText = Get-Content -Raw -LiteralPath (Join-Path $isolatedHome 'profiles\web-desktop\cordis.patch.yml')
+        $islandPatchRows = [regex]::Matches($profilePatchText, '(?m)^\s*- id: composer-dynamic-island\s*$').Count
+        if ($islandPatchRows -ne 1 -or $profilePatchText -notmatch "(?m)^\s*name: 'dsh-composer-dynamic-island'\s*$") {
+            throw "Composer Dynamic Island profile patch is missing or duplicated (rows=$islandPatchRows)."
+        }
+        $builtinMarker = Get-Content -Raw -LiteralPath (Join-Path $isolatedHome 'profiles\web-desktop\.dsh-builtin-plugins.json') | ConvertFrom-Json
+        if ('dsh-composer-dynamic-island' -notin @($builtinMarker.names)) {
+            throw 'Composer Dynamic Island is absent from the built-in plugin marker.'
+        }
+
         $publicSettingsFile = Join-Path $isolatedHome 'settings.yaml'
         $publicSettingsText = Get-Content -Raw -LiteralPath $publicSettingsFile
         $forbiddenSeedMetadata = @(
@@ -283,6 +309,11 @@ try {
         $report.profile = [ordered]@{
             requiredPackages = $requiredPackages
             missingPackages = $missingPackages
+            composerDynamicIsland = [ordered]@{
+                missingFiles = $missingIslandFiles
+                patchRows = $islandPatchRows
+                builtin = $true
+            }
             privateSettingsFound = $foundPrivateSettings
             retainedMachineMetadata = $retainedSeedMetadata
         }

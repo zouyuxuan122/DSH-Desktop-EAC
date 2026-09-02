@@ -1762,6 +1762,8 @@ const COMPANION_PLUGINS = [
   // lib/ 预编译自包含（codemirror、xterm 已内嵌），服务端仅额外依赖
   // schemastery（已加入 app 闭包，见 package.json）。
   { id: 'better-sidebar', name: 'dsh-better-sidebar', dir: 'dsh-better-sidebar' },
+  // 输入区灵动岛：将按钮型输入扩展收拢到固定触发器，不搬移 React 节点。
+  { id: 'composer-dynamic-island', name: 'dsh-composer-dynamic-island', dir: 'dsh-composer-dynamic-island' },
   // 自动压缩：监听 contextPressure 投影，接近上下文上限（默认 80%）时
   // 自动向当前会话发送 /compact（dsh 原生命令，压缩事务由内核执行）。
   { id: 'auto-compact', name: 'dsh-auto-compact', dir: 'dsh-auto-compact' },
@@ -1800,6 +1802,7 @@ const COMPANION_PLUGINS = [
 // ---------------------------------------------------------------------------
 const PLUGIN_UPDATE_SOURCES = {
   'better-sidebar': { npm: 'dsh-better-sidebar' },
+  'composer-dynamic-island': { github: 'says693/dsh-composer-dynamic-island' },
   'dsh-market-plugin': { npm: '@sanqi-normal/dsh-webui-market-plugin' },
   // dsh-market 自身也持续发版（stable/dev 渠道由其设置卡管理）。
   'dsh-market': { npm: 'dshmarket' },
@@ -1872,9 +1875,9 @@ function pluginCopyEntries(src) {
       else copyFile(sub);
     }
   };
-  for (const f of ['package.json', 'skin.json', ...EXTRA_PACKAGE_FILES]) copyFile(f);
+  for (const f of ['package.json', 'skin.json', 'dsh-plugin.json', 'dsh.plugin.json', ...EXTRA_PACKAGE_FILES]) copyFile(f);
   for (const f of ['index.js', 'client.js', 'recall-inject.js', 'cordis.patch.yml']) copyFile(f);
-  for (const d of ['lib', 'preview', 'vendor', 'node_modules', 'data', 'assets', 'runtime', 'src', 'client']) copyDir(d);
+  for (const d of ['lib', 'docs', 'preview', 'vendor', 'node_modules', 'data', 'assets', 'runtime', 'src', 'client']) copyDir(d);
   return out;
 }
 
@@ -1921,9 +1924,10 @@ function copyPluginPackage(profileDirP, src, name) {
   };
   // lib 整目录随包（配套插件可能有 logic.js 等额外模块，按清单拷会漏文件
   // 导致 dsh web 启动时 ERR_MODULE_NOT_FOUND）。
-  for (const f of ['package.json', 'skin.json', ...EXTRA_PACKAGE_FILES]) copyFile(f);
+  for (const f of ['package.json', 'skin.json', 'dsh-plugin.json', 'dsh.plugin.json', ...EXTRA_PACKAGE_FILES]) copyFile(f);
   for (const f of ['index.js', 'client.js', 'recall-inject.js', 'cordis.patch.yml']) copyFile(f);
   copyDir('lib');
+  copyDir('docs');
   copyDir('preview');
   copyDir('vendor');
   // 内置插件自带的嵌套 node_modules（vendored 运行时依赖）：放在包内部，
@@ -1946,7 +1950,7 @@ function copyPluginPackage(profileDirP, src, name) {
 }
 
 // 随插件/皮肤包一起拷贝到 profile 的许可与出处文件（存在才拷贝）。
-const EXTRA_PACKAGE_FILES = ['LICENSE', 'LICENSE.md', 'NOTICE', 'NOTICE.md', 'README.md', 'README.zh.md', 'THIRD-PARTY-NOTICES.md'];
+const EXTRA_PACKAGE_FILES = ['LICENSE', 'LICENSE.md', 'NOTICE', 'NOTICE.md', 'README.md', 'README.zh.md', 'README.zh-CN.md', 'THIRD-PARTY-NOTICES.md', 'EAC-VENDOR.json'];
 
 // pnpm（dsh plugin add / 插件市场）hoist 进 profile node_modules 的
 // @deepseek-ai 核心包真实拷贝，会遮蔽 <home>/profiles/node_modules 里指向
