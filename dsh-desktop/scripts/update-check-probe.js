@@ -24,7 +24,7 @@ app.whenReady().then(async () => {
     // 下载路径冒烟：取 Setup 资产 URL，用同一条 electron.net 网络栈拉前
     // 64KB，验证重定向到 CDN 后数据能到达且是有效 PE 文件（MZ 头）。
     const net = require('electron').net;
-    const setup = rel.assets.find((a) => /setup.*x64\.exe$/i.test(a.name));
+    const setup = cu.selectAsset(rel).parts[0];
     await new Promise((resolve, reject) => {
       let got = 0;
       let first2 = '';

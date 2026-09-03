@@ -32,6 +32,35 @@ test('selectAsset picks versioned Setup artifact (Setup-v<ver>-x64.exe naming)',
   assert.equal(got.parts.length, 1);
 });
 
+test('selectAsset ignores AIO setup even when it appears before the formal installer', () => {
+  const rel = {
+    version: '5.3.6',
+    assets: [
+      A('DSHEAC-AIO-v1-Setup-x64.exe'),
+      A('Deepseek-Harness-EAC-5.3.6-Setup-x64.exe'),
+    ],
+  };
+  const got = selectAsset(rel);
+  assert.equal(got.name, 'Deepseek-Harness-EAC-5.3.6-Setup-x64.exe');
+});
+
+test('selectAsset accepts the native Tauri x64-setup artifact order', () => {
+  const rel = {
+    version: '5.3.6',
+    assets: [A('Deepseek.Harness.EAC_5.3.6_x64-setup.exe')],
+  };
+  const got = selectAsset(rel);
+  assert.equal(got.name, 'Deepseek.Harness.EAC_5.3.6_x64-setup.exe');
+});
+
+test('selectAsset rejects an AIO-only release for the formal client', () => {
+  const rel = {
+    version: '5.3.6',
+    assets: [A('DSHEAC-AIO-v1-Setup-x64.exe')],
+  };
+  assert.throws(() => selectAsset(rel), /未找到匹配/);
+});
+
 test('selectAsset still picks legacy versioned Portable artifact (<=v2.0.2 naming)', () => {
   const rel = {
     version: '2.0.2',
