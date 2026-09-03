@@ -20,8 +20,50 @@ function Count-Files {
     return @(Get-ChildItem -LiteralPath $path -File -Filter $Filter).Count
 }
 
-$desktopPackage = Get-Content -Encoding UTF8 -LiteralPath (Join-Path $root 'dsh-desktop\package.json') -Raw | ConvertFrom-Json
-$tauriConfig = Get-Content -Encoding UTF8 -LiteralPath (Join-Path $root 'tauri-shell\tauri.conf.json') -Raw | ConvertFrom-Json
+$repositoryLayout = if (
+    (Test-Path -LiteralPath (Join-Path $root 'dsh-desktop\package.json') -PathType Leaf) -and
+    (Test-Path -LiteralPath (Join-Path $root 'tauri-shell\tauri.conf.json') -PathType Leaf)
+) {
+    'modern-5x'
+} elseif (
+    (Test-Path -LiteralPath (Join-Path $root 'package.json') -PathType Leaf) -and
+    (Test-Path -LiteralPath (Join-Path $root 'tauri-app\tauri.conf.json') -PathType Leaf)
+) {
+    'aio-v1'
+} else {
+    throw 'Unsupported repository layout: expected modern 5.x or aio-v1 manifests.'
+}
+
+$layout = if ($repositoryLayout -eq 'modern-5x') {
+    [ordered]@{
+        desktopPackage = 'dsh-desktop\package.json'
+        tauriConfig = 'tauri-shell\tauri.conf.json'
+        plugins = 'dsh-desktop\assets\plugins'
+        skins = 'dsh-desktop\assets\skins'
+        agentPresets = 'dsh-desktop\assets\agent-presets'
+        bundledSkills = 'dsh-desktop\assets\skills'
+        desktopL2 = 'dsh-desktop\lib\desktop'
+        sidecar = 'tauri-shell\sidecar'
+        tests = 'dsh-desktop\test'
+        testFilter = '*.test.ts'
+    }
+} else {
+    [ordered]@{
+        desktopPackage = 'package.json'
+        tauriConfig = 'tauri-app\tauri.conf.json'
+        plugins = 'assets\plugins'
+        skins = 'assets\skins'
+        agentPresets = 'assets\agent-presets'
+        bundledSkills = 'distribution\profile-seed\skills'
+        desktopL2 = ''
+        sidecar = 'sidecar\src'
+        tests = 'test'
+        testFilter = '*.test.mjs'
+    }
+}
+
+$desktopPackage = Get-Content -Encoding UTF8 -LiteralPath (Join-Path $root $layout.desktopPackage) -Raw | ConvertFrom-Json
+$tauriConfig = Get-Content -Encoding UTF8 -LiteralPath (Join-Path $root $layout.tauriConfig) -Raw | ConvertFrom-Json
 
 Push-Location $root
 try {
@@ -55,6 +97,7 @@ foreach ($group in ($extensionNames | Group-Object | Sort-Object Count -Descendi
     status = 'ready'
     generatedAt = (Get-Date).ToString('yyyy-MM-ddTHH:mm:ssK')
     repoRoot = $root
+    repositoryLayout = $repositoryLayout
     gitHead = $head
     gitStatus = $status
     versions = [ordered]@{
@@ -63,14 +106,14 @@ foreach ($group in ($extensionNames | Group-Object | Sort-Object Count -Descendi
         dsh = [string]$desktopPackage.dependencies.'@deepseek-ai/dsh'
     }
     counts = [ordered]@{
-        plugins = Count-Directories 'dsh-desktop\assets\plugins'
-        skins = Count-Directories 'dsh-desktop\assets\skins'
-        agentPresets = Count-Directories 'dsh-desktop\assets\agent-presets'
-        bundledSkills = Count-Directories 'dsh-desktop\assets\skills'
-        desktopL2TypeScript = Count-Files 'dsh-desktop\lib\desktop' '*.ts'
-        sidecarTypeScript = Count-Files 'tauri-shell\sidecar' '*.ts'
+        plugins = Count-Directories $layout.plugins
+        skins = Count-Directories $layout.skins
+        agentPresets = Count-Directories $layout.agentPresets
+        bundledSkills = Count-Directories $layout.bundledSkills
+        desktopL2TypeScript = Count-Files $layout.desktopL2 '*.ts'
+        sidecarTypeScript = Count-Files $layout.sidecar '*.ts'
         rustFiles = @($files | Where-Object { [IO.Path]::GetExtension($_) -eq '.rs' }).Count
-        nodeTestFiles = Count-Files 'dsh-desktop\test' '*.test.ts'
+        nodeTestFiles = Count-Files $layout.tests $layout.testFilter
         rootSmokeScripts = @(Get-ChildItem -LiteralPath $root -File | Where-Object Name -match '(smoke|upgrade-test).*\.js$').Count
         workflows = Count-Files '.github\workflows' '*'
     }

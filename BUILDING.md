@@ -9,7 +9,7 @@
 - Windows SDK 与 Visual Studio C++ Build Tools
 - 可访问 npm、Cargo 与 Tauri/NSIS/WebView2 构建资源的网络环境；依赖已缓存时可部分离线
 
-版型为 `AIO`（All-in-One），用户可见版本为 `v1`，内部 SemVer 为 `1.0.0`。
+版型为 `AIO`（All-in-One），用户可见版本为 `v1`，当前内部 SemVer 为 `1.1.0`。
 
 ## 一键发布构建
 
@@ -31,21 +31,20 @@ npm run dist
 7. 串行运行全部重构版 JavaScript 测试；
 8. `cargo test --locked`；
 9. Tauri/NSIS 打包；
-10. 生成源码归档、构建元数据和 SHA-256 清单并复核。
+10. 生成便携归档和 SHA-256 清单并复核。
 
 ## 产物
 
 ```text
 dist/
 ├── DSHEAC-AIO-v1-Setup-x64.exe
-├── DSHEAC-AIO-v1-Source.zip
+├── portable/
+│   ├── DSHEAC-AIO-v1-Portable-x64.zip
+│   └── SHA256SUMS.txt
 └── SHA256SUMS.txt
-
-verification/
-└── build-metadata.json
 ```
 
-源码归档不包含：
+便携归档不包含构建期文件，例如：
 
 - `.git`；
 - `tauri-app/target`；
@@ -53,7 +52,7 @@ verification/
 - 本地插件 `dist` 目录中的预构建安装器；
 - 本地插件 source map。
 
-这些排除项不属于构建输入，能显著降低源码包体积和解压时间。
+这些排除项不属于运行时，能显著降低便携包体积和解压时间。
 
 ## 安装 E2E
 

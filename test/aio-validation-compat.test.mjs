@@ -62,3 +62,11 @@ test('AIO update smoke rejects client self-update exposure', () => {
   assert.match(smoke, /client auto-update scripts/);
   assert.match(smoke, /plugin auto-update must default to disabled/);
 });
+
+test('release scripts compute SHA-256 without PowerShell module autoloading', () => {
+  for (const rel of ['scripts/build-aio-release.ps1', 'scripts/verify-aio-installer.ps1']) {
+    const source = read(rel);
+    assert.match(source, /System\.Security\.Cryptography\.SHA256/);
+    assert.ok(!source.includes('Get-FileHash'), `${rel} must work when Microsoft.PowerShell.Utility is not auto-loaded`);
+  }
+});

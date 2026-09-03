@@ -126,6 +126,15 @@ $pluginCopyRule = if ($isAioLayout) { 'aio-plugin-copy' } else { 'plugin-copy' }
 $manifestRule = if ($isAioLayout) { 'aio-package-manifest' } else { 'desktop-package-manifest' }
 $packagingRule = if ($isAioLayout) { 'aio-packaging' } else { 'packaging' }
 
+$inventory = Invoke-JsonFixture -Script 'repo-inventory.ps1' -Arguments @('-RepoPath', $repoRoot)
+Assert-Fixture -Name 'repo-inventory-layout' -Condition (
+    $inventory.exitCode -eq 0 -and
+    $inventory.data.status -eq 'ready' -and
+    $inventory.data.repositoryLayout -eq $(if ($isAioLayout) { 'aio-v1' } else { 'modern-5x' }) -and
+    [int]$inventory.data.counts.nodeTestFiles -gt 0 -and
+    [int]$inventory.data.counts.rustFiles -gt 0
+) -Failure ($inventory.raw)
+
 $dependencyPatch = Invoke-JsonFixture -Script 'classify-change.ps1' -Arguments @('-RepoPath', $repoRoot, '-FilesJsonBase64', (ConvertTo-FilesJsonBase64 $dependencyFiles))
 Assert-Fixture -Name 'dependency-patch-chain' -Condition ($dependencyPatch.exitCode -eq 0 -and $dependencyPatch.data.minimumValidation -eq 'package' -and $dependencyRule -in @($dependencyPatch.data.matchedRules) -and @($dependencyPatch.data.unmatchedCodeFiles).Count -eq 0) -Failure ($dependencyPatch.raw)
 

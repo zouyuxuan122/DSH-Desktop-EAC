@@ -158,7 +158,16 @@ test('打包：package.json 使用 AIO v1 发布标识、无客户端自更新�
   const pkg = JSON.parse(read('package.json'));
   assert.equal(pkg.name, 'dsh-desktop-aio');
   assert.equal(pkg.productName, 'DSHEAC AIO');
-  assert.equal(pkg.version, '1.0.0');
+  assert.equal(pkg.version, '1.1.0');
+  assert.deepEqual(pkg.overrides, {
+    '@xmldom/xmldom': '0.8.15',
+    'fast-uri': '3.1.6',
+    qs: '6.16.0',
+  });
+  const lock = JSON.parse(read('package-lock.json'));
+  assert.equal(lock.packages['node_modules/@xmldom/xmldom'].version, '0.8.15');
+  assert.equal(lock.packages['node_modules/fast-uri'].version, '3.1.6');
+  assert.equal(lock.packages['node_modules/qs'].version, '6.16.0');
   assert.ok(!JSON.stringify(pkg.scripts).includes('client-update'));
   assert.ok(!JSON.stringify(pkg.scripts).includes('check-client-latest'));
 });

@@ -12,8 +12,8 @@ const tauriConfig = JSON.parse(fs.readFileSync(path.join(repo, 'tauri-app', 'tau
 const ipc = fs.readFileSync(path.join(repo, 'tauri-app', 'src', 'ipc.rs'), 'utf8');
 const shell = fs.readFileSync(path.join(repo, 'tauri-app', 'frontend', 'chrome.ts'), 'utf8');
 
-assert.equal(packageJson.version, '1.0.0');
-assert.equal(tauriConfig.version, '1.0.0');
+assert.equal(packageJson.version, '1.1.0');
+assert.equal(tauriConfig.version, '1.1.0');
 assert.ok(!JSON.stringify(packageJson.scripts).includes('client-update'), 'AIO must not expose client auto-update scripts');
 assert.ok(!ipc.includes('client_update'), 'AIO native IPC must not expose a client updater');
 assert.ok(!shell.includes('clientUpdater'), 'AIO web bridge must not expose a client updater');

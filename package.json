@@ -1,7 +1,7 @@
 {
   "name": "dsh-desktop-aio",
   "productName": "DSHEAC AIO",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "DSHEAC AIO v1（All-in-One）：整合 dsh CLI、Node 运行时、插件与技能快照的 Windows x64 发行版。",
   "main": "main.js",
   "author": "DSH Desktop",
@@ -52,5 +52,10 @@
   "devDependencies": {
     "electron": "^43.4.0",
     "electron-builder": "^26.15.3"
+  },
+  "overrides": {
+    "@xmldom/xmldom": "0.8.15",
+    "fast-uri": "3.1.6",
+    "qs": "6.16.0"
   }
 }
