@@ -3,18 +3,23 @@ import path from 'node:path';
 import { createRequire } from 'node:module';
 
 const root = path.resolve(process.argv[2] || process.cwd());
-const seedRoot = path.join(root, 'distribution', 'profile-seed');
+const seedRoot = process.env.DSH_PROFILE_SEED_DIR
+  ? path.resolve(process.env.DSH_PROFILE_SEED_DIR)
+  : path.join(root, 'distribution', 'profile-seed');
 const settingsFile = path.join(seedRoot, 'settings.yaml');
 const require = createRequire(path.join(root, 'package.json'));
 const yaml = require('js-yaml');
 
-const input = yaml.load(fs.readFileSync(settingsFile, 'utf8')) || {};
+const settingsSource = fs.readFileSync(settingsFile, 'utf8');
+const input = yaml.load(settingsSource) || {};
 const output = {};
 for (const key of ['status-rotator', 'webui-modules']) {
   if (!Object.hasOwn(input, key)) throw new Error(`missing public section: ${key}`);
   output[key] = input[key];
 }
-fs.writeFileSync(settingsFile, yaml.dump(output, { noRefs: true, lineWidth: -1, noCompatMode: true }), 'utf8');
+const eol = settingsSource.includes('\r\n') ? '\r\n' : '\n';
+const sanitizedSettings = yaml.dump(output, { noRefs: true, lineWidth: -1, noCompatMode: true }).replaceAll('\n', eol);
+if (sanitizedSettings !== settingsSource) fs.writeFileSync(settingsFile, sanitizedSettings, 'utf8');
 
 const forbiddenState = ['.modules.yaml', '.pnpm-workspace-state-v1.json', path.join('.pnpm', 'lock.yaml')];
 const profileNodeModules = path.join(seedRoot, 'profiles', 'web-desktop', 'node_modules');

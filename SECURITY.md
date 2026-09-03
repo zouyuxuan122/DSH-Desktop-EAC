@@ -2,7 +2,7 @@
 
 ## 支持范围
 
-当前仅审计和支持 `DSHEAC AIO`（All-in-One，用户可见版本 `v1`，内部 SemVer `1.0.0`）的 Windows x64 Tauri 构建。
+当前仅审计和支持 `DSHEAC AIO`（All-in-One，用户可见版本 `v1`，内部 SemVer `1.1.0`）的 Windows x64 Tauri 构建。
 
 ## 信任边界
 

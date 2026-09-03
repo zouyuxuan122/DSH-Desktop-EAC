@@ -11,6 +11,20 @@ $RepoRoot = (Resolve-Path -LiteralPath $RepoRoot).Path
 $tauri = Join-Path $RepoRoot 'tauri-app'
 $dist = Join-Path $RepoRoot 'dist'
 
+function Get-Sha256Hex([string]$Path) {
+    $stream = [System.IO.File]::OpenRead($Path)
+    try {
+        $sha = [System.Security.Cryptography.SHA256]::Create()
+        try {
+            return (($sha.ComputeHash($stream) | ForEach-Object { $_.ToString('x2') }) -join '')
+        } finally {
+            $sha.Dispose()
+        }
+    } finally {
+        $stream.Dispose()
+    }
+}
+
 if ([string]::IsNullOrWhiteSpace($ProfileSeedDir)) {
     $ProfileSeedDir = Join-Path $RepoRoot 'distribution\profile-seed'
 }
@@ -51,7 +65,7 @@ if ($LASTEXITCODE -ne 0) { throw 'resource staging failed' }
 & npm.cmd --prefix $tauri run bundle
 if ($LASTEXITCODE -ne 0) { throw 'Tauri bundle failed' }
 
-$builtSetup = Join-Path $tauri 'target\release\bundle\nsis\DSHEAC AIO_1.0.0_x64-setup.exe'
+$builtSetup = Join-Path $tauri 'target\release\bundle\nsis\DSHEAC AIO_1.1.0_x64-setup.exe'
 $setup = Join-Path $dist 'DSHEAC-AIO-v1-Setup-x64.exe'
 Copy-Item -LiteralPath $builtSetup -Destination $setup -Force
 
@@ -61,7 +75,7 @@ if ($LASTEXITCODE -ne 0) { throw 'portable package failed' }
 
 Write-Host '[7/7] release hashes'
 $hashLines = foreach ($file in Get-ChildItem $dist -Recurse -File | Where-Object Name -ne 'SHA256SUMS.txt' | Sort-Object FullName) {
-    $hash = (Get-FileHash -Algorithm SHA256 -LiteralPath $file.FullName).Hash.ToLowerInvariant()
+    $hash = Get-Sha256Hex $file.FullName
     $relative = $file.FullName.Substring($dist.Length + 1).Replace('\', '/')
     "$hash  $relative"
 }

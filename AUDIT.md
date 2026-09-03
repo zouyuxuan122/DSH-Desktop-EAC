@@ -83,11 +83,19 @@
 
 已删除 `.modules.yaml`、`.pnpm-workspace-state-v1.json`、`.pnpm/lock.yaml` 等会记录 `H:/CODEX`、原 Windows 用户目录、pnpm store 和 `.dsh-v4lite` 的机器状态；个人化 status-rotator 文案已替换为中性公共默认值。`Set-PublicSeed` 现在会执行全树路径扫描，命中则阻断构建。
 
+### 8. 外部 seed 审计目标错误
+
+发布脚本允许通过 `DSH_PROFILE_SEED_DIR` 注入审核后的完整离线 seed，但脱敏脚本此前始终扫描仓库内占位目录，实际打包输入可能绕过检查。现已统一读取同一环境变量，并增加外部 seed、CRLF 保持和本机路径阻断回归测试。
+
+### 9. 依赖公告与发布哈希兼容性
+
+发布前 npm 审计发现 `fast-uri` 高危、`qs` 与 `@xmldom/xmldom` 中危公告，现通过 overrides 锁定修复版本，完整与生产依赖审计均为 0。发布哈希改用 .NET SHA-256，避免 Windows PowerShell 未自动加载 `Microsoft.PowerShell.Utility` 时在流水线末尾失败。
+
 ## AIO v1 命名与版本
 
 - 版型：AIO（All-in-One）
 - 用户可见版本：v1
-- 机器内部 SemVer：1.0.0
+- 机器内部 SemVer：1.1.0
 - 上游 `v4.5-lite` 只作为源码溯源，不是当前产品版本。
 
 ## 仍未完全解决
@@ -108,7 +116,7 @@
 
 ## 验收标准
 
-本机最终技术验证结果：JavaScript 275/275、Rust 12/12，安装/首启/共存/卸载 E2E 已 PASS。该结论不替代第三方授权、代码签名或商标审查。
+本机最终技术验证结果：JavaScript 291/291、Rust 15/15，安装/首启/共存/卸载 E2E 已 PASS。该结论不替代第三方授权、代码签名或商标审查。
 
 发布前必须看到：
 

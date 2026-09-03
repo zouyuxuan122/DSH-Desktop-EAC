@@ -1,6 +1,6 @@
 [package]
 name = "dsh-desktop-aio"
-version = "1.0.0"
+version = "1.1.0"
 description = "DSHEAC AIO - All-in-One Tauri shell around the dsh web UI"
 edition = "2021"
 rust-version = "1.77"

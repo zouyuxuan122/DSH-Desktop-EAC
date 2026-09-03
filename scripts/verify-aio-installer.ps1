@@ -32,11 +32,25 @@ $report = [ordered]@{
     edition = 'AIO'
     editionMeaning = 'All-in-One'
     release = 'v1'
-    technicalSemVer = '1.0.0'
+    technicalSemVer = '1.1.0'
     verifiedAt = (Get-Date).ToString('o')
     installer = $installer
     installDirectory = $installRoot
     result = 'RUNNING'
+}
+
+function Get-Sha256Hex([string]$Path) {
+    $stream = [System.IO.File]::OpenRead($Path)
+    try {
+        $sha = [System.Security.Cryptography.SHA256]::Create()
+        try {
+            return (($sha.ComputeHash($stream) | ForEach-Object { $_.ToString('x2') }) -join '')
+        } finally {
+            $sha.Dispose()
+        }
+    } finally {
+        $stream.Dispose()
+    }
 }
 
 function Wait-ProcessBounded([System.Diagnostics.Process]$Process, [int]$TimeoutSeconds, [string]$Label) {
@@ -126,7 +140,7 @@ try {
     if (Test-Path -LiteralPath $runRoot) { throw "Refusing to reuse test directory: $runRoot" }
     New-Item -ItemType Directory -Path $runRoot | Out-Null
 
-    $report.installerSha256 = (Get-FileHash -Algorithm SHA256 -LiteralPath $installer).Hash.ToLowerInvariant()
+    $report.installerSha256 = Get-Sha256Hex $installer
     $report.installerBytes = (Get-Item -LiteralPath $installer).Length
 
     # Coexistence is conditional: absence of the original product is N/A, not failure.

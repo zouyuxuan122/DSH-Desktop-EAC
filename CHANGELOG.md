@@ -16,7 +16,13 @@ DeepSeek Harness（dsh）的 Windows 桌面客户端：内置独立 Node 运行�
 4.4.0（修复设置页「Skills 与 MCP → 打开目录」失效）→
 4.5.0（本版：内核升级 0.1.1-rc.2 + 内置 dsh-market 社区插件市场）。
 
-## [AIO v1] — 2026-09-03
+## [AIO v1.1.0] — 2026-09-03
+
+### 安全与发布维护
+- 锁定 `fast-uri 3.1.6`、`qs 6.16.0` 与 `@xmldom/xmldom 0.8.15`，修复发布前依赖审计发现的高危/中危公告。
+- 修复开发者 Skill 的仓库 inventory 对 AIO 布局不兼容的问题，发布审计现在能正确统计 AIO 插件、皮肤、测试与 Rust/sidecar 文件。
+- 修复外部 `DSH_PROFILE_SEED_DIR` 构建时仍错误扫描仓库占位 seed 的问题，并保持已脱敏 settings 的原始换行格式。
+- 修复 Windows PowerShell 模块未自动加载时 `Get-FileHash` 不可用、导致安装包已生成但发布流水线最终失败的问题。
 
 ### 新增：内置 Composer Dynamic Island 2.1.0
 - 从 `says693/dsh-composer-dynamic-island` 的 `v2.1.0`（`2ccd12ff`）引入

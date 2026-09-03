@@ -6,7 +6,7 @@
 >
 > **用户可见版本：v1**
 >
-> 机器内部 SemVer：`1.0.0`
+> 机器内部 SemVer：`1.1.0`
 >
 > 上游源码基线：`v4.5-lite`，commit `de55ef6d5319eacc24ce60309acc261b9fb78b6c`
 
@@ -41,7 +41,7 @@ AIO 不表示包含上游项目所有历史功能；实际功能以本仓库打�
 发布产物：
 
 - `dist/DSHEAC-AIO-v1-Setup-x64.exe`
-- `dist/DSHEAC-AIO-v1-Source.zip`
+- `dist/portable/DSHEAC-AIO-v1-Portable-x64.zip`
 - `dist/SHA256SUMS.txt`
 
 安装包目前未签名。Windows SmartScreen 可能提示未知发布者；运行前请核对 SHA-256。
@@ -65,11 +65,11 @@ powershell -NoProfile -File .\scripts\verify-aio-installer.ps1
 
 ## 隐私边界
 
-发行 seed 明确排除凭据、会话、记忆、附件、浏览器 profile、日志、usage 数据，以及原用户模型/provider/权限和个人 preset 选择。个人化状态文案已替换为中性公共默认值；构建时 `Set-PublicSeed` 会删除含本机绝对路径的 pnpm 状态文件，并全树扫描原工作区、用户目录、`.dsh-v4lite` 与 pnpm store 痕迹。上传前仍需人工复核。
+发行 seed 明确排除凭据、会话、记忆、附件、浏览器 profile、日志、usage 数据，以及原用户模型/provider/权限和个人 preset 选择。个人化状态文案已替换为中性公共默认值；构建时 `sanitize-public-seed.mjs` 会删除含本机绝对路径的包管理器状态文件，并全树扫描原工作区、用户目录、`.dsh-v4lite` 与 pnpm store 痕迹。上传前仍需人工复核。
 
 ## 本轮工程改进
 
-- 产品名统一为 `DSHEAC AIO`，用户版本统一为 `v1`，内部 SemVer 为 `1.0.0`；
+- 产品名统一为 `DSHEAC AIO`，用户版本统一为 `v1`，当前内部 SemVer 为 `1.1.0`；
 - 修复 Node `fs.cpSync` 在当前中文长路径工作区中以 `0xC0000409` 崩溃；
 - staging 仅对发布树裁剪 `.map`、`.pdb` 和 ARM64 预编译件；
 - 停用可读取任意绝对路径、且无调用方的壳层预览端口；
