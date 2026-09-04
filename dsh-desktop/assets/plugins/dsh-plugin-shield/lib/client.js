@@ -88,7 +88,23 @@ window.__ModuleLoader__.load({
       busy: "处理中…",
       reason: "原因",
       pluginRows: "插件行",
-      files: "文件"
+      files: "文件",
+      compatTitle: "版本兼容防线",
+      compatIntro: "启动前与体检时静态核对每个插件与内核的对应关系：插件包/入口缺失（loader 必崩，9/3 连环启动失败根因）、peer 依赖不满足、客户端注入缺失、dsh.kernel 版本窗口违例。可自动处置的项在启动前已自动隔离（快照 + patch disabled + 事故记录），此处可查看明细或手动隔离。",
+      compatKernel: "内核版本",
+      compatEntries: "插件条目",
+      compatIssues: "存在问题",
+      compatHealthy: "全部对应正常",
+      compatNone: "（无可隔离项）",
+      compatInstalled: "未安装",
+      compatEntryMissing: "包/入口缺失",
+      compatPeerBad: "依赖不满足",
+      compatPeerDrift: "依赖漂移",
+      compatInjectBad: "注入缺失",
+      compatKernelBad: "版本窗口违例",
+      compatQuarantine: "隔离此插件",
+      quarantineConfirm: "隔离将立即把该插件在 cordis.patch.yml 中标记为 disabled（先自动创建快照，可随时回滚），重启 Web 服务后生效。确定继续？",
+      quarantined: "已隔离，重启 Web 服务后生效"
     };
     var en = {
       nav: "Plugin Guard",
@@ -123,7 +139,23 @@ window.__ModuleLoader__.load({
       busy: "Working…",
       reason: "reason",
       pluginRows: "plugin rows",
-      files: "files"
+      files: "files",
+      compatTitle: "Version Compatibility Line",
+      compatIntro: "Static checks on boot and in health checks: plugin package/entry missing (fatal for the loader — the root cause of the Sep 3 boot-failure chain), unsatisfied peer dependencies, missing client injects, and dsh.kernel window violations. Auto-quarantinable findings are isolated before boot (snapshot + patch disabled + incident); inspect details or quarantine manually here.",
+      compatKernel: "kernel version",
+      compatEntries: "plugin entries",
+      compatIssues: "issues",
+      compatHealthy: "all entries compatible",
+      compatNone: "(nothing to quarantine)",
+      compatInstalled: "not installed",
+      compatEntryMissing: "package/entry missing",
+      compatPeerBad: "dependency unsatisfied",
+      compatPeerDrift: "dependency drift",
+      compatInjectBad: "inject missing",
+      compatKernelBad: "kernel window violated",
+      compatQuarantine: "Quarantine",
+      quarantineConfirm: "Quarantining immediately marks this plugin as disabled in cordis.patch.yml (a snapshot is taken first; you can roll back anytime). Restart the web service to apply. Continue?",
+      quarantined: "Quarantined — restart the web service to apply"
     };
 
     var inject = ["slots", "locale"];
@@ -153,11 +185,21 @@ window.__ModuleLoader__.load({
       var incidentState = react.useState(null);
       var incident = incidentState[0];
       var setIncident = incidentState[1];
+      var versionState = react.useState(null);
+      var version = versionState[0];
+      var setVersion = versionState[1];
 
       var call = function (action, value) {
         if (!bridge) return Promise.resolve({ ok: false, error: "no-bridge" });
         return bridge.action(action, value);
       };
+
+      var loadVersion = react.useCallback(function () {
+        if (!bridge) return;
+        call("version").then(function (r) {
+          if (r && r.ok) setVersion(r.report || null);
+        }).catch(function () { /* 版本报告失败不打扰 */ });
+      }, [bridge]);
 
       var load = react.useCallback(function () {
         if (!bridge) { setData({ status: "no-bridge" }); return; }
@@ -168,6 +210,7 @@ window.__ModuleLoader__.load({
         }).catch(function (e) { setData({ status: "error", error: String(e) }); });
       }, [bridge]);
       react.useEffect(load, [load]);
+      react.useEffect(loadVersion, [loadVersion]);
 
       if (data.status === "loading") return h("div", { className: "__sh_root" }, h("p", { className: "__sh_hint" }, "…"));
       if (data.status === "no-bridge") {
@@ -218,9 +261,39 @@ window.__ModuleLoader__.load({
         setBusy("resolve:" + id);
         call("resolve-incident", id).then(function () { setBusy(null); setIncident(null); load(); }).catch(function () { setBusy(null); });
       };
+      var doQuarantine = function (id) {
+        if (!window.confirm(t("quarantineConfirm"))) return;
+        setBusy("q:" + id);
+        call("quarantine", id).then(function (r) {
+          setBusy(null);
+          if (r && r.ok) { window.alert(t("quarantined")); loadVersion(); load(); }
+          else window.alert(String((r && r.error) || "failed"));
+        }).catch(function () { setBusy(null); });
+      };
 
       var findings = report && report.findings ? report.findings : null;
       var repairedList = report && report.repaired ? report.repaired : null;
+
+      var compatEntries = version && version.entries ? version.entries : null;
+      var compatIssues = function (e) {
+        var out = [];
+        if (!e.installed) out.push(t("compatInstalled"));
+        if (e.installed && !e.entryPoint) out.push(t("compatEntryMissing"));
+        if (!e.enabled) return out;
+        (e.peers || []).forEach(function (p) {
+          if (p.optional) return; // 可选 peer 不算问题
+          if (p.verdict === "missing" || p.verdict === "high") out.push(p.dep + " → " + t("compatPeerBad"));
+          else if (p.verdict === "low") out.push(p.dep + " → " + t("compatPeerDrift"));
+        });
+        (e.inject || []).forEach(function (i2) { if (i2.ok !== true) out.push(i2.dep + " → " + t("compatInjectBad")); });
+        (e.issues || []).forEach(function (i3) { out.push(t("compatKernelBad") + "：" + i3); });
+        return out;
+      };
+      var compatQuarantinable = function (e) {
+        if (!e.enabled || !e.id) return false;
+        if (!e.installed || (e.installed && !e.entryPoint)) return true;
+        return (e.peers || []).some(function (p) { return p.verdict === "missing" || p.verdict === "high"; });
+      };
 
       return h("div", { className: "__sh_root" },
         h("p", { className: "__sh_hint", style: { margin: 0 } }, t("intro")),
@@ -252,6 +325,38 @@ window.__ModuleLoader__.load({
         repairedList ? h("div", null,
           repairedList.length ? h("p", { className: "__sh_ok" }, t("repaired") + "：") : h("p", { className: "__sh_ok" }, t("repairedNone")),
           repairedList.length ? h("ul", { className: "__sh_hint" }, repairedList.map(function (a, i) { return h("li", { key: String(i) }, a); })) : null
+        ) : null,
+
+        compatEntries ? h("div", null,
+          h("h3", { className: "__sh_h3" }, t("compatTitle")),
+          h("p", { className: "__sh_hint" }, t("compatIntro")),
+          version && version.kernel ? h("div", { className: "__sh_cards" },
+            h("div", { className: "__sh_card" }, h("div", { className: "__sh_cardk" }, t("compatKernel")), h("div", { className: "__sh_cardv" }, String(version.kernel.version || "—"))),
+            h("div", { className: "__sh_card" }, h("div", { className: "__sh_cardk" }, t("compatEntries")), h("div", { className: "__sh_cardv" }, String(compatEntries.length))),
+            h("div", { className: "__sh_card" },
+              h("div", { className: "__sh_cardk" }, t("compatIssues")),
+              h("div", { className: "__sh_cardv", style: { color: compatEntries.some(compatIssues) ? "var(--dsw-alias-state-error-primary)" : undefined } },
+                String(compatEntries.filter(compatIssues).length))
+            )
+          ) : null,
+          compatEntries.filter(compatIssues).length === 0 ? h("p", { className: "__sh_ok" }, t("compatHealthy")) :
+            h("div", { className: "__sh_list", style: { maxHeight: 360 } }, compatEntries.map(function (e, i) {
+              var issues = compatIssues(e);
+              if (!issues.length) return null;
+              return h("div", { className: "__sh_row", key: String(i) },
+                h("div", { className: "__sh_rowmain" },
+                  h("div", { className: "__sh_rowtitle" }, String(e.name || e.id) + (e.version ? " v" + e.version : "") + (e.enabled ? "" : "（disabled）")),
+                  h("div", { className: "__sh_rowsub" }, issues.map(function (m, k) {
+                    return h("div", { key: String(k), className: k < 2 ? "__sh_err" : "__sh_warn" }, "· " + m);
+                  }))
+                ),
+                compatQuarantinable(e) ? h("button", {
+                  className: "__sh_btn __sh_btnDanger",
+                  disabled: !!busy,
+                  onClick: function () { doQuarantine(e.id); }
+                }, busy === "q:" + e.id ? t("busy") : t("compatQuarantine")) : null
+              );
+            }))
         ) : null,
 
         h("div", null,

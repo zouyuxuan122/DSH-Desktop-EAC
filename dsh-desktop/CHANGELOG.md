@@ -47,6 +47,25 @@ next2（功能包体系：.dshpack 打包分发插件+预设+技能，声明官�
 官方版本升级自动检出并一键迁移/回滚 —— 核心在 L2 功能包引擎 + CLI，
 交互集成进 dsh-unified-market 插件；详见下方「功能包体系（Feature Pack）」批次）
 
+## next（版本兼容防线：插件与内核版本对应关系启动前静态核验）
+
+- **版本兼容防线（plugin-guard.ts v0.2 · dsh-plugin-shield 0.2.0）**：
+  `cordis.patch.yml` 引用的插件包/入口缺失（9/3 连环启动失败根因）、peer
+  依赖未满足、`dsh.client.inject` 客户端包缺失、`dsh.kernel` 版本窗口违例
+  在启动前静态检出（只读 manifest，绝不执行插件代码）；模块缺失与 peer
+  大版本不满足自动隔离 —— 快照先行 + patch disabled + 事故记录，内核照常
+  启动而非整树崩溃；`@deepseek-ai/*` 内核同源包不自动隔离（缺失为安装
+  损坏，走回滚/重装）。
+- peer 版本务实比对：rc/alpha 时代插件的 `*` 与 `^0.1.0-rc.x` 声明对实际
+  `-alpha/-rc` 内核版本按「剥 prerelease tag 宽松比对」，仅 major.minor
+  版本线不符判不兼容；semver 缺失环境自动降级为提示级，绝不误判。
+- 设置页「插件保护」新增「版本兼容防线」卡片：内核版本、逐条插件的
+  安装/入口/peer/inject/版本窗口状态与一键手动隔离。
+- 新契约：插件可在 package.json 声明 `dsh.kernel`（semver range 或
+  `{ min, max }`）声明兼容的内核版本窗口。
+- `guard.action` RPC 新增 `version` / `quarantine`；启动链路预检接入
+  `quarantineFatal`，重启服务即生效。
+
 ## 5.3.6（内置输入灵动岛与分发契约补强）· 2026-09-03
 
 - 内置 `dsh-composer-dynamic-island` 2.1.0（says693，MIT），作为推荐插件

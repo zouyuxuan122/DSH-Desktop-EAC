@@ -1,7 +1,7 @@
 {
   "name": "dsh-plugin-shield",
-  "description": "插件保护中心（DSH Desktop 配套插件）：快照/一键回滚/健康检查/事故报告，经桌面壳 IPC 驱动内置 plugin-guard 引擎 —— 融合 dsh-plugin-guard / dsh-web-plugin-manager / dsh-plugin-healthcheck 三大社区保护插件并内置",
-  "version": "0.1.0",
+  "description": "插件保护中心 · 版本兼容防线（DSH Desktop 配套插件）：启动前 static 核对插件与内核的版本对应关系（包/入口缺失、peer 依赖、client 注入、dsh.kernel 窗口），自动隔离不兼容插件防内核崩溃；快照/一键回滚/健康检查/事故报告，经桌面壳 IPC 驱动内置 plugin-guard 引擎。",
+  "version": "0.2.0",
   "type": "module",
   "main": "lib/index.js",
   "exports": {
