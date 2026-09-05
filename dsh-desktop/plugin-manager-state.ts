@@ -38,6 +38,8 @@ const KERNEL_BUNDLE_IDS = new Set([
 interface PluginRow {
   id: string; name: string; description: string; enabled: boolean;
   toggleable: boolean; removable: boolean; removed: boolean; core: boolean;
+  /** EAC 私有维护（台账 eac-original）：不参与内置插件自动更新。 */
+  privateMaintained: boolean;
   group: 'companion' | 'other' | 'core';
 }
 
@@ -47,6 +49,8 @@ interface CollectCtx {
   removedIds?: Iterable<string>;
   describe?: (name: string) => string;
   bundles?: string[];
+  /** 私有维护插件 id 集合（行上打 privateMaintained 标记）。 */
+  privateIds?: Iterable<string>;
 }
 
 function collectPluginRows(entries: unknown[], ctx: CollectCtx = {}): PluginRow[] {
@@ -57,6 +61,7 @@ function collectPluginRows(entries: unknown[], ctx: CollectCtx = {}): PluginRow[
   const removedIds = new Set(ctx.removedIds || []);
   const describe = typeof ctx.describe === 'function' ? ctx.describe : () => '';
   const bundles = Array.isArray(ctx.bundles) ? ctx.bundles : [];
+  const privateIds = new Set(ctx.privateIds || []);
 
   const insertById = new Map<string, { name: string; disabled: boolean }>();
   const userById = new Map<string, { name: string; disabled: boolean; hasConfig: boolean }>();
@@ -102,6 +107,7 @@ function collectPluginRows(entries: unknown[], ctx: CollectCtx = {}): PluginRow[
       removable: group === 'companion' && !isCore && !isRemoved,
       removed: isRemoved,
       core: isCore,
+      privateMaintained: privateIds.has(id),
       group,
     });
   };

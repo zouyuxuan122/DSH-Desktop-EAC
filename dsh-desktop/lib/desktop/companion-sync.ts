@@ -275,6 +275,35 @@ export function companionPluginsForPlatform(platform: NodeJS.Platform = 'win32')
 }
 
 // ---------------------------------------------------------------------------
+// 私有维护插件（自动更新黑名单，SOURCES.json 台账驱动）：
+//
+// 台账 origin=eac-original 的 main 线插件由 EAC 私有维护（外部匹配审计的
+// best-match 即 EAC 主仓库本体），没有可钉的外部上游发版——自动更新要么把
+// EAC 适配冲掉，要么更新到无从校验的来源。黑名单在此生成，pluginUpdateSources
+// 是唯一漏斗：即使将来误把私有插件登记进 PLUGIN_UPDATE_SOURCES 也会被强制
+// 过滤（sidecar server.ts 的「检测」与「应用更新」两条路都经过它）。
+// ---------------------------------------------------------------------------
+
+let privateMaintainedCache: Set<string> | null = null;
+
+/** 台账 origin=eac-original 的 main 线插件包名集合（自动更新黑名单）。
+ *  读取失败从宽返回空集：台账缺失/损坏时不拦截任何既有更新源。 */
+export function privateMaintainedPluginNames(): Set<string> {
+  if (privateMaintainedCache) return privateMaintainedCache;
+  const names = new Set<string>();
+  try {
+    const ledger = JSON.parse(fs.readFileSync(path.join(APP_ROOT, 'assets', 'SOURCES.json'), 'utf8')) as {
+      components?: { line?: string; type?: string; origin?: string; name?: string }[];
+    };
+    for (const c of ledger.components || []) {
+      if (c.line === 'main' && c.type === 'plugin' && c.origin === 'eac-original' && c.name) names.add(c.name);
+    }
+  } catch { /* 从宽处理 */ }
+  privateMaintainedCache = names;
+  return names;
+}
+
+// ---------------------------------------------------------------------------
 // 内置插件上游更新源（V4.3，plugin-updater.js 消费）：
 //
 // 只登记「上游仍在 npm / GitHub 发布」的社区插件 —— 内置分发的副本可以
@@ -358,18 +387,25 @@ export function seedBundledPlugins(profileDir: string): { changed: boolean; bund
   return { changed, bundles: bundled };
 }
 
-/** 把内置插件表 + 更新源注册表合并成 plugin-updater 的 sources 输入。 */
+/** 把内置插件表 + 更新源注册表合并成 plugin-updater 的 sources 输入。
+ *  私有维护插件（台账 eac-original）在此强制过滤——这是更新源的唯一漏斗。 */
 export function pluginUpdateSources(): { id: string; name: string; assetsDir: string; update: { npm?: string; github?: string } }[] {
   const removed = removedPluginIds();
+  const privateNames = privateMaintainedPluginNames();
+  const blocked: string[] = [];
   const out: { id: string; name: string; assetsDir: string; update: { npm?: string; github?: string } }[] = [];
   for (const p of COMPANION_PLUGINS) {
     const update = PLUGIN_UPDATE_SOURCES[p.id];
     if (!update) continue;
     if (removed.has(p.id)) continue;
+    if (privateNames.has(p.name)) { blocked.push(p.id); continue; }
     const dirName = p.dir || (p.name.includes('/') ? p.name.split('/').pop() as string : p.name);
     const assetsDir = path.join(APP_ROOT, 'assets', 'plugins', dirName);
     if (!fs.existsSync(path.join(assetsDir, 'package.json'))) continue;
     out.push({ id: p.id, name: p.name, assetsDir, update });
+  }
+  if (blocked.length) {
+    console.warn('[plugin-update] 私有维护插件不参与自动更新，已从更新源过滤: ' + blocked.join(', '));
   }
   return out;
 }
