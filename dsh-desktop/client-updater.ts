@@ -389,9 +389,19 @@ function selectAsset(release: ReleaseInfo, { platform = 'win32' }: PlatformAsset
   // V4 平台围栏：文件名带 linux/arm64 等标记的一律不选（双平台发布时
   // 防止误拿；x64 正则本身已排除 arm64，这里再显式拒绝）。
   // Tauri 便携：选 -portable.zip（树交换更新）；Electron 便携/安装版正则不变。
-  const wanted = isTauriPortable() ? /portable\.zip$/i : isPortable() ? /portable.*x64\.exe$/i : /setup.*x64\.exe$/i;
+  const wanted = isTauriPortable()
+    ? /portable\.zip$/i
+    : isPortable()
+      ? /portable.*x64\.exe$/i
+      : /(?:setup.*x64|x64.*setup)\.exe$/i;
   const platformOk = (name: string) => !/linux|arm64|aarch64|appimage|\.deb$|\.rpm$|\.snap$/i.test(name);
-  const direct = release.assets.find((a) => wanted.test(a.name) && platformOk(a.name));
+  // 一个 release 可以同步承载正式版、AIO、Launcher 等不同产品。旧逻辑只
+  // 看 Setup/Portable 后缀，API 或镜像一旦调整 assets 顺序，正式版客户端就
+  // 可能下载到 AIO 安装器。正式版自更新必须同时验证产品身份，不依赖顺序。
+  const officialProduct = (name: string) =>
+    /^deepseek(?:[. _-]+)harness(?:[. _-]+)eac(?:[. _-]|$)/i.test(name)
+    && !/(?:^|[. _-])aio(?:[. _-]|$)|launcher/i.test(name);
+  const direct = release.assets.find((a) => wanted.test(a.name) && platformOk(a.name) && officialProduct(a.name));
   if (direct) return { parts: [direct], name: direct.name, totalSize: direct.size };
 
   // Gitee 单文件 100MB 限制：安装包拆分为 <file>.part1 / <file>.part2 …
