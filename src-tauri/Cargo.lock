@@ -874,7 +874,7 @@ dependencies = [
 
 [[package]]
 name = "dsh-eac-launcher"
-version = "1.0.0"
+version = "1.1.0"
 dependencies = [
  "dirs",
  "futures-util",

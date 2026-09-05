@@ -6,6 +6,7 @@ import { icons } from "./ui/icons";
 import { state, setState, subscribe, type ViewId, runningCount } from "./core/store";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { renderHome } from "./views/home";
+import { renderSafety } from "./views/safety";
 import { renderMarket } from "./views/market";
 import { renderTasks } from "./views/tasks";
 import { renderSettings } from "./views/settings";
@@ -13,6 +14,7 @@ import { toast } from "./ui/feedback";
 
 const NAV: { id: ViewId; label: string; cn: string; icon: keyof typeof icons }[] = [
   { id: "home", label: "INSTANCES", cn: "实例库", icon: "grid" },
+  { id: "safety", label: "SAFETY", cn: "安全中心", icon: "shield" },
   { id: "market", label: "MARKET", cn: "插件市场", icon: "market" },
   { id: "tasks", label: "TRANSFER", cn: "传输", icon: "activity" },
   { id: "settings", label: "SETTINGS", cn: "设置", icon: "sliders" },
@@ -102,6 +104,12 @@ export function buildShell(root: HTMLElement): void {
         const active = state.tasks.filter((t) => t.state === "active").length;
         if (active > 0) b.append(h("span", { class: "nav-badge" }, String(active)));
       }
+      if (n.id === "safety") {
+        const warn = state.instances.filter(
+          (i) => (i.failStreak ?? 0) >= 2 || i.updateAvailable || (i.quarantine?.length ?? 0) > 0,
+        ).length;
+        if (warn > 0) b.append(h("span", { class: "nav-badge" }, String(warn)));
+      }
     }
     const msg = document.getElementById("ticker-msg");
     if (msg) {
@@ -134,6 +142,7 @@ export function refreshCurrentView(): void {
 function swapView(id: ViewId, soft = false): void {
   const renderers: Record<ViewId, Renderer> = {
     home: renderHome,
+    safety: renderSafety,
     market: renderMarket,
     tasks: renderTasks,
     settings: renderSettings,

@@ -283,39 +283,9 @@ async fn run_pipeline(
     }
 
     // ---- 安装 ----
-    let name_l = asset_name.to_ascii_lowercase();
     let app_dir = inst.app_dir.clone();
     std::fs::create_dir_all(&app_dir).map_err(|e| format!("创建程序目录失败: {e}"))?;
-    if name_l.ends_with(".zip") {
-        state.update_task(app, task_id, |t| {
-            t.stage = "extract".into();
-            t.message = "解压便携包".into();
-        });
-        let (zip_path, dest, task_id_s) = (cache_path.clone(), app_dir.clone(), task_id.to_string());
-        let app2 = app.clone();
-        let res = tauri::async_runtime::spawn_blocking(move || {
-            util::unzip_to(&zip_path, &dest, |done, total| {
-                if done % 500 == 0 || done == total {
-                    state_update_extract(&app2, &task_id_s, done, total);
-                }
-            })
-        })
-        .await
-        .map_err(|e| format!("解压任务失败: {e}"))?;
-        res?;
-        util::collapse_single_root_dir(&app_dir);
-    } else if name_l.ends_with(".exe") {
-        // NSIS 静默安装（Lite 等安装包）：
-        // NSIS 的 /D= 不接受引号，Rust 对含空格/非 ASCII 路径会自动加引号导致
-        // 参数失效，故先安装到 ASCII 无空格暂存目录，再把文件移入实例目录。
-        state.update_task(app, task_id, |t| {
-            t.stage = "install".into();
-            t.message = "运行静默安装（/S）".into();
-        });
-        wait_nsis(&cache_path, &app_dir).await?;
-    } else {
-        return Err(format!("不认识的产物类型: {asset_name}"));
-    }
+    materialize_asset(app, state, task_id, &cache_path, asset_name, &app_dir).await?;
 
     // ---- 发现主程序 ----
     let exe = util::find_main_exe(&app_dir)
@@ -326,6 +296,293 @@ async fn run_pipeline(
         t.message = format!("就绪 · {}", exe.file_name().unwrap_or_default().to_string_lossy());
     });
     Ok(())
+}
+
+/// 把产物落到 app 目录：zip 解压 / NSIS 静默安装后移交。
+/// 供全新安装与原地升级共用（升级时 dest 为暂存目录，校验后再换位）。
+async fn materialize_asset(
+    app: &AppHandle,
+    state: &App,
+    task_id: &str,
+    cache_path: &Path,
+    asset_name: &str,
+    dest: &Path,
+) -> Result<(), String> {
+    let name_l = asset_name.to_ascii_lowercase();
+    std::fs::create_dir_all(dest).map_err(|e| format!("创建程序目录失败: {e}"))?;
+    if name_l.ends_with(".zip") {
+        state.update_task(app, task_id, |t| {
+            t.stage = "extract".into();
+            t.message = "解压便携包".into();
+        });
+        let (zip_path, d, task_id_s) = (cache_path.to_path_buf(), dest.to_path_buf(), task_id.to_string());
+        let app2 = app.clone();
+        let res = tauri::async_runtime::spawn_blocking(move || {
+            util::unzip_to(&zip_path, &d, |done, total| {
+                if done % 500 == 0 || done == total {
+                    state_update_extract(&app2, &task_id_s, done, total);
+                }
+            })
+        })
+        .await
+        .map_err(|e| format!("解压任务失败: {e}"))?;
+        res?;
+        util::collapse_single_root_dir(dest);
+    } else if name_l.ends_with(".exe") {
+        // NSIS 静默安装（Lite 等安装包）：
+        // NSIS 的 /D= 不接受引号，Rust 对含空格/非 ASCII 路径会自动加引号导致
+        // 参数失效，故先安装到 ASCII 无空格暂存目录，再把文件移入目标目录。
+        state.update_task(app, task_id, |t| {
+            t.stage = "install".into();
+            t.message = "运行静默安装（/S）".into();
+        });
+        wait_nsis(cache_path, dest).await?;
+    } else {
+        return Err(format!("不认识的产物类型: {asset_name}"));
+    }
+    Ok(())
+}
+
+/// 校验一个候选 app 目录可用于升级换位
+fn validate_app_dir(dir: &Path, edition: &str) -> Result<(), String> {
+    let exe = util::find_main_exe(dir).ok_or("候选目录中未找到主程序 exe")?;
+    let _ = exe;
+    if edition == "full" {
+        let ok = dir.join("dsh-desktop").join("package.json").is_file()
+            && dir.join("sidecar").join("server.js").is_file();
+        if !ok {
+            return Err("候选目录缺少 dsh-desktop/package.json 或 sidecar/server.js，疑似不完整产物".into());
+        }
+    } else if !dir.join("resources").is_dir() {
+        return Err("候选目录缺少 resources/，疑似不完整产物".into());
+    }
+    Ok(())
+}
+
+/// 升级/降级流水线：下载 → 暂存目录安装 → 校验 → 备份旧 app → 换位。
+/// dsh-home（数据/插件）完全不动；旧 app 保留为 app.bak-<旧版本> 供一键回退。
+pub fn spawn_upgrade_pipeline(
+    app: AppHandle,
+    state: Arc<App>,
+    inst_id: String,
+    info: crate::model::EditionInfo,
+) {
+    let task_id = format!("upgrade-{}", inst_id);
+    let (old_ver, name) = {
+        let cfg = state.cfg.lock().unwrap();
+        cfg.instances
+            .iter()
+            .find(|i| i.id == inst_id)
+            .map(|i| (i.version.clone(), i.name.clone()))
+            .unwrap_or_default()
+    };
+    let label = format!("升级 {name} · {old_ver} → {}", info.tag);
+    let info_task = new_task_info(&task_id, "instance", &label, Some(inst_id.clone()));
+    {
+        let mut tasks = state.tasks.lock().unwrap();
+        tasks.insert(
+            task_id.clone(),
+            Arc::new(Task {
+                cancel: Arc::new(AtomicBool::new(false)),
+                info: std::sync::Mutex::new(info_task),
+            }),
+        );
+    }
+    tauri::async_runtime::spawn(async move {
+        let result = run_upgrade(&app, &state, &inst_id, &task_id, &info).await;
+        let state_str = match &result {
+            Ok(_) => "done",
+            Err(e) if e == "__CANCELLED__" => "cancelled",
+            Err(_) => "error",
+        };
+        let msg = match &result {
+            Ok(_) => format!("已{}到 {}", if is_downgrade(&info.tag, &old_ver) { "降级" } else { "升级" }, info.tag),
+            Err(e) if e == "__CANCELLED__" => "已取消".to_string(),
+            Err(e) => e.clone(),
+        };
+        state.update_task(&app, &task_id, |t| {
+            t.state = state_str.into();
+            t.message = msg.clone();
+            t.speed_bps = 0;
+        });
+        if result.is_ok() {
+            if let Ok(rec) = crate::instance::find_instance(&state, &inst_id) {
+                write_instance_manifest(&rec);
+            }
+            use tauri::Emitter;
+            let _ = app.emit("instance:upgraded", inst_id.clone());
+        }
+    });
+}
+
+fn is_downgrade(new_tag: &str, old_ver: &str) -> bool {
+    crate::net::version_key(new_tag) < crate::net::version_key(&format!("v{old_ver}"))
+}
+
+#[allow(clippy::too_many_arguments)]
+async fn run_upgrade(
+    app: &AppHandle,
+    state: &App,
+    inst_id: &str,
+    task_id: &str,
+    info: &crate::model::EditionInfo,
+) -> Result<(), String> {
+    let inst = crate::instance::find_instance(state, inst_id)?;
+    if crate::instance::is_running(state, inst_id) {
+        return Err("实例运行中，请先停止再升级".into());
+    }
+    if inst.edition != info.edition {
+        return Err(format!("版本线不匹配（实例是 {}，产物是 {}）", inst.edition, info.edition));
+    }
+    let mirror = state.cfg.lock().unwrap().settings.mirror_prefix.clone();
+
+    // ---- 下载 + 校验 ----
+    state.update_task(app, task_id, |t| {
+        t.stage = "download".into();
+        t.message = "连接上游".into();
+    });
+    let cache_path = state.cache_dir.join(&info.asset.name);
+    let mut expected: Option<String> = None;
+    if let Some(sha_url) = &info.sha_url {
+        match net::fetch_sha256sums(sha_url, &mirror).await {
+            Ok(map) => expected = map.get(&info.asset.name).cloned(),
+            Err(e) => eprintln!("[upgrade] 校验文件获取失败（跳过校验）: {e}"),
+        }
+    }
+    let final_url = net::apply_mirror(&info.asset.url, &mirror);
+    let hash = download_file(app, state, task_id, &final_url, &cache_path, info.asset.size).await?;
+    if let Some(exp) = &expected {
+        if exp != &hash {
+            let _ = std::fs::remove_file(&cache_path);
+            return Err(format!("SHA256 校验失败：期望 {}，实际 {}", &exp[..16], &hash[..16]));
+        }
+        state.update_task(app, task_id, |t| t.message = "SHA256 校验通过".into());
+    }
+
+    // ---- 暂存目录安装 + 校验 ----
+    let staging = inst.dir.join(format!("staging-{}", &util::gen_id()[..8]));
+    let r = materialize_asset(app, state, task_id, &cache_path, &info.asset.name, &staging).await;
+    let _ = std::fs::remove_file(&cache_path);
+    r?;
+    let validation = {
+        let staging_c = staging.clone();
+        let edition = inst.edition.clone();
+        tauri::async_runtime::spawn_blocking(move || validate_app_dir(&staging_c, &edition))
+            .await
+            .map_err(|e| format!("校验任务失败: {e}"))?
+    };
+    if let Err(e) = validation {
+        let _ = std::fs::remove_dir_all(&staging);
+        return Err(format!("产物校验失败: {e}"));
+    }
+
+    // ---- 备份旧 app → 换位（失败自动回滚）----
+    state.update_task(app, task_id, |t| {
+        t.stage = "done".into();
+        t.message = "换位安装（旧版本保留为备份）".into();
+    });
+    let app_dir = inst.app_dir.clone();
+    let bak = inst.dir.join(format!("app.bak-{}", inst.version));
+    let swap = (|| -> Result<(), String> {
+        if bak.exists() {
+            std::fs::remove_dir_all(&bak).map_err(|e| format!("清理旧备份失败: {e}"))?;
+        }
+        if app_dir.exists() {
+            std::fs::rename(&app_dir, &bak).map_err(|e| format!("备份旧版本失败: {e}"))?;
+        }
+        if let Err(e) = std::fs::rename(&staging, &app_dir) {
+            // 回滚：把备份换回去
+            let _ = std::fs::rename(&bak, &app_dir);
+            let _ = std::fs::remove_dir_all(&staging);
+            return Err(format!("换位失败（已回滚）: {e}"));
+        }
+        Ok(())
+    })();
+    swap?;
+
+    // ---- 更新元数据 ----
+    let new_ver = info
+        .tag
+        .trim_start_matches('v')
+        .trim_end_matches("-lite")
+        .to_string();
+    {
+        let mut cfg = state.cfg.lock().unwrap();
+        if let Some(r) = cfg.instances.iter_mut().find(|i| i.id == inst_id) {
+            r.version = new_ver;
+            r.tag = info.tag.clone();
+            r.update_available = None;
+            r.exe_path = util::find_main_exe(&r.app_dir);
+            r.last_fail_reason = None;
+        }
+    }
+    state.persist()?;
+    Ok(())
+}
+
+/// 一键回退到 app.bak-<版本> 备份。对称换位：当前版本成为新备份，可再次回退。
+pub fn rollback_instance(state: &Arc<App>, inst_id: &str) -> Result<String, String> {
+    let inst = crate::instance::find_instance(state, inst_id)?;
+    if crate::instance::is_running(state, inst_id) {
+        return Err("实例运行中，请先停止再回退".into());
+    }
+    // 找备份（唯一保留策略：app.bak-* 只有一个，但容错遍历）
+    let mut baks: Vec<(String, PathBuf)> = Vec::new();
+    if let Ok(rd) = std::fs::read_dir(&inst.dir) {
+        for e in rd.flatten() {
+            let n = e.file_name().to_string_lossy().to_string();
+            if let Some(v) = n.strip_prefix("app.bak-") {
+                if e.path().is_dir() {
+                    baks.push((v.to_string(), e.path()));
+                }
+            }
+        }
+    }
+    baks.sort();
+    let (bak_ver, bak) = baks
+        .into_iter()
+        .next()
+        .ok_or_else(|| "没有可回退的备份（app.bak-* 不存在）".to_string())?;
+    validate_app_dir(&bak, &inst.edition)?;
+
+    let app_dir = inst.app_dir.clone();
+    let swap_tmp = inst.dir.join(format!("app.swap-{}", &util::gen_id()[..6]));
+    std::fs::rename(&app_dir, &swap_tmp).map_err(|e| format!("移出当前版本失败: {e}"))?;
+    if let Err(e) = std::fs::rename(&bak, &app_dir) {
+        let _ = std::fs::rename(&swap_tmp, &app_dir);
+        return Err(format!("回退失败（已还原）: {e}"));
+    }
+    std::fs::rename(&swap_tmp, inst.dir.join(format!("app.bak-{bak_ver}"))).ok();
+
+    // 从换位后的程序树读真实版本号
+    let new_cur_ver = read_installed_version(&app_dir, &inst.edition).unwrap_or(bak_ver.clone());
+    {
+        let mut cfg = state.cfg.lock().unwrap();
+        if let Some(r) = cfg.instances.iter_mut().find(|i| i.id == inst_id) {
+            r.version = new_cur_ver.clone();
+            r.tag = format!("v{new_cur_ver}");
+            r.exe_path = util::find_main_exe(&r.app_dir);
+            r.last_fail_reason = None;
+            r.update_available = None;
+        }
+    }
+    state.persist()?;
+    if let Ok(rec) = crate::instance::find_instance(state, inst_id) {
+        write_instance_manifest(&rec);
+    }
+    Ok(format!("已回退到 v{new_cur_ver}（当前版本 v{bak_ver} 保留为备份，可再次切换）"))
+}
+
+/// 从安装后的程序树读版本号
+pub fn read_installed_version(app_dir: &Path, edition: &str) -> Option<String> {
+    let rel = if edition == "lite" {
+        PathBuf::from("resources").join("app").join("package.json")
+    } else {
+        PathBuf::from("dsh-desktop").join("package.json")
+    };
+    let text = std::fs::read_to_string(app_dir.join(&rel)).ok()?;
+    let v: serde_json::Value = serde_json::from_str(&text).ok()?;
+    v["version"].as_str().map(String::from)
 }
 
 fn state_update_extract(app: &AppHandle, task_id: &str, done: u64, total: u64) {
@@ -391,8 +648,7 @@ async fn wait_nsis(setup: &Path, dest: &Path) -> Result<(), String> {
 }
 
 /// 重新尝试失败/取消的实例安装
-pub fn retry_install(app: AppHandle, state: Arc<App>, inst: &InstanceMeta, asset: (String, String, u64), sha_url: Option<String>) {
-    let mut inst2 = inst.clone();
+pub fn retry_install(app: AppHandle, state: Arc<App>, inst: &InstanceMeta, asset: (String, String, u64), sha_url: Option<String>) {    let mut inst2 = inst.clone();
     inst2.status = InstanceStatus::Installing;
     inst2.error_message = None;
     {
@@ -404,4 +660,55 @@ pub fn retry_install(app: AppHandle, state: Arc<App>, inst: &InstanceMeta, asset
     }
     let _ = state.persist();
     spawn_install_pipeline(app, state, inst2, asset.0, asset.1, asset.2, sha_url);
+}
+
+#[cfg(test)]
+mod upgrade_tests {
+    use super::*;
+    use std::fs;
+    use std::path::PathBuf;
+
+    fn fake_app(tag: &str, full: bool) -> PathBuf {
+        let dir = std::env::temp_dir().join(format!("eac-upg-{}-{}", tag, std::process::id()));
+        let _ = fs::remove_dir_all(&dir);
+        fs::create_dir_all(dir.join("sidecar")).unwrap();
+        fs::write(dir.join("dsh-eac-shell.exe"), b"MZ").unwrap();
+        if full {
+            fs::create_dir_all(dir.join("dsh-desktop")).unwrap();
+            fs::write(dir.join("dsh-desktop").join("package.json"), r#"{"version":"5.3.6"}"#).unwrap();
+            fs::write(dir.join("sidecar").join("server.js"), b"").unwrap();
+        } else {
+            fs::create_dir_all(dir.join("resources").join("app")).unwrap();
+        }
+        dir
+    }
+
+    #[test]
+    fn validate_accepts_complete_full_layout() {
+        let dir = fake_app("ok", true);
+        assert!(validate_app_dir(&dir, "full").is_ok());
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn validate_rejects_incomplete_full_layout() {
+        let dir = fake_app("bad", true);
+        fs::remove_file(dir.join("sidecar").join("server.js")).unwrap();
+        assert!(validate_app_dir(&dir, "full").is_err(), "缺 sidecar/server.js 必须拒绝换位");
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn validate_rejects_lite_layout_for_full() {
+        let dir = fake_app("mix", false);
+        assert!(validate_app_dir(&dir, "full").is_err());
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn read_installed_version_parses_manifest() {
+        let dir = fake_app("ver", true);
+        assert_eq!(read_installed_version(&dir, "full").as_deref(), Some("5.3.6"));
+        let _ = fs::remove_dir_all(&dir);
+    }
 }

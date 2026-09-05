@@ -43,6 +43,11 @@ export function renderHome(host: HTMLElement): () => void {
         pulse.root,
         h("div", { class: "actions" },
           h("button", {
+            class: "btn",
+            title: "导入本机已有的 EAC 实例（原地接管，不移动文件）",
+            onClick: () => void doImport(),
+          }, ico("external"), "导入本地实例"),
+          h("button", {
             class: "btn solid",
             onClick: () => setState({ wizardOpen: true }),
           }, ico("plus"), "新实例"),
@@ -54,6 +59,16 @@ export function renderHome(host: HTMLElement): () => void {
         h("span", { class: "mono faint" }, state.settings?.instanceRoot ?? ""),
       ),
     );
+  };
+
+  const doImport = async () => {
+    const { openImportModal } = await import("./onboard");
+    const imported = await openImportModal();
+    if (imported) {
+      setState({ instances: [{ ...imported }, ...state.instances] });
+      toast("导入完成", `${imported.name} 已接管（原地，未移动文件）`);
+      refreshCurrentView();
+    }
   };
 
   const buildList = () => {
@@ -115,7 +130,11 @@ export function renderHome(host: HTMLElement): () => void {
         h("div", { class: "name" },
           h("span", { class: "nm" }, inst.name),
           h("span", { class: "chip" }, inst.edition === "lite" ? "LITE" : "FULL"),
-          h("span", { class: "chip on" }, inst.tag),
+          h("span", { class: "chip on" }, inst.updateAvailable ? `${inst.tag} → ${inst.updateAvailable}` : inst.tag),
+          inst.origin === "imported" ? h("span", { class: "chip" }, "本地导入") : null,
+          inst.updateAvailable ? h("span", { class: "chip", style: { borderColor: "var(--warn)", color: "var(--warn)" } }, "可升级") : null,
+          (inst.failStreak ?? 0) >= 2 ? h("span", { class: "chip", style: { borderColor: "var(--danger)", color: "var(--danger)" } }, `连败 ${inst.failStreak}`) : null,
+          (inst.quarantine?.length ?? 0) > 0 ? h("span", { class: "chip", style: { borderColor: "var(--warn)", color: "var(--warn)" } }, `隔离 ${inst.quarantine!.length}`) : null,
         ),
         h("div", { class: "path" }, inst.appDir),
       ),
@@ -140,6 +159,10 @@ export function renderHome(host: HTMLElement): () => void {
     if (inst.status === "error") {
       return h("div", { class: "status", title: inst.errorMessage ?? "" },
         h("i", { class: "dot err" }), h("span", {}, "安装失败"));
+    }
+    if ((inst.failStreak ?? 0) >= 2) {
+      return h("div", { class: "status", title: inst.lastFailReason ?? "连续启动失败" },
+        h("i", { class: "dot err" }), h("span", {}, "启动异常"));
     }
     return h("div", { class: "status" }, h("i", { class: "dot ready" }),
       h("span", { class: "dim" }, `就绪 · ${relTime(inst.lastLaunchedAt)}`));
@@ -167,6 +190,9 @@ export function renderHome(host: HTMLElement): () => void {
       await api.stopInstance(inst.id);
       setState({ running: { ...state.running, [inst.id]: false } });
       toast("已停止", `${inst.name} 的进程树已结束`);
+      // 停止后刷新：看门狗可能在运行期更新了连败/诊断状态
+      const c = await api.getState();
+      setState({ instances: c.instances });
     } catch (e) {
       toast("停止失败", String(e), "err");
     }
@@ -182,6 +208,25 @@ export function renderHome(host: HTMLElement): () => void {
   };
 
   const doDelete = async (inst: InstanceMeta) => {
+    if (inst.origin === "imported") {
+      const ok = await confirmModal({
+        title: "移除记录",
+        body: `「${inst.name}」是本地导入的实例，启动器不会删除你的文件。
+
+仅解除接管关系（保留 ${inst.dir} 全部内容与数据）。`,
+        confirmText: "移除记录",
+      });
+      if (!ok) return;
+      try {
+        await api.unregisterInstance(inst.id);
+        toast("已移除记录", inst.name);
+        setState({ instances: state.instances.filter((x) => x.id !== inst.id), drawerId: null });
+        refreshCurrentView();
+      } catch (e) {
+        toast("失败", String(e), "err");
+      }
+      return;
+    }
     const ok = await confirmModal({
       title: "删除实例",
       body: `将永久删除「${inst.name}」及其全部数据（程序 + DSH_HOME）：
@@ -200,6 +245,51 @@ ${inst.dir}
       refreshCurrentView();
     } catch (e) {
       toast("删除失败", String(e), "err");
+    }
+  };
+
+  const doRollback = async (inst: InstanceMeta) => {
+    try {
+      const msg = await api.rollbackInstance(inst.id);
+      toast("回退完成", msg);
+      const c = await api.getState();
+      setState({ instances: c.instances });
+      refreshCurrentView();
+    } catch (e) {
+      toast("回退失败", String(e), "err");
+    }
+  };
+
+  const doUpgrade = async (inst: InstanceMeta) => {
+    try {
+      const list = await api.listEditions(inst.edition);
+      const target = list.find((e) => e.tag === inst.updateAvailable);
+      if (!target) {
+        toast("未找到产物", `上游目录中没有 ${inst.updateAvailable} 的可用产物`, "err");
+        return;
+      }
+      await api.upgradeInstance(inst.id, target);
+      toast("升级已开始", `${inst.name} → ${target.tag}`);
+    } catch (e) {
+      toast("升级失败", String(e), "err");
+    }
+  };
+
+  const doPickVersion = async (inst: InstanceMeta) => {
+    const list = (await api.listEditions(inst.edition)).filter((e) => e.edition === inst.edition);
+    const { pickEditionModal } = await import("../ui/feedback");
+    const picked = await pickEditionModal(inst.name, list);
+    if (!picked) return;
+    if (picked.tag === inst.tag) {
+      toast("版本相同", `当前已是 ${picked.tag}`, "info");
+      return;
+    }
+    try {
+      await api.upgradeInstance(inst.id, picked);
+      toast("版本切换已开始", `${inst.name} → ${picked.tag}`);
+      refreshCurrentView();
+    } catch (e) {
+      toast("操作失败", String(e), "err");
     }
   };
 
@@ -256,14 +346,22 @@ ${inst.dir}
     onRename: () => void,
     onRetry: () => void,
   ): HTMLElement => {
-    const wrap = h("div", {}, ...kvRow("状态", running ? "运行中" : inst.status === "ready" ? "就绪" : inst.status === "installing" ? "安装中" : `安装失败${inst.errorMessage ? " · " + inst.errorMessage : ""}`),
-      ...kvRow("版本", `${inst.version}（${inst.tag}）`),
+    const stText = running
+      ? "运行中"
+      : inst.status === "ready"
+        ? (inst.failStreak ?? 0) >= 2 ? "就绪（启动异常，见安全中心）" : "就绪"
+        : inst.status === "installing" ? "安装中" : `安装失败${inst.errorMessage ? " · " + inst.errorMessage : ""}`;
+    const wrap = h("div", {}, ...kvRow("状态", stText),
+      ...kvRow("版本", `${inst.version}（${inst.tag}）${inst.updateAvailable ? ` · 可升级 ${inst.updateAvailable}` : ""}`),
+      ...kvRow("来源", inst.origin === "imported" ? "本地导入（原地接管）" : "启动器下载安装"),
       ...kvRow("主程序", inst.exePath ?? "待安装完成发现"),
       ...kvRow("程序目录", inst.appDir),
       ...kvRow("数据目录", `${inst.dshHome}（DSH_HOME）`),
       ...kvRow("占用", state.sizeCache[inst.id] != null ? fmtBytes(state.sizeCache[inst.id]) : "…"),
       ...kvRow("创建于", fmtDate(inst.createdAt)),
       ...kvRow("最近启动", `${relTime(inst.lastLaunchedAt)} · 共 ${inst.launchCount} 次`),
+      ...(inst.lastFailReason ? [...kvRow("最近诊断", inst.lastFailReason)] : []),
+      ...((inst.quarantine?.length ?? 0) > 0 ? [...kvRow("隔离区", `${inst.quarantine!.length} 个插件（安全中心可恢复）`)] : []),
     ) as HTMLElement;
     wrap.className = "kv";
     const ops = h("div", { style: { display: "flex", gap: "10px", flexWrap: "wrap", marginTop: "26px" } });
@@ -271,14 +369,25 @@ ${inst.dir}
       ops.append(h("button", { class: "btn", onClick: () => void doStop(inst) }, ico("stop"), "停止实例"));
     } else if (inst.status === "ready") {
       ops.append(h("button", { class: "btn solid", onClick: () => void doLaunch(inst) }, ico("play"), "启动实例"));
+      if (inst.updateAvailable && inst.origin !== "imported") {
+        ops.append(h("button", { class: "btn", onClick: () => void doUpgrade(inst) }, ico("up"), `升级 ${inst.updateAvailable}`));
+      }
+      ops.append(
+        h("button", { class: "btn ghost", onClick: () => void doPickVersion(inst) }, ico("list"), "版本"),
+        h("button", { class: "btn ghost", onClick: () => void doRollback(inst) }, ico("undo"), "回退"),
+      );
     } else if (inst.status === "error") {
       ops.append(h("button", { class: "btn", onClick: onRetry }, ico("refresh"), "重试安装"));
     }
     ops.append(
       h("button", { class: "btn ghost", onClick: () => void sys.openPath(inst.appDir).catch(() => toast("无法打开", inst.appDir, "err")) }, ico("folder"), "程序目录"),
       h("button", { class: "btn ghost", onClick: () => void sys.openPath(inst.dshHome).catch(() => toast("无法打开", inst.dshHome, "err")) }, ico("folder"), "数据目录"),
+      h("button", { class: "btn ghost", title: "启动器捕获的实例输出", onClick: () => void sys.reveal(inst.dir + "\\launcher-shell.log").catch(() => toast("暂无日志", "该实例还没有启动日志", "info")) }, ico("external"), "启动日志"),
       h("button", { class: "btn ghost", onClick: onRename }, ico("edit"), "重命名"),
-      h("button", { class: "btn ghost danger", onClick: onDelete }, ico("trash"), "删除"),
+      h("button", {
+        class: "btn ghost danger",
+        onClick: onDelete,
+      }, ico("trash"), inst.origin === "imported" ? "移除记录" : "删除"),
     );
     const wrap2 = h("div", {}, wrap, ops);
     wrap2.querySelectorAll(".kv .v").forEach((v) => ((v as HTMLElement).style.wordBreak = "break-all"));

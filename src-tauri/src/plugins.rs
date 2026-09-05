@@ -13,6 +13,11 @@ pub fn profile_dir(inst: &crate::model::InstanceMeta) -> PathBuf {
     inst.dsh_home.join("profiles").join("web-desktop")
 }
 
+/// EAC web-desktop profile 的基础 bundles：dsh-base / dsh-web-app 是 webServer
+/// 等核心服务的提供者，manifest 缺失即 dsh web 启动崩溃（退出码 1）。
+/// EAC v4Lite 的退出流程会把 bundles 清空且下次启动不会重建，必须由启动器兜底。
+pub const BASE_BUNDLES: [&str; 2] = ["@deepseek-ai/dsh-base", "@deepseek-ai/dsh-web-app"];
+
 /// 首次初始化 profile（与 EAC/dsh 的模板一致）
 pub fn ensure_profile(dir: &Path) -> Result<(), String> {
     std::fs::create_dir_all(dir).map_err(|e| format!("创建 profile 目录失败: {e}"))?;
@@ -22,7 +27,7 @@ pub fn ensure_profile(dir: &Path) -> Result<(), String> {
             "name": "dsh-profile-web-desktop",
             "version": "0.0.0",
             "private": true,
-            "dsh": { "profile": { "bundles": [] } }
+            "dsh": { "profile": { "bundles": BASE_BUNDLES } }
         });
         std::fs::write(&pkg, serde_json::to_string_pretty(&manifest).unwrap())
             .map_err(|e| format!("写入 profile 清单失败: {e}"))?;
@@ -125,17 +130,27 @@ fn run_pm(pm: &Pm, profile: &Path, verb: &str, spec: &str, registry: &str) -> Re
             let node = pm.node.as_ref().unwrap();
             let cli = pm.npm_cli.as_ref().unwrap();
             let mut c = std::process::Command::new(node);
-            c.arg(cli).arg(verb).arg(spec);
+            c.arg(cli).arg(verb);
+            // spec 为空 = `npm install`（按清单重装），不传空参数
+            if !spec.trim().is_empty() {
+                c.arg(spec);
+            }
             c
         }
         "pnpm" => {
             let mut c = std::process::Command::new("pnpm.cmd");
-            c.arg(verb).arg(spec);
+            c.arg(verb);
+            if !spec.trim().is_empty() {
+                c.arg(spec);
+            }
             c
         }
         "npm" => {
             let mut c = std::process::Command::new("npm.cmd");
-            c.arg(verb).arg(spec);
+            c.arg(verb);
+            if !spec.trim().is_empty() {
+                c.arg(spec);
+            }
             c
         }
         _ => return Err("本机未找到可用的包管理器（pnpm / npm），且实例未内置 Node 运行时".into()),
@@ -516,6 +531,8 @@ pub fn install_sync(
     let registry = state.cfg.lock().unwrap().settings.npm_registry.clone();
     let profile = profile_dir(&inst);
     ensure_profile(&profile)?;
+    // 操作前自动快照（可回滚）
+    let _ = snapshot_profile(&inst, &format!("安装 {spec} 前自动快照"));
     let pm = detect_pm(&inst);
     if pm.program == "none" {
         return Err(
@@ -561,6 +578,7 @@ pub fn uninstall_sync(state: &App, inst_id: &str, pkg: &str) -> Result<(), Strin
     if !pkg_path.exists() {
         return Err("该实例没有安装任何插件".into());
     }
+    let _ = snapshot_profile(&inst, &format!("卸载 {pkg} 前自动快照"));
     let registry = state.cfg.lock().unwrap().settings.npm_registry.clone();
     let pm = detect_pm(&inst);
     if pm.program == "none" {
@@ -593,6 +611,7 @@ pub fn toggle_plugin(state: &App, inst_id: &str, pkg: &str, disabled: bool) -> R
     }
     let profile = profile_dir(&inst);
     ensure_profile(&profile)?;
+    let _ = snapshot_profile(&inst, &format!("{} {pkg} 前自动快照", if disabled { "停用" } else { "启用" }));
     let cid = cordis_id_of(pkg);
     let patch_path = profile.join("cordis.patch.yml");
     let text =
@@ -602,52 +621,491 @@ pub fn toggle_plugin(state: &App, inst_id: &str, pkg: &str, disabled: bool) -> R
     Ok(())
 }
 
-/// 采集当前健康的 dsh.profile.bundles（实例运行中/正常退出后调用）
-pub fn capture_good_bundles(state: &App, inst_id: &str) -> Result<Vec<String>, String> {
-    let inst = instance::find_instance(state, inst_id)?;
-    let pkg_path = profile_dir(&inst).join("package.json");
-    let Ok(text) = std::fs::read_to_string(&pkg_path) else {
-        return Ok(Vec::new());
+/// 读取 profile 清单里的 dsh.profile.bundles；清单缺失/损坏返回空
+fn read_profile_bundles(pkg_path: &Path) -> Vec<String> {
+    let Ok(text) = std::fs::read_to_string(pkg_path) else {
+        return Vec::new();
     };
     let Ok(manifest) = serde_json::from_str::<Value>(&text) else {
-        return Ok(Vec::new());
+        return Vec::new();
     };
-    let bundles = manifest["dsh"]["profile"]["bundles"]
+    manifest["dsh"]["profile"]["bundles"]
         .as_array()
         .map(|a| a.iter().filter_map(|v| v.as_str().map(String::from)).collect())
-        .unwrap_or_default();
-    Ok(bundles)
+        .unwrap_or_default()
 }
 
-/// 启动前守卫：manifest bundles 若丢失了上次健康快照中的内置条目，自动补回。
+/// 把 bundles 写回 profile 清单（自动补齐 dsh.profile 层级；只改数组，不动其它字段）
+fn write_profile_bundles(pkg_path: &Path, manifest: &mut Value, bundles: Vec<String>) -> Result<(), String> {
+    if !manifest.is_object() {
+        *manifest = json!({});
+    }
+    if !manifest["dsh"].is_object() {
+        manifest["dsh"] = json!({});
+    }
+    if !manifest["dsh"]["profile"].is_object() {
+        manifest["dsh"]["profile"] = json!({});
+    }
+    manifest["dsh"]["profile"]["bundles"] = json!(bundles);
+    std::fs::write(pkg_path, serde_json::to_string_pretty(manifest).unwrap())
+        .map_err(|e| format!("写回 profile 清单失败: {e}"))
+}
+
+/// 立即采集 bundles 快照到实例元数据。返回是否发生了更新。
+/// 供两处调用：stop() 杀进程前（EAC 退出流程会清空 bundles，这是最后机会）、
+/// 启动后 watcher 确认实例存活时。
+pub fn snapshot_bundles_now(state: &App, inst_id: &str) -> bool {
+    let Ok(inst) = instance::find_instance(state, inst_id) else {
+        return false;
+    };
+    let bundles = read_profile_bundles(&profile_dir(&inst).join("package.json"));
+    if bundles.is_empty() || bundles == inst.last_good_bundles {
+        return false;
+    }
+    {
+        let mut cfg = state.cfg.lock().unwrap();
+        if let Some(r) = cfg.instances.iter_mut().find(|r| r.id == inst_id) {
+            r.last_good_bundles = bundles;
+        } else {
+            return false;
+        }
+    }
+    let _ = state.persist();
+    if let Ok(snapshot) = instance::find_instance(state, inst_id) {
+        crate::store::write_instance_manifest(&snapshot);
+    }
+    true
+}
+
+/// 启动后异步采集健康 bundles 快照。EAC 在启动过程中会把 bundles 写回
+/// manifest，因此不能在 spawn 后立即读（读到的是上次退出后被清空的状态）：
+/// 轮询等待 manifest 出现非空 bundles，再静置一段时间让启动流程走完
+/// （若 dsh web 随后崩溃则实例已不在运行态，放弃采集）。
+pub fn spawn_bundle_snapshot(state: &std::sync::Arc<App>, inst_id: &str) {
+    let state = std::sync::Arc::clone(state);
+    let inst_id = inst_id.to_string();
+    std::thread::spawn(move || {
+        let pkg_path = match instance::find_instance(&state, &inst_id) {
+            Ok(inst) => profile_dir(&inst).join("package.json"),
+            Err(_) => return,
+        };
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(180);
+        let mut seen_non_empty = false;
+        while std::time::Instant::now() < deadline {
+            std::thread::sleep(std::time::Duration::from_secs(2));
+            if !instance::is_running(&state, &inst_id) {
+                return; // 实例已退出（启动失败或用户秒退），不采集
+            }
+            if !read_profile_bundles(&pkg_path).is_empty() {
+                seen_non_empty = true;
+                break;
+            }
+        }
+        if !seen_non_empty {
+            return;
+        }
+        // 静置：等 EAC 写全（伴生 bundles 同步），也避开 dsh web 启动即崩的窗口
+        std::thread::sleep(std::time::Duration::from_secs(15));
+        if instance::is_running(&state, &inst_id) {
+            snapshot_bundles_now(&state, &inst_id);
+        }
+    });
+}
+
+/// 启动前守卫：把 manifest 缺失的 bundles 补回（增量并集，绝不重算整个数组）。
 /// EAC 的退出流程在部分版本上会把 bundles 清空，导致下次启动 webServer 缺失、
-/// 全部插件 pending（退出码 1）。此守卫保证启动时基础 bundles 完整。
+/// 全部插件 pending（退出码 1）。补回来源按可靠性排序：
+/// 1. 基础 bundles 兜底（dsh-base / dsh-web-app，核心服务提供者，无条件补回）
+/// 2. dependencies 中声明了 dsh.bundle 的已装插件（dsh-loader 等第三方）
+/// 3. 历史健康快照（EAC 内置伴生 bundles 等无法从清单推导的条目）
+///
+/// 清单缺失/损坏时重建最小模板，其余状态由 EAC 首启自愈。
 pub fn repair_bundles_before_launch(inst: &crate::model::InstanceMeta) {
-    if inst.last_good_bundles.is_empty() {
-        return;
-    }
-    let pkg_path = profile_dir(inst).join("package.json");
-    let Ok(text) = std::fs::read_to_string(&pkg_path) else { return };
-    let Ok(mut manifest) = serde_json::from_str::<Value>(&text) else { return };
-    let bundles: Vec<String> = manifest["dsh"]["profile"]["bundles"]
-        .as_array()
-        .map(|a| a.iter().filter_map(|v| v.as_str().map(String::from)).collect())
-        .unwrap_or_default();
-    let missing: Vec<&String> = inst
-        .last_good_bundles
-        .iter()
-        .filter(|b| !bundles.contains(b))
-        .collect();
-    if missing.is_empty() {
-        return;
-    }
+    let profile = profile_dir(inst);
+    let pkg_path = profile.join("package.json");
+    // 首次启动前 profile 目录尚不存在（EAC 首启自建）——补建目录再写守卫结果
+    let _ = std::fs::create_dir_all(&profile);
+    let mut manifest: Value = match std::fs::read_to_string(&pkg_path) {
+        Ok(text) => serde_json::from_str(&text).unwrap_or_else(|_| json!({})),
+        Err(_) => json!({}),
+    };
+    let bundles = read_profile_bundles(&pkg_path);
     let mut next = bundles;
-    for m in missing {
-        eprintln!("[launch-guard] 恢复丢失的 bundle: {m}");
-        next.push(m.clone());
+    let before = next.len();
+    for b in BASE_BUNDLES {
+        if !next.iter().any(|x| x == b) {
+            eprintln!("[launch-guard] 兜底补回基础 bundle: {b}");
+            next.push(b.to_string());
+        }
     }
-    manifest["dsh"]["profile"]["bundles"] = json!(next);
-    let _ = std::fs::write(&pkg_path, serde_json::to_string_pretty(&manifest).unwrap());
+    // dependencies 里声明了 dsh.bundle 且已安装的插件包，补回 bundle 声明
+    if let Some(deps) = manifest.get("dependencies").and_then(|d| d.as_object()) {
+        for name in deps.keys() {
+            if next.iter().any(|x| x == name) {
+                continue;
+            }
+            let is_bundle = read_dep_manifest(&profile, name)
+                .map(|m| m.pointer("/dsh/bundle/patch").is_some())
+                .unwrap_or(false);
+            if is_bundle {
+                eprintln!("[launch-guard] 恢复丢失的插件 bundle: {name}");
+                next.push(name.clone());
+            }
+        }
+    }
+    for b in &inst.last_good_bundles {
+        if !next.iter().any(|x| x == b) {
+            eprintln!("[launch-guard] 按健康快照恢复 bundle: {b}");
+            next.push(b.clone());
+        }
+    }
+    if next.len() == before {
+        return;
+    }
+    if let Err(e) = write_profile_bundles(&pkg_path, &mut manifest, next) {
+        eprintln!("[launch-guard] 写回修复结果失败: {e}");
+    }
+}
+
+// ---------- 插件安全体系：profile 快照 / 回滚 / 隔离区 ----------
+
+/// profile 元数据快照目录（package.json + cordis.patch.yml + lock）
+fn backups_root(inst: &crate::model::InstanceMeta) -> PathBuf {
+    inst.dsh_home.join("launcher-backups")
+}
+
+/// 隔离区根目录
+fn quarantine_root(inst: &crate::model::InstanceMeta) -> PathBuf {
+    inst.dsh_home.join("launcher-quarantine")
+}
+
+/// 把 profile 元数据（package.json / cordis.patch.yml / package-lock.json）
+/// 快照到 <dsh_home>/launcher-backups/snap-<ts>/。全部插件操作前自动调用。
+/// 保留最近 20 份，超出删除最旧的。
+pub fn snapshot_profile(inst: &crate::model::InstanceMeta, reason: &str) -> Result<u64, String> {
+    let profile = profile_dir(inst);
+    let ts = crate::util::now_ms();
+    let snap = backups_root(inst).join(format!("snap-{ts}"));
+    std::fs::create_dir_all(&snap).map_err(|e| format!("创建快照目录失败: {e}"))?;
+    for f in ["package.json", "cordis.patch.yml", "package-lock.json"] {
+        let src = profile.join(f);
+        if src.exists() {
+            std::fs::copy(&src, snap.join(f)).map_err(|e| format!("快照 {f} 失败: {e}"))?;
+        }
+    }
+    let meta = json!({ "ts": ts, "reason": reason });
+    std::fs::write(snap.join("snapshot.json"), serde_json::to_string_pretty(&meta).unwrap())
+        .map_err(|e| format!("写快照元数据失败: {e}"))?;
+    prune_snapshots(inst, 20);
+    Ok(ts)
+}
+
+fn prune_snapshots(inst: &crate::model::InstanceMeta, keep: usize) {
+    let Ok(rd) = std::fs::read_dir(backups_root(inst)) else { return };
+    let mut snaps: Vec<(u64, PathBuf)> = rd
+        .flatten()
+        .filter_map(|e| {
+            let name = e.file_name().to_string_lossy().to_string();
+            name.strip_prefix("snap-").and_then(|t| t.parse::<u64>().ok()).map(|t| (t, e.path()))
+        })
+        .collect();
+    snaps.sort_by_key(|(t, _)| std::cmp::Reverse(*t));
+    for (_, p) in snaps.into_iter().skip(keep) {
+        let _ = std::fs::remove_dir_all(p);
+    }
+}
+
+/// 列出全部快照（新→旧）
+pub fn list_snapshots(state: &App, inst_id: &str) -> Result<Vec<crate::model::PluginSnapshot>, String> {
+    let inst = instance::find_instance(state, inst_id)?;
+    let root = backups_root(&inst);
+    let Ok(rd) = std::fs::read_dir(&root) else { return Ok(vec![]) };
+    let mut out = Vec::new();
+    for e in rd.flatten() {
+        let name = e.file_name().to_string_lossy().to_string();
+        let Some(ts) = name.strip_prefix("snap-").and_then(|t| t.parse::<u64>().ok()) else { continue };
+        let reason = std::fs::read_to_string(e.path().join("snapshot.json"))
+            .ok()
+            .and_then(|t| serde_json::from_str::<Value>(&t).ok())
+            .and_then(|m| m["reason"].as_str().map(String::from))
+            .unwrap_or_default();
+        let deps = std::fs::read_to_string(e.path().join("package.json"))
+            .ok()
+            .and_then(|t| serde_json::from_str::<Value>(&t).ok())
+            .and_then(|m| m["dependencies"].as_object().map(|d| d.len()))
+            .unwrap_or(0);
+        out.push(crate::model::PluginSnapshot { ts, reason, deps });
+    }
+    out.sort_by_key(|s| std::cmp::Reverse(s.ts));
+    Ok(out)
+}
+
+/// 回滚 profile 到指定快照：恢复三个元数据文件后按清单重装依赖
+/// （npm install 会把 node_modules 对齐到快照的 dependencies），最后跑启动守卫补 bundles。
+pub fn restore_snapshot_sync(
+    state: &App,
+    inst_id: &str,
+    ts: u64,
+    on_stage: impl FnMut(&str),
+) -> Result<(), String> {
+    let mut on_stage = on_stage;
+    let inst = instance::find_instance(state, inst_id)?;
+    if instance::is_running(state, inst_id) {
+        return Err("实例运行中，请先停止再回滚".into());
+    }
+    let snap = backups_root(&inst).join(format!("snap-{ts}"));
+    let pkg_src = snap.join("package.json");
+    if !pkg_src.exists() {
+        return Err("快照不存在或已损坏".into());
+    }
+    on_stage("恢复 profile 清单");
+    let profile = profile_dir(&inst);
+    ensure_profile(&profile)?;
+    for f in ["package.json", "cordis.patch.yml", "package-lock.json"] {
+        let src = snap.join(f);
+        if src.exists() {
+            std::fs::copy(&src, profile.join(f)).map_err(|e| format!("恢复 {f} 失败: {e}"))?;
+        }
+    }
+    // 按恢复后的清单重装依赖（含幽灵包保护）
+    on_stage("按快照清单重装依赖");
+    reinstall_deps_sync(state, &inst, on_stage)?;
+    Ok(())
+}
+
+/// 按当前 profile 清单重装依赖（node_modules 对齐 package.json）。
+/// 前后做幽灵包保护；完成后跑启动守卫兜底 bundles。
+pub fn reinstall_deps_sync(
+    state: &App,
+    inst: &crate::model::InstanceMeta,
+    mut on_stage: impl FnMut(&str),
+) -> Result<(), String> {
+    if instance::is_running(state, &inst.id) {
+        return Err("实例运行中，请先停止再操作".into());
+    }
+    let profile = profile_dir(inst);
+    ensure_profile(&profile)?;
+    let registry = registry_of(state);
+    let pm = detect_pm(inst);
+    if pm.program == "none" {
+        return Err("未找到包管理器（pnpm / npm）".into());
+    }
+    let ghost_backup = profile.join(format!(".ghost-bak-{}", &crate::util::gen_id()[..8]));
+    stash_ghost_packages(&profile, &ghost_backup).map_err(|e| {
+        let _ = std::fs::remove_dir_all(&ghost_backup);
+        format!("无法安全备份内置插件（已中止）: {e}")
+    })?;
+    on_stage(&format!("npm install · {}", pm.program));
+    let pm_result = run_pm(&pm, &profile, "install", "", &registry);
+    restore_ghost_packages(&ghost_backup, &profile);
+    pm_result.map_err(|e| format!("依赖重装失败: {e}"))?;
+    on_stage("启动守卫补回基础 bundles");
+    repair_bundles_before_launch(inst);
+    Ok(())
+}
+
+fn registry_of(state: &App) -> String {
+    state.cfg.lock().unwrap().settings.npm_registry.clone()
+}
+
+/// 隔离单个第三方插件：移出 node_modules + 清 dependencies/bundles/patch 条目。
+/// 纯文件移动，不跑包管理器，随时可恢复。
+pub fn quarantine_plugin(
+    state: &App,
+    inst_id: &str,
+    pkg: &str,
+    reason: &str,
+) -> Result<crate::model::QuarantinedPlugin, String> {
+    let mut inst = instance::find_instance(state, inst_id)?;
+    if instance::is_running(state, inst_id) {
+        return Err("实例运行中，请先停止再隔离插件".into());
+    }
+    let profile = profile_dir(&inst);
+    let pkg_path = profile.join("package.json");
+    let text = std::fs::read_to_string(&pkg_path).map_err(|e| format!("读取清单失败: {e}"))?;
+    let mut manifest: Value =
+        serde_json::from_str(&text).map_err(|e| format!("清单损坏: {e}"))?;
+    let spec = manifest["dependencies"]
+        .get(pkg)
+        .cloned()
+        .ok_or_else(|| format!("{pkg} 不在该实例的 dependencies 中"))?;
+    let spec_s = match &spec {
+        Value::String(s) => s.clone(),
+        other => other.to_string(),
+    };
+    let version = read_dep_manifest(&profile, pkg)
+        .and_then(|m| m["version"].as_str().map(String::from))
+        .unwrap_or_default();
+
+    // 移出 node_modules（scope 感知）
+    let nm = profile.join("node_modules");
+    let src = nm.join(pkg.replace('/', std::path::MAIN_SEPARATOR_STR));
+    let qroot = quarantine_root(&inst);
+    let dest = qroot.join(format!(
+        "{}-{}",
+        pkg.replace(['/', '\\'], "__"),
+        &crate::util::gen_id()[..6]
+    ));
+    if src.exists() {
+        std::fs::create_dir_all(&qroot).map_err(|e| format!("创建隔离区失败: {e}"))?;
+        std::fs::rename(&src, &dest).map_err(|e| format!("移出 {pkg} 失败: {e}"))?;
+        // 清掉空的 scope 目录
+        if pkg.contains('/') {
+            if let Some(scope) = pkg.split('/').next() {
+                let scope_dir = nm.join(scope);
+                if scope_dir.is_dir() {
+                    let _ = std::fs::remove_dir(&scope_dir); // 空才删得掉
+                }
+            }
+        }
+    }
+
+    // 清 dependencies
+    if let Some(deps) = manifest["dependencies"].as_object_mut() {
+        deps.remove(pkg);
+    }
+    std::fs::write(&pkg_path, serde_json::to_string_pretty(&manifest).unwrap())
+        .map_err(|e| format!("写回清单失败: {e}"))?;
+    // 清 bundles 与 patch 条目
+    let _ = bundle_remove(&profile, pkg);
+    let cid = cordis_id_of(pkg);
+    let patch_path = profile.join("cordis.patch.yml");
+    if patch_path.exists() {
+        let pt = std::fs::read_to_string(&patch_path).unwrap_or_default();
+        let _ = std::fs::write(&patch_path, patch_remove_entry(&pt, &cid));
+    }
+
+    let item = crate::model::QuarantinedPlugin {
+        name: pkg.to_string(),
+        id: cid,
+        version,
+        spec: spec_s,
+        reason: reason.to_string(),
+        at: crate::util::now_ms(),
+    };
+    {
+        let mut cfg = state.cfg.lock().unwrap();
+        if let Some(r) = cfg.instances.iter_mut().find(|r| r.id == inst_id) {
+            r.quarantine.retain(|q| q.name != pkg);
+            r.quarantine.push(item.clone());
+        }
+    }
+    state.persist()?;
+    inst.quarantine = {
+        let cfg = state.cfg.lock().unwrap();
+        cfg.instances
+            .iter()
+            .find(|r| r.id == inst_id)
+            .map(|r| r.quarantine.clone())
+            .unwrap_or_default()
+    };
+    Ok(item)
+}
+
+/// 隔离全部第三方插件（crash-guard 自动恢复 / 安全启动共用）。返回隔离数量。
+pub fn quarantine_all_third_party(
+    state: &App,
+    inst_id: &str,
+    reason: &str,
+) -> Result<usize, String> {
+    let plugins = list_installed(state, inst_id)?;
+    let mut n = 0usize;
+    for p in &plugins {
+        if p.disabled {
+            // 已停用的插件同样隔离，保证安全启动完全干净
+        }
+        match quarantine_plugin(state, inst_id, &p.name, reason) {
+            Ok(_) => n += 1,
+            Err(e) => eprintln!("[quarantine] 跳过 {}: {e}", p.name),
+        }
+    }
+    Ok(n)
+}
+
+/// 从隔离区恢复插件：移回 node_modules + 写回 dependencies + 必要时补 bundle
+pub fn quarantine_restore(state: &App, inst_id: &str, pkg: &str) -> Result<(), String> {
+    let inst = instance::find_instance(state, inst_id)?;
+    if instance::is_running(state, inst_id) {
+        return Err("实例运行中，请先停止再恢复插件".into());
+    }
+    let item = {
+        let cfg = state.cfg.lock().unwrap();
+        cfg.instances
+            .iter()
+            .find(|r| r.id == inst_id)
+            .and_then(|r| r.quarantine.iter().find(|q| q.name == pkg))
+            .cloned()
+            .ok_or_else(|| "该插件不在隔离区".to_string())?
+    };
+    // 隔离目录（唯一以 <pkg>__ 开头且属于该包的最近目录）
+    let qroot = quarantine_root(&inst);
+    let prefix = format!("{}-", pkg.replace(['/', '\\'], "__"));
+    let mut found: Option<PathBuf> = None;
+    if let Ok(rd) = std::fs::read_dir(&qroot) {
+        for e in rd.flatten() {
+            let n = e.file_name().to_string_lossy().to_string();
+            if n.starts_with(&prefix) && e.path().is_dir() {
+                found = Some(e.path()); // 取最后一个（目录名含时间与随机段）
+            }
+        }
+    }
+    let profile = profile_dir(&inst);
+    let nm = profile.join("node_modules");
+    let dest = nm.join(pkg.replace('/', std::path::MAIN_SEPARATOR_STR));
+    if let Some(src) = found {
+        if dest.exists() {
+            return Err(format!("node_modules 中已存在 {pkg}，无法恢复"));
+        }
+        if let Some(parent) = dest.parent() {
+            std::fs::create_dir_all(parent).map_err(|e| format!("创建目录失败: {e}"))?;
+        }
+        std::fs::rename(&src, &dest).map_err(|e| format!("移回 {pkg} 失败: {e}"))?;
+    } else if !dest.exists() {
+        eprintln!("[quarantine] {pkg} 无隔离文件，仅恢复清单条目");
+    }
+    // 写回 dependencies + bundle 声明
+    let pkg_path = profile.join("package.json");
+    let text = std::fs::read_to_string(&pkg_path).unwrap_or_else(|_| "{}".into());
+    let mut manifest: Value = serde_json::from_str(&text).unwrap_or_else(|_| json!({}));
+    if !manifest["dependencies"].is_object() {
+        manifest["dependencies"] = json!({});
+    }
+    manifest["dependencies"][pkg] = json!(item.spec);
+    std::fs::write(&pkg_path, serde_json::to_string_pretty(&manifest).unwrap())
+        .map_err(|e| format!("写回清单失败: {e}"))?;
+    let _ = bundle_add(&profile, pkg);
+    // 移除隔离记录
+    {
+        let mut cfg = state.cfg.lock().unwrap();
+        if let Some(r) = cfg.instances.iter_mut().find(|r| r.id == inst_id) {
+            r.quarantine.retain(|q| q.name != pkg);
+        }
+    }
+    state.persist()?;
+    Ok(())
+}
+
+/// 彻底删除隔离区中的插件文件与记录
+pub fn quarantine_purge(state: &App, inst_id: &str, pkg: &str) -> Result<(), String> {
+    let inst = instance::find_instance(state, inst_id)?;
+    let qroot = quarantine_root(&inst);
+    let prefix = format!("{}-", pkg.replace(['/', '\\'], "__"));
+    if let Ok(rd) = std::fs::read_dir(&qroot) {
+        for e in rd.flatten() {
+            let n = e.file_name().to_string_lossy().to_string();
+            if n.starts_with(&prefix) {
+                let _ = std::fs::remove_dir_all(e.path());
+            }
+        }
+    }
+    {
+        let mut cfg = state.cfg.lock().unwrap();
+        if let Some(r) = cfg.instances.iter_mut().find(|r| r.id == inst_id) {
+            r.quarantine.retain(|q| q.name != pkg);
+        }
+    }
+    state.persist()?;
+    Ok(())
 }
 
 // ---------- 市场 ----------
@@ -703,6 +1161,70 @@ pub async fn fetch_market(state: &App, force: bool) -> Result<Vec<MarketPlugin>,
     let list = map_market(raw);
     let _ = std::fs::write(&cache, serde_json::to_string(&list).unwrap_or_default());
     Ok(list)
+}
+
+#[cfg(test)]
+mod safety_tests {
+    use super::*;
+    use crate::model::InstanceMeta;
+    use std::fs;
+    use std::path::PathBuf;
+
+    fn fake_instance(tag: &str) -> InstanceMeta {
+        let dir = std::env::temp_dir().join(format!("eac-safety-{}-{}", tag, std::process::id()));
+        let _ = fs::remove_dir_all(&dir);
+        let inst = InstanceMeta {
+            id: format!("t-{tag}"),
+            dsh_home: dir.join("dsh-home"),
+            ..Default::default()
+        };
+        let profile = profile_dir(&inst);
+        fs::create_dir_all(&profile).unwrap();
+        fs::write(
+            profile.join("package.json"),
+            r#"{"dependencies":{"@dsh-plugin/dsh-loader":"^1.3.3"},"dsh":{"profile":{"bundles":["@deepseek-ai/dsh-base","@deepseek-ai/dsh-web-app","@dsh-plugin/dsh-loader"]}}}"#,
+        )
+        .unwrap();
+        fs::write(profile.join("cordis.patch.yml"), "[]\n").unwrap();
+        inst
+    }
+
+    /// 快照：三个元数据文件落盘、可枚举、超量裁剪
+    #[test]
+    fn snapshot_profile_roundtrip_and_prune() {
+        let inst = fake_instance("snap");
+        for _ in 0..23 {
+            snapshot_profile(&inst, "测试快照").unwrap();
+        }
+        let root = backups_root(&inst);
+        let snaps: Vec<_> = fs::read_dir(&root)
+            .unwrap()
+            .flatten()
+            .filter(|e| e.file_name().to_string_lossy().starts_with("snap-"))
+            .collect();
+        assert_eq!(snaps.len(), 20, "快照数量应裁剪到 20");
+        let newest = snaps
+            .iter()
+            .map(|e| e.path())
+            .max_by_key(|p| p.file_name().unwrap_or_default().to_string_lossy().to_string())
+            .unwrap();
+        assert!(newest.join("package.json").is_file());
+        assert!(newest.join("cordis.patch.yml").is_file());
+        assert!(newest.join("snapshot.json").is_file());
+        let _ = fs::remove_dir_all(inst.dsh_home.parent().unwrap());
+    }
+
+    /// 隔离/恢复的文件系统语义：quarantine_plugin 需要 state，这里直接验证
+    /// 隔离目录命名与恢复路径推导（prefix 规则）保持一致
+    #[test]
+    fn quarantine_naming_roundtrip() {
+        let pkg = "@dsh-plugin/dsh-loader";
+        let prefix = format!("{}-", pkg.replace(['/', '\\'], "__"));
+        assert_eq!(prefix, "@dsh-plugin__dsh-loader-");
+        let dir = PathBuf::from(format!("{prefix}abc123"));
+        let name = dir.file_name().unwrap().to_string_lossy().to_string();
+        assert!(name.starts_with(&prefix), "恢复时按 prefix 找回隔离目录");
+    }
 }
 
 #[cfg(test)]
@@ -828,5 +1350,121 @@ mod guard_tests {
             json!(["@deepseek-ai/dsh-base", "@deepseek-ai/dsh-web-app", "@dsh-plugin/dsh-loader"])
         );
         let _ = fs::remove_dir_all(&dir);
+    }
+
+    /// 本次事故的回归测试：快照为空（从未采集成功）时守卫不得空转，
+    /// 基础 bundles 必须被无条件兜底补回，否则 dsh web 启动即崩（退出码 1）。
+    #[test]
+    fn repair_floors_base_bundles_with_empty_snapshot() {
+        let dir = tmp_profile("floor");
+        let profile = dir.join("profiles").join("web-desktop");
+        let mp = profile.join("package.json");
+        fs::write(&mp, r#"{"dependencies":{"@dsh-plugin/dsh-loader":"^1.3.3"},"dsh":{"profile":{"bundles":[]}}}"#).unwrap();
+        let inst = crate::model::InstanceMeta {
+            dsh_home: dir.clone(),
+            last_good_bundles: Vec::new(),
+            ..Default::default()
+        };
+        repair_bundles_before_launch(&inst);
+        let m: Value = serde_json::from_str(&fs::read_to_string(&mp).unwrap()).unwrap();
+        assert_eq!(
+            m["dsh"]["profile"]["bundles"],
+            json!(["@deepseek-ai/dsh-base", "@deepseek-ai/dsh-web-app"]),
+            "空快照时基础 bundles 也必须兜底"
+        );
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    /// dependencies 里声明了 dsh.bundle 的已装插件（dsh-loader 等）应被恢复
+    #[test]
+    fn repair_recovers_dependency_bundles() {
+        let dir = tmp_profile("deps");
+        let profile = dir.join("profiles").join("web-desktop");
+        let mp = profile.join("package.json");
+        fs::write(&mp, r#"{"dependencies":{"@dsh-plugin/dsh-loader":"^1.3.3"},"dsh":{"profile":{"bundles":[]}}}"#).unwrap();
+        let pkg_dir = profile.join("node_modules").join("@dsh-plugin").join("dsh-loader");
+        fs::create_dir_all(&pkg_dir).unwrap();
+        fs::write(pkg_dir.join("package.json"), r#"{"name":"@dsh-plugin/dsh-loader","version":"1.3.3","dsh":{"bundle":{"patch":"./cordis.patch.yml"}}}"#).unwrap();
+        let inst = crate::model::InstanceMeta {
+            dsh_home: dir.clone(),
+            last_good_bundles: Vec::new(),
+            ..Default::default()
+        };
+        repair_bundles_before_launch(&inst);
+        let m: Value = serde_json::from_str(&fs::read_to_string(&mp).unwrap()).unwrap();
+        assert_eq!(
+            m["dsh"]["profile"]["bundles"],
+            json!(["@deepseek-ai/dsh-base", "@deepseek-ai/dsh-web-app", "@dsh-plugin/dsh-loader"])
+        );
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    /// 清单缺失时重建最小模板（bundles 兜底），EAC 首启自愈其余状态
+    #[test]
+    fn repair_rebuilds_missing_manifest() {
+        let dir = std::env::temp_dir().join(format!("eac-guard-missing-{}", std::process::id()));
+        let profile = dir.join("profiles").join("web-desktop");
+        fs::create_dir_all(&profile).unwrap();
+        let inst = crate::model::InstanceMeta {
+            dsh_home: dir.clone(),
+            ..Default::default()
+        };
+        repair_bundles_before_launch(&inst);
+        let mp = profile.join("package.json");
+        assert!(mp.exists(), "缺失的清单应被重建");
+        let m: Value = serde_json::from_str(&fs::read_to_string(&mp).unwrap()).unwrap();
+        assert_eq!(
+            m["dsh"]["profile"]["bundles"],
+            json!(["@deepseek-ai/dsh-base", "@deepseek-ai/dsh-web-app"])
+        );
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    /// 健康（含 EAC 内置伴生 bundle 等未知条目）时不得改写，也不能删除任何条目
+    #[test]
+    fn repair_noop_when_healthy_and_preserves_entries() {
+        let dir = tmp_profile("noop");
+        let profile = dir.join("profiles").join("web-desktop");
+        let mp = profile.join("package.json");
+        let healthy = r#"{"dsh":{"profile":{"bundles":["@deepseek-ai/dsh-base","@deepseek-ai/dsh-web-app","eac-companion-bundle"]}}}"#;
+        fs::write(&mp, healthy).unwrap();
+        let inst = crate::model::InstanceMeta {
+            dsh_home: dir.clone(),
+            last_good_bundles: vec!["@deepseek-ai/dsh-base".into(), "@deepseek-ai/dsh-web-app".into()],
+            ..Default::default()
+        };
+        repair_bundles_before_launch(&inst);
+        assert_eq!(
+            fs::read_to_string(&mp).unwrap(),
+            healthy,
+            "健康 bundles 不得被改写"
+        );
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    /// 真机手动验证：DSH_EAC_VERIFY_HOME=<实例 dsh-home> cargo test -- --ignored
+    /// repair_bundles_before_launch
+    /// 对真实实例目录执行生产 repair 函数，断言基础 bundles 被补回。
+    #[test]
+    #[ignore]
+    fn repair_real_instance_manual() {
+        let Ok(home) = std::env::var("DSH_EAC_VERIFY_HOME") else {
+            eprintln!("跳过：未设置 DSH_EAC_VERIFY_HOME");
+            return;
+        };
+        let dir = PathBuf::from(home);
+        let inst = crate::model::InstanceMeta {
+            dsh_home: dir.clone(),
+            ..Default::default()
+        };
+        let mp = profile_dir(&inst).join("package.json");
+        let before = read_profile_bundles(&mp);
+        eprintln!("repair 前 bundles: {before:?}");
+        repair_bundles_before_launch(&inst);
+        let after = read_profile_bundles(&mp);
+        eprintln!("repair 后 bundles: {after:?}");
+        for b in BASE_BUNDLES {
+            assert!(after.iter().any(|x| x == b), "基础 bundle {b} 必须在列");
+        }
     }
 }

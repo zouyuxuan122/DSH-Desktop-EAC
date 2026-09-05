@@ -10,6 +10,15 @@ export interface Settings {
 
 export type InstanceStatus = "installing" | "ready" | "error";
 
+export interface QuarantinedPlugin {
+  name: string;
+  id: string;
+  version: string;
+  spec: string;
+  reason: string;
+  at: number;
+}
+
 export interface InstanceMeta {
   id: string;
   name: string;
@@ -26,6 +35,13 @@ export interface InstanceMeta {
   lastLaunchedAt: number | null;
   launchCount: number;
   lastPid: number | null;
+  lastGoodBundles?: string[];
+  /** download = 启动器安装；imported = 本地导入（删除仅移除记录） */
+  origin?: string;
+  failStreak?: number;
+  lastFailReason?: string | null;
+  updateAvailable?: string | null;
+  quarantine?: QuarantinedPlugin[];
 }
 
 export interface Config {
@@ -80,4 +96,29 @@ export interface InstalledPlugin {
   isBundle: boolean;
   disabled: boolean;
   isCore: boolean;
+}
+
+export interface DoctorCheck {
+  id: string;
+  title: string;
+  level: "ok" | "warn" | "err";
+  detail: string;
+  fix: string | null;
+}
+
+export interface PluginSnapshot {
+  ts: number;
+  reason: string;
+  deps: number;
+}
+
+export interface ImportProbe {
+  ok: boolean;
+  reason: string;
+  dir: string;
+  exe: string | null;
+  edition: string;
+  version: string;
+  suggestedName: string;
+  dshHomeExists: boolean;
 }

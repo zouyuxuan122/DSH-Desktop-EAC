@@ -611,3 +611,105 @@
   background: var(--paper);
   color: var(--ink-0);
 }
+
+/* ---------- 安全中心 ---------- */
+
+.safety-stats {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+  margin-top: 18px;
+}
+
+.stat-block {
+  border: 1px solid var(--line);
+  background: linear-gradient(160deg, var(--ink-1), transparent 70%);
+  padding: 14px 16px 12px;
+  position: relative;
+  overflow: hidden;
+}
+
+.stat-block::after {
+  content: "";
+  position: absolute;
+  inset: auto 0 0 0;
+  height: 2px;
+  background: var(--paper);
+  opacity: .18;
+}
+
+.stat-block.warn::after { background: var(--warn); opacity: .8; }
+.stat-block.err::after { background: var(--danger); opacity: .8; }
+
+.stat-block .num {
+  font-size: 30px;
+  font-weight: 640;
+  letter-spacing: -0.02em;
+  line-height: 1;
+}
+
+.stat-block .lbl {
+  margin-top: 7px;
+  font-size: 11px;
+  color: var(--paper-dim);
+  letter-spacing: .08em;
+}
+
+.panel {
+  border: 1px solid var(--line);
+  background: color-mix(in srgb, var(--ink-1) 72%, transparent);
+  padding: 18px 20px 20px;
+  margin-bottom: 16px;
+  box-shadow: 0 1px 0 rgba(0,0,0,.25), inset 0 1px 0 rgba(255,255,255,.03);
+}
+
+.panel-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 12px;
+}
+
+.panel-head h3 {
+  font-size: 15px;
+  font-weight: 660;
+  letter-spacing: .02em;
+}
+
+.check-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 9px 0;
+  border-bottom: 1px dashed var(--line);
+}
+
+.check-row:last-child { border-bottom: none; }
+.check-row .dot { flex: none; }
+
+.pick-row {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  width: 100%;
+  text-align: left;
+  padding: 10px 14px;
+  border: 1px solid var(--line);
+  background: var(--ink-1);
+  color: var(--paper);
+  cursor: pointer;
+  transition: border-color .15s ease, background .15s ease;
+}
+
+.pick-row:hover { border-color: var(--paper); background: var(--ink-2); }
+.pick-row.sel { border-color: var(--paper); box-shadow: inset 3px 0 0 var(--paper); }
+.pick-row .spacer { flex: 1; }
+
+[data-theme="light"] .panel { background: color-mix(in srgb, var(--ink-1) 55%, transparent); }
+[data-theme="light"] .pick-row { background: var(--ink-1); color: var(--paper); }
+[data-theme="light"] .pick-row:hover { background: var(--ink-2); }
+
+.chip.danger {
+  border-color: var(--danger);
+  color: var(--danger);
+}

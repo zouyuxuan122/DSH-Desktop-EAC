@@ -99,6 +99,30 @@ async function boot(): Promise<void> {
     toast("安装失败", inst?.errorMessage ?? id, "err");
     refreshCurrentView();
   });
+  void onInstanceEvent("instance:recovered", async (id) => {
+    const c = await api.getState();
+    hydrate(c);
+    const inst = c.instances.find((i) => i.id === id);
+    toast(
+      "崩溃守卫已介入",
+      `${inst?.name ?? id} 连续启动失败，已自动隔离全部第三方插件并修复 bundles。可在「安全中心」恢复或回滚。`,
+      "err",
+    );
+    refreshCurrentView();
+  });
+  void onInstanceEvent("instance:upgraded", async (id) => {
+    const c = await api.getState();
+    hydrate(c);
+    const inst = c.instances.find((i) => i.id === id);
+    toast("版本切换完成", `${inst?.name ?? id} 现为 ${inst?.tag ?? "?"}，数据与插件已保留`);
+    refreshCurrentView();
+  });
+  void onInstanceEvent("instance:repaired", async (id) => {
+    const c = await api.getState();
+    hydrate(c);
+    refreshCurrentView();
+    void id;
+  });
 
   // 运行状态轮询
   const poll = async () => {
@@ -108,6 +132,11 @@ async function boot(): Promise<void> {
         const r = await api.isInstanceRunning(inst.id);
         if (!!state.running[inst.id] !== r) {
           setState({ running: { ...state.running, [inst.id]: r } });
+          // 运行状态翻转时同步注册表（崩溃/退出后徽标即时还原）
+          if (!r) {
+            const c = await api.getState();
+            hydrate(c);
+          }
         }
       } catch {
         /* 忽略轮询错误 */
@@ -116,6 +145,23 @@ async function boot(): Promise<void> {
   };
   void poll();
   setInterval(() => void poll(), 4000);
+
+  // 上游更新检查（后台，不阻塞进入）
+  void (async () => {
+    try {
+      const instances = await api.checkUpdates();
+      hydrate({ settings: state.settings!, instances });
+      const up = instances.filter((i) => i.updateAvailable);
+      if (up.length > 0) {
+        toast(
+          "发现新版本",
+          `${up.map((i) => `${i.name} → ${i.updateAvailable}`).join("，")} · 可在安全中心升级`,
+        );
+      }
+    } catch {
+      /* 离线/网络失败不打扰 */
+    }
+  })();
 
   // 首次运行 → 引导向导
   const enter = () => {

@@ -6,8 +6,8 @@ import { ico } from "../ui/icons";
 import { api, sys } from "../core/api";
 import { state, setState } from "../core/store";
 import { fmtBytes, fmtIsoDate, pct } from "../core/format";
-import type { EditionInfo } from "../core/types";
-import { toast } from "../ui/feedback";
+import type { EditionInfo, InstanceMeta } from "../core/types";
+import { toast, confirmModal, promptModal } from "../ui/feedback";
 import { refreshCurrentView } from "../app";
 
 type StepId = "welcome" | "edition" | "install" | "done";
@@ -172,10 +172,45 @@ export function openWizard(mode: "first" | "add"): () => void {
   const pageEdition = (page: HTMLElement) => {
     page.append(
       h("div", { class: "o-title" }, "选择版本，", h("span", { class: "serif" }, "起个名字")),
-      h("div", { class: "o-sub" }, "产物信息实时解析自 zouyuxuan122/DSH-Desktop-EAC 的最新 Release。"),
+      h("div", { class: "o-sub" }, "产物信息实时解析自 zouyuxuan122/DSH-Desktop-EAC。默认最新版；点版本徽章可切换历史版本（降级）。"),
     );
     const grid = h("div", { class: "ed-grid" });
     page.append(grid);
+
+    // 版本历史行（默认收起）
+    let history: EditionInfo[] = [];
+    let historyOpen = false;
+    const historyRow = h("div", { style: { marginTop: "14px", maxWidth: "480px" } });
+    const drawHistory = () => {
+      historyRow.innerHTML = "";
+      if (historyOpen && history.length > 0) {
+        history.forEach((e) => {
+          historyRow.append(h("button", {
+            class: `pick-row ${chosen?.tag === e.tag ? "sel" : ""}`,
+            onClick: () => {
+              chosen = e;
+              if (!instName) {
+                instName = e.edition === "lite" ? "轻量实例" : "主力实例";
+                nameInput.value = instName;
+              }
+              renderCards();
+              drawHistory();
+              drawFoot();
+            },
+          },
+            h("span", { class: "mono", style: { fontWeight: 600 } }, e.tag),
+            h("span", { class: "mono faint", style: { fontSize: "11px" } },
+              `${fmtBytes(e.asset.size)} · ${fmtIsoDate(e.publishedAt)}`),
+          ));
+        });
+      } else if (history.length > 1) {
+        historyRow.append(h("button", {
+          class: "btn small ghost",
+          onClick: () => { historyOpen = true; drawHistory(); },
+        }, ico("list"), `历史版本（${history.length} 个，可降级）`));
+      }
+    };
+    page.append(historyRow);
 
     const nameField = h("div", { class: "field", style: { marginTop: "26px", maxWidth: "480px" } });
     page.append(nameField);
@@ -223,6 +258,14 @@ export function openWizard(mode: "first" | "add"): () => void {
             }
             renderCards();
             drawFoot();
+            // 切 edition 后刷新历史列表
+            void (async () => {
+              try {
+                const all = await api.listEditions(ed.edition);
+                history = all.filter((e) => e.edition === ed.edition);
+                drawHistory();
+              } catch { /* 离线时隐藏历史 */ }
+            })();
           },
         },
           h("div", { class: "corner" }, h("span", { innerHTML: ico("check").innerHTML })),
@@ -243,7 +286,16 @@ export function openWizard(mode: "first" | "add"): () => void {
       }
     };
     renderCards();
-    void loadEditions().then(renderCards);
+    void loadEditions().then(() => {
+      renderCards();
+      void (async () => {
+        try {
+          const all = await api.listEditions();
+          history = all.filter((e) => (chosen ? e.edition === chosen.edition : e.edition === "full"));
+          drawHistory();
+        } catch { /* 离线时隐藏历史 */ }
+      })();
+    });
   };
 
   const loadEditions = async () => {
@@ -384,4 +436,35 @@ export function openWizard(mode: "first" | "add"): () => void {
 
   goto(step);
   return close;
+}
+
+/** 导入本地实例弹窗：选目录 → 探测 → 确认接管（原地，不移动文件）。返回导入后的实例。 */
+export async function openImportModal(): Promise<InstanceMeta | null> {
+  const start = state.settings?.instanceRoot ?? "D:\\";
+  const picked = await sys.pickFolder("选择 EAC 实例目录（壳 exe 所在目录）", start);
+  if (!picked) return null;
+  const probe = await api.probeImport(picked);
+  if (!probe.ok) {
+    await confirmModal({
+      title: "无法导入",
+      body: `${picked}\n\n${probe.reason}`,
+      confirmText: "知道了",
+    });
+    return null;
+  }
+  const ok = await confirmModal({
+    title: "导入本地实例",
+    body: `识别成功，将原地接管（不移动、不修改你的文件）：
+
+目录    ${probe.dir}
+类型    ${probe.edition === "lite" ? "Lite 轻量版" : "完整版"}
+版本    ${probe.version || "未知"}
+主程序  ${probe.exe}
+数据目录  ${probe.dir}\dsh-home${probe.dshHomeExists ? "（已存在，沿用）" : "（将创建）"}`,
+    confirmText: "导入",
+  });
+  if (!ok) return null;
+  const name = await promptModal({ title: "实例名称", value: probe.suggestedName });
+  if (name === null) return null;
+  return await api.importInstance(picked, name || undefined);
 }

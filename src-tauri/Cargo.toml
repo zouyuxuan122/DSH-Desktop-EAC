@@ -1,6 +1,6 @@
 [package]
 name = "dsh-eac-launcher"
-version = "1.0.0"
+version = "1.1.0"
 description = "DSH EAC Launcher — 多实例 DSH EAC 桌面启动器"
 authors = ["dsh-eac"]
 edition = "2021"

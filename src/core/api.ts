@@ -6,10 +6,13 @@ import { open as dialogOpen } from "@tauri-apps/plugin-dialog";
 import { openPath, revealItemInDir } from "@tauri-apps/plugin-opener";
 import type {
   Config,
+  DoctorCheck,
   EditionInfo,
+  ImportProbe,
   InstalledPlugin,
   InstanceMeta,
   MarketPlugin,
+  PluginSnapshot,
   Settings,
   TaskInfo,
 } from "./types";
@@ -18,13 +21,36 @@ export const api = {
   getState: () => invoke<Config>("get_state"),
   setSettings: (settings: Settings) => invoke<void>("set_settings", { settings }),
   resolveEditions: () => invoke<EditionInfo[]>("resolve_editions"),
+  listEditions: (edition?: string) =>
+    invoke<EditionInfo[]>("list_editions", { edition: edition ?? null }),
+  checkUpdates: () => invoke<InstanceMeta[]>("check_updates"),
   createInstance: (name: string, edition: string, info: EditionInfo) =>
     invoke<InstanceMeta>("create_instance", { name, edition, info }),
   retryInstanceInstall: (id: string) => invoke<void>("retry_instance_install", { id }),
+  probeImport: (path: string) => invoke<ImportProbe>("probe_import", { path }),
+  importInstance: (path: string, name?: string) =>
+    invoke<InstanceMeta>("import_instance", { path, name: name ?? null }),
+  unregisterInstance: (id: string) => invoke<void>("unregister_instance", { id }),
+  upgradeInstance: (id: string, info: EditionInfo) =>
+    invoke<void>("upgrade_instance", { id, info }),
+  rollbackInstance: (id: string) => invoke<string>("rollback_instance", { id }),
+  getDoctor: (id: string) => invoke<DoctorCheck[]>("get_doctor", { id }),
+  doctorFix: (id: string, check: string) => invoke<string>("doctor_fix", { id, check }),
+  pluginSnapshots: (id: string) => invoke<PluginSnapshot[]>("plugin_snapshots", { id }),
+  restoreSnapshot: (id: string, ts: number) =>
+    invoke<string>("plugin_restore_snapshot", { id, ts }),
+  quarantineAll: (id: string, reason?: string) =>
+    invoke<number>("quarantine_all", { id, reason: reason ?? null }),
+  quarantineRestore: (id: string, pkg: string) =>
+    invoke<void>("quarantine_restore", { id, pkg }),
+  quarantinePurge: (id: string, pkg: string) =>
+    invoke<void>("quarantine_purge", { id, pkg }),
+  reinstallDeps: (id: string) => invoke<string>("reinstall_deps", { id }),
   getTasks: () => invoke<TaskInfo[]>("get_tasks"),
   cancelTask: (id: string) => invoke<void>("cancel_task", { id }),
   clearTask: (id: string) => invoke<void>("clear_task", { id }),
-  launchInstance: (id: string) => invoke<number>("launch_instance", { id }),
+  launchInstance: (id: string, safe = false) =>
+    invoke<number>("launch_instance", { id, safe }),
   stopInstance: (id: string) => invoke<void>("stop_instance", { id }),
   isInstanceRunning: (id: string) => invoke<boolean>("is_instance_running", { id }),
   deleteInstance: (id: string) => invoke<void>("delete_instance", { id }),
@@ -56,7 +82,12 @@ export function onTaskUpdate(fn: (t: TaskInfo) => void): Promise<() => void> {
 }
 
 export function onInstanceEvent(
-  name: "instance:ready" | "instance:error",
+  name:
+    | "instance:ready"
+    | "instance:error"
+    | "instance:recovered"
+    | "instance:upgraded"
+    | "instance:repaired",
   fn: (id: string) => void,
 ): Promise<() => void> {
   return listen<string>(name, (e) => fn(e.payload));

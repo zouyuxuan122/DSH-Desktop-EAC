@@ -20,6 +20,7 @@
   --line-faint: rgba(236, 228, 207, 0.06);
 
   --danger: #e5484d;
+  --warn: #d9a441;
 
   /* 强调：米黄实心块 */
   --accent: #ece4cf;
@@ -74,6 +75,9 @@
   --line: rgba(35, 32, 26, 0.14);
   --line-strong: rgba(35, 32, 26, 0.32);
   --line-faint: rgba(35, 32, 26, 0.07);
+
+  --danger: #c53034;
+  --warn: #a56d17;
 
   --accent: #2b2820;
   --accent-contrast: #f2ecdc;

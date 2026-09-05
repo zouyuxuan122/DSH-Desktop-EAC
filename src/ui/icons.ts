@@ -29,6 +29,11 @@ export const icons = {
   plug: S(`<path d="M5.5 2.5v3M10.5 2.5v3M4 5.5h8v2.5a4 4 0 0 1-8 0zM8 12v2"/>`),
   back: S(`<path d="M13 8H3M6.5 4.5L3 8l3.5 3.5"/>`),
   arrow: S(`<path d="M3 8h9M8.5 4.5L12 8l-3.5 3.5"/>`),
+  // 安全中心
+  shield: S(`<path d="M8 1.8l5 1.9v4.1c0 3.2-2.1 5.6-5 6.4-2.9-.8-5-3.2-5-6.4V3.7z"/><path d="M5.6 8l1.7 1.7 3.1-3.4"/>`),
+  up: S(`<path d="M8 13.5V3.5M4.5 7L8 3.5 11.5 7M3 13.5h10"/>`),
+  undo: S(`<path d="M2.5 6.5h7a3.5 3.5 0 1 1 0 7H6M2.5 6.5L6 3M2.5 6.5L6 10"/>`),
+  list: S(`<path d="M5.5 4h8M5.5 8h8M5.5 12h8M2.5 4h.01M2.5 8h.01M2.5 12h.01"/>`),
 };
 
 export function ico(name: keyof typeof icons, cls = ""): HTMLElement {

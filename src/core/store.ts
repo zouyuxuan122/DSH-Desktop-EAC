@@ -9,7 +9,7 @@ import type {
   TaskInfo,
 } from "./types";
 
-export type ViewId = "home" | "market" | "tasks" | "settings";
+export type ViewId = "home" | "safety" | "market" | "tasks" | "settings";
 
 export interface AppState {
   view: ViewId;

@@ -71,6 +71,39 @@ pub struct InstanceMeta {
     /// 用于在启动前修复被 EAC 退出流程清空的基础 bundles
     #[serde(default)]
     pub last_good_bundles: Vec<String>,
+    /// 实例来源：download（启动器安装）/ imported（本地导入，删除时只移除记录不动文件）
+    #[serde(default)]
+    pub origin: String,
+    /// 连续快速失败（启动后短时间退出）次数；成功启动后清零
+    #[serde(default)]
+    pub fail_streak: u32,
+    /// 最近一次启动失败的诊断摘要（人类可读）
+    #[serde(default)]
+    pub last_fail_reason: Option<String>,
+    /// 上游有新版本的 tag（check_updates 时刷新）
+    #[serde(default)]
+    pub update_available: Option<String>,
+    /// 已隔离的第三方插件（可恢复/可彻底清除）
+    #[serde(default)]
+    pub quarantine: Vec<QuarantinedPlugin>,
+}
+
+/// 被隔离的第三方插件记录
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", default)]
+pub struct QuarantinedPlugin {
+    /// npm 包名
+    pub name: String,
+    /// cordis id
+    pub id: String,
+    /// 隔离时的版本
+    pub version: String,
+    /// 原 dependencies 中的 spec（恢复时写回）
+    pub spec: String,
+    /// 隔离原因（crash-guard / safe-launch / manual）
+    pub reason: String,
+    /// 隔离时间戳（ms）
+    pub at: u64,
 }
 
 impl Default for InstanceMeta {
@@ -92,8 +125,39 @@ impl Default for InstanceMeta {
             launch_count: 0,
             last_pid: None,
             last_good_bundles: Vec::new(),
+            origin: "download".into(),
+            fail_streak: 0,
+            last_fail_reason: None,
+            update_available: None,
+            quarantine: Vec::new(),
         }
     }
+}
+
+/// 健康检查单项
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DoctorCheck {
+    pub id: String,
+    pub title: String,
+    /// ok / warn / err
+    pub level: String,
+    pub detail: String,
+    /// 可一键修复时的修复动作 id（doctor_fix 的 check 参数）
+    #[serde(default)]
+    pub fix: Option<String>,
+}
+
+/// 插件 profile 快照信息（回滚用）
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PluginSnapshot {
+    /// 快照时间戳（ms），即目录名 snap-<ts>
+    pub ts: u64,
+    /// 快照原因（安装/卸载/停用前自动创建，或手动）
+    pub reason: String,
+    /// 快照内 dependencies 数量
+    pub deps: usize,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
