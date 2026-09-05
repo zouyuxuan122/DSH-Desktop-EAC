@@ -36,6 +36,19 @@ const { healSoulMdPatchRow, removeBundledRowDuplicates, collectBundleEntryIds } 
   removeBundledRowDuplicates(patch: string, rowIds: Record<string, unknown>, bundleNames: unknown[], bundleEntryIds: Set<string>): { patch: string; removed: string[] };
   collectBundleEntryIds(bundleNames: unknown[], profileNodeModules: string): Set<string>;
 };
+const { togglePluginInPatch } = require('./scripts/plugin-manager-patch') as {
+  togglePluginInPatch(text: string, id: string, enabled: boolean, name?: string): string;
+};
+// semver 随 dsh 内核闭包/锁文件携带；个别精简环境缺失时降级：peer 版本比对
+// 全部按「提示级」处理（绝不误判、绝不崩），模块缺失/入口/注入检查不受影响。
+interface SemverLike {
+  satisfies(v: string, r: string): boolean;
+  validRange(r: string): string | null;
+  minVersion(r: string): { major: number; minor: number; patch: number } | null;
+  coerce(v: string): { major: number; minor: number; patch: number } | null;
+}
+let semverLib: SemverLike | null = null;
+try { semverLib = require('semver') as SemverLike; } catch { /* semver 不可用 → 降级 */ }
 
 // 快照覆盖的 profile 配置面：插件树的全部「声明性」状态。
 const GUARD_FILES: string[] = ['package.json', 'pnpm-lock.yaml', 'pnpm-workspace.yaml', 'cordis.patch.yml'];
@@ -79,6 +92,42 @@ interface Finding {
   severity: 'high' | 'medium' | 'low';
   message: string;
   fixable: boolean;
+  /** 版本兼容防线的发现项归属（patch 行条目），供自动/手动隔离定位。 */
+  entry?: { id: string | null; name: string; fromBundle?: boolean };
+}
+
+/** 版本兼容防线（v0.2）：内核版本 + 每条 patch 条目的安装/入口/peer/inject 状态。 */
+interface CompatPeer {
+  dep: string;
+  required: string;
+  actual: string | null;
+  verdict: 'ok' | 'low' | 'high' | 'missing' | 'optional';
+  ok: boolean;
+  optional: boolean;
+}
+interface CompatInject {
+  dep: string;
+  ok: boolean;
+  alias?: boolean;
+}
+interface CompatRow {
+  id: string | null;
+  name: string | null;
+  enabled: boolean;
+  fromBundle: boolean;
+  installed: boolean;
+  version: string | null;
+  entryPoint: string | null;
+  kernelWindow: string | null;
+  peers: CompatPeer[];
+  inject: CompatInject[];
+  issues: string[];
+}
+interface CompatReport {
+  at: string;
+  profile: string;
+  kernel: { name: string; version: string | null };
+  entries: CompatRow[];
 }
 
 interface GuardState {
@@ -107,6 +156,11 @@ interface GuardApi {
   readIncident(id: string): { ok: boolean; content?: string; error?: string };
   resolveIncident(id: string): { ok: boolean; error?: string };
   attributeBootFailure(errText: string): BootAttribution | null;
+  // 版本兼容防线（v0.2）
+  compatFindings(dir?: string): Finding[];
+  versionReport(): CompatReport;
+  quarantineFatal(opts?: { quarantinePeers?: boolean }): { checked: number; quarantined: string[] };
+  quarantineById(id: string): { ok: boolean; error?: string; snapshot?: string | null; alreadyDisabled?: boolean; restartRequired?: boolean };
 }
 
 function createGuard(opts: GuardOpts): GuardApi {
@@ -268,6 +322,10 @@ function createGuard(opts: GuardOpts): GuardApi {
 
     // 高危静态扫描：只扫非内置的第三方包。
     findings.push(...trojanFindings(dir));
+
+    // 版本兼容防线（v0.2）：插件包/入口缺失、peer 依赖不满足、client 注入
+    // 缺失、内核版本窗口违例（只读 manifest，绝不执行插件代码）。
+    findings.push(...compatFindings(dir));
 
     return { at: new Date().toISOString(), profile: getProfile(), findings };
   }
@@ -469,6 +527,419 @@ function createGuard(opts: GuardOpts): GuardApi {
     return out;
   }
 
+  // ── 版本兼容防线（v0.2）────────────────────────────────────────────
+  // 把「插件与内核/依赖对不上」在启动前静态揪出来，而不是等 loader import
+  // 时整棵插件树崩掉（实战根因：cordis.patch.yml 引用 dsh-memory 但包缺失
+  // → ERR_MODULE_NOT_FOUND → dsh web 退出码 1 连环事故）。只读 manifest 与
+  // package.json（绝不执行插件代码）；可自动处置的发现项走「快照 → patch
+  // disabled → incident」隔离，与其余 repair 同层：只动配置面与插件层。
+  //
+  // 检查面：
+  //   ENTRY_MODULE_MISSING    patch 行/bundle 引用的插件包或入口文件缺失
+  //                           （loader import 必崩）
+  //   ENTRY_PEER_UNSATISFIED  peerDependencies 未安装或大版本线不满足
+  //   PEER_RANGE_DRIFT        peer 版本仅 pre-release/patch 层面漂移（提示级）
+  //   ENTRY_INJECT_MISSING    dsh.client.inject 引用的客户端包缺失（UI 挂点崩）
+  //   KERNEL_RANGE_VIOLATION  dsh.kernel 声明的版本窗口与内核不匹配（新契约）
+  // 隔离边界：@deepseek-ai/* 内核同源包不自动隔离（缺失=安装损坏，走回滚/重装）。
+  const COMPAT_MAX_FINDINGS = 40;
+  const COMPAT_CORE_PREFIXES = ['@deepseek-ai/'];
+
+  interface PatchEntryRow {
+    id: string | null;
+    name: string | null;
+    disabled: boolean;
+    inInsert: boolean;
+    fromBundle: boolean;
+  }
+
+  function patchEntryRows(dir: string): PatchEntryRow[] {
+    const out: PatchEntryRow[] = [];
+    const file = path.join(dir, 'cordis.patch.yml');
+    let text: string;
+    try {
+      text = fs.readFileSync(file, 'utf8');
+    } catch {
+      return out;
+    }
+    const lines = text.split(/\r?\n/);
+    for (let i = 0; i < lines.length; i++) {
+      const line = lines[i];
+      if (!line) continue;
+      const m = /^([ \t]*)- id:\s*([A-Za-z0-9_.-]+)\s*$/.exec(line);
+      if (!m) continue;
+      const indent = m[1]!.length;
+      const entry: PatchEntryRow = { id: m[2]!, name: null, disabled: false, inInsert: indent > 0, fromBundle: false };
+      for (let j = i + 1; j < lines.length; j++) {
+        const l2 = lines[j];
+        if (!l2) break;
+        const m2 = /^([ \t]*)(.*)$/.exec(l2);
+        if (!m2) break;
+        const ws = m2[1] ?? '';
+        const rest = m2[2] ?? '';
+        if (!rest || ws.length <= indent) break; // 兄弟条目 / 外层结构：块结束
+        const nm = /^name:\s*['"]?([^'"\s]+)['"]?\s*(?:#.*)?$/.exec(rest);
+        if (nm) entry.name = nm[1]!;
+        const dm = /^disabled:\s*(true|false)\b/.exec(rest);
+        if (dm) entry.disabled = dm[1] === 'true';
+      }
+      out.push(entry);
+    }
+    // bundle 聚合（profile package.json dsh.profile.bundles）：bundle 包自身
+    // 缺失同样会拖垮启动 → 并入条目集做存在性检查。
+    const manifest = readJson(path.join(dir, 'package.json'), {});
+    const bundles: string[] = (manifest.dsh && manifest.dsh.profile && Array.isArray(manifest.dsh.profile.bundles)) ? manifest.dsh.profile.bundles : [];
+    for (const name of bundles) {
+      if (out.some((e) => e.name === name || e.id === name)) continue;
+      out.push({ id: null, name, disabled: false, inInsert: false, fromBundle: true });
+    }
+    return out;
+  }
+
+  // 包目录查找：profile node_modules → 共享 junction 层 → 安装闭包 node_modules。
+  function resolvePkgDir(dir: string, name: string): string | null {
+    const roots = [path.join(dir, 'node_modules'), path.join(home(), 'profiles', 'node_modules')];
+    const closure = expectedClosureRoot();
+    if (closure) roots.push(closure); // expectedClosureRoot 即 node_modules 根
+    for (const root of roots) {
+      const p = path.join(root, ...String(name).split('/'));
+      try {
+        if (fs.statSync(p).isDirectory() && fs.existsSync(path.join(p, 'package.json'))) return p;
+      } catch { /* 顺着找 */ }
+    }
+    return null;
+  }
+
+  // 入口解析：exports['.'] → main → index.js（对齐 ESM loader 行为）。
+  function resolveEntryPoint(pkgDir: string, pkg: Record<string, unknown> | null): string | null {
+    const candidates: string[] = [];
+    const dot = pkg && pkg.exports && typeof pkg.exports === 'object' ? (pkg.exports as Record<string, unknown>)['.'] : null;
+    if (typeof dot === 'string') candidates.push(dot);
+    else if (dot && typeof dot === 'object') {
+      const ex = dot as Record<string, unknown>;
+      if (typeof ex.import === 'string') candidates.push(ex.import);
+      if (typeof ex.default === 'string') candidates.push(ex.default);
+      if (typeof ex.require === 'string') candidates.push(ex.require);
+    }
+    if (pkg && typeof pkg.main === 'string') candidates.push(pkg.main);
+    candidates.push('index.js');
+    for (const c of candidates) {
+      const p = path.join(pkgDir, c);
+      try {
+        if (fs.statSync(p).isFile()) return p;
+        if (fs.statSync(p).isDirectory() && fs.existsSync(path.join(p, 'index.js'))) return path.join(p, 'index.js');
+      } catch { /* 下一个候选 */ }
+    }
+    return null;
+  }
+
+  // 依赖实际版本查找（peers 对照）：profile → 共享层 → 闭包。
+  function resolveDepVersion(dir: string, dep: string): string | null {
+    const roots = [path.join(dir, 'node_modules'), path.join(home(), 'profiles', 'node_modules')];
+    const closure = expectedClosureRoot();
+    if (closure) roots.push(closure);
+    for (const root of roots) {
+      const pkg = readJson(path.join(root, ...String(dep).split('/'), 'package.json'), null);
+      if (pkg && pkg.version) return pkg.version;
+    }
+    return null;
+  }
+
+  // 内核版本：从安装闭包 @deepseek-ai/dsh 读（expectedClosureRoot 即闭包
+  // node_modules 根；dshBin 已区分内置/overlay）。
+  function kernelVersion(): string | null {
+    const closure = expectedClosureRoot();
+    if (!closure) return null;
+    const pkg = readJson(path.join(closure, '@deepseek-ai', 'dsh', 'package.json'), null);
+    return (pkg && pkg.version) || null;
+  }
+
+  // peer 版本务实比对：dsh 生态在 rc/alpha 时代普遍用 `*`、^0.1.0-rc.x 声明
+  // 兼容范围，而内核实际版本常带 -alpha/-rc tag —— 严格 semver（prerelease
+  // 版本只匹配显式含同族 prerelease 的 range）会把全部兼容插件误报为不兼容。
+  // 策略：先严格比对；失败则剥掉全部 prerelease tag 宽松比对；仍失败且
+  // 主次版本线（major.minor）不一致 → 真不兼容（'high'，可隔离）；仅
+  // prerelease/patch 层面差 → 'low'（提示级，不隔离）。semver 不可用时
+  // 全部落 'low'，绝不误判。
+  function peerCheck(got: string, want: string): 'ok' | 'low' | 'high' {
+    if (semverLib) {
+      try { if (semverLib.satisfies(got, want)) return 'ok'; } catch { /* 落宽松 */ }
+    }
+    const strip = (r: string) => String(r).replace(/-[0-9A-Za-z.-]+/g, '').trim();
+    try {
+      const w2 = strip(want);
+      const g2 = strip(got);
+      if (!w2 || w2 === '*' || w2 === 'x') return 'ok'; // 任意版本
+      if (!semverLib) return 'low'; // semver 不可用 → 提示级
+      if (!semverLib.validRange(w2)) return 'low'; // range 无法解析 → 提示级
+      if (semverLib.satisfies(g2, w2)) return 'ok'; // 剥 tag 后满足 → 生态兼容
+      // 宽松仍不满足 → 区分真不兼容（主次版本线不符）与补丁/预发布漂移
+      const wMin = semverLib.minVersion(w2);
+      const gv = semverLib.coerce(g2);
+      if (wMin && gv && (wMin.major !== gv.major || wMin.minor !== gv.minor)) return 'high';
+      return 'low';
+    } catch {
+      return 'low';
+    }
+  }
+
+  // dsh.kernel 契约：semver range 字符串或 { min, max }；不满足返回说明，否则 null。
+  function kernelWindowCheck(pkg: Record<string, unknown> | null, kernel: string | null): string | null {
+    const w = pkg && pkg.dsh ? (pkg.dsh as Record<string, unknown>).kernel : null;
+    if (!w || w === true) return null; // 未声明 / true = 只要求运行在 dsh 内核上
+    if (!semverLib) return null;
+    try {
+      if (typeof w === 'string') {
+        if (!kernel || !semverLib.validRange(w)) return null;
+        return semverLib.satisfies(kernel, w) ? null : `要求 ${w}，当前 ${kernel || '未知'}`;
+      }
+      if (w && typeof w === 'object') {
+        const k = kernel || '0.0.0';
+        const wo = w as Record<string, unknown>;
+        if (typeof wo.min === 'string' && !semverLib.satisfies(k, '>=' + wo.min)) return `要求 >=${wo.min}，当前 ${kernel || '未知'}`;
+        if (typeof wo.max === 'string' && !semverLib.satisfies(k, '<=' + wo.max)) return `要求 <=${wo.max}，当前 ${kernel || '未知'}`;
+      }
+    } catch { /* 声明不可解析 → 不拦 */ }
+    return null;
+  }
+
+  function compatFindings(dir: string): Finding[] {
+    const out: Finding[] = [];
+    const kernel = kernelVersion();
+    for (const entry of patchEntryRows(dir)) {
+      if (out.length >= COMPAT_MAX_FINDINGS) break;
+      const name = entry.name || entry.id;
+      if (!name) continue;
+      const pkgDir = resolvePkgDir(dir, name);
+      if (!pkgDir) {
+        if (!entry.disabled) {
+          out.push({
+            code: 'ENTRY_MODULE_MISSING', severity: 'high', fixable: true,
+            entry: { id: entry.id, name, fromBundle: entry.fromBundle },
+            message: `${entry.fromBundle ? 'bundle' : 'patch 行'} ${entry.id || name}（${name}）引用的插件包不存在（loader import 必崩）`,
+          });
+        }
+        continue;
+      }
+      const pkg = readJson(path.join(pkgDir, 'package.json'), null) as Record<string, unknown> | null;
+      if (!entry.disabled && pkg && !resolveEntryPoint(pkgDir, pkg)) {
+        out.push({
+          code: 'ENTRY_MODULE_MISSING', severity: 'high', fixable: true,
+          entry: { id: entry.id, name },
+          message: `${entry.id || name}（${name}）的入口文件缺失（main/exports 均不可解析）: ${path.relative(dir, pkgDir)}`,
+        });
+      }
+      if (!entry.disabled && pkg && pkg.peerDependencies) {
+        const optional = pkg.peerDependenciesMeta && typeof pkg.peerDependenciesMeta === 'object' ? pkg.peerDependenciesMeta as Record<string, Record<string, unknown>> : {};
+        const peers = pkg.peerDependencies as Record<string, unknown>;
+        let n = 0;
+        for (const dep of Object.keys(peers)) {
+          if (n >= 4 || out.length >= COMPAT_MAX_FINDINGS) break;
+          if (optional[dep] && optional[dep].optional === true) continue; // 可选 peer：不拦
+          const want = String(peers[dep]);
+          const got = resolveDepVersion(dir, dep);
+          if (!got) {
+            n += 1;
+            out.push({
+              code: 'ENTRY_PEER_UNSATISFIED', severity: 'high', fixable: true,
+              entry: { id: entry.id, name },
+              message: `${entry.id || name}（${name}）的运行时依赖 ${dep}（要求 ${want}）未安装`,
+            });
+            continue;
+          }
+          const verdict = peerCheck(got, want);
+          if (verdict === 'high') {
+            n += 1;
+            out.push({
+              code: 'ENTRY_PEER_UNSATISFIED', severity: 'high', fixable: true,
+              entry: { id: entry.id, name },
+              message: `${entry.id || name}（${name}）的运行时依赖不兼容：${dep} 要求 ${want}，实际 ${got}`,
+            });
+          } else if (verdict === 'low') {
+            n += 1;
+            out.push({
+              code: 'PEER_RANGE_DRIFT', severity: 'low', fixable: false,
+              entry: { id: entry.id, name },
+              message: `${entry.id || name}（${name}）依赖 ${dep} 版本漂移：要求 ${want}，实际 ${got}（预发布/补丁级差异，仅提示）`,
+            });
+          }
+        }
+      }
+      // dsh.client.inject 客户端包缺失 → web UI 挂点崩（只报告，自动隔离无意义）。
+      // 裸名依赖是内核的别名机制（如 slots → @deepseek-ai/dsh-client-ui-slots），
+      // 只有含 @scope/ 或裸包名的完整引用才做存在性检查。
+      if (!entry.disabled && pkg && pkg.dsh) {
+        const dshMeta = pkg.dsh as Record<string, unknown>;
+        const inject = dshMeta.client && typeof dshMeta.client === 'object' ? (dshMeta.client as Record<string, unknown>).inject : null;
+        if (Array.isArray(inject)) {
+          let n = 0;
+          for (const dep of inject as string[]) {
+            if (n >= 3 || out.length >= COMPAT_MAX_FINDINGS) break;
+            if (!String(dep).includes('/') && !String(dep).startsWith('@')) continue; // 别名引用：交给内核解析
+            if (!resolvePkgDir(dir, dep)) {
+              n += 1;
+              out.push({
+                code: 'ENTRY_INJECT_MISSING', severity: 'medium', fixable: false,
+                entry: { id: entry.id, name },
+                message: `${entry.id || name}（${name}）注入的客户端包 ${dep} 不存在（UI 挂点缺失）`,
+              });
+            }
+          }
+        }
+      }
+      // 内核版本窗口（dsh.kernel 新契约）。
+      const badWindow = !entry.disabled && pkg ? kernelWindowCheck(pkg, kernel) : null;
+      if (badWindow) {
+        out.push({
+          code: 'KERNEL_RANGE_VIOLATION', severity: 'medium', fixable: true,
+          entry: { id: entry.id, name },
+          message: `${entry.id || name}（${name}）声明与内核版本不兼容：${badWindow}`,
+        });
+      }
+    }
+    return out;
+  }
+
+  // 隔离执行器：快照先行 → patch disabled（togglePluginInPatch，防 loader
+  // 双登记）→ 原子写 → incident 留痕。@deepseek-ai/* 同源内核包跳过。
+  function quarantineEligible(findings: Finding[] | null | undefined, dirP?: string): string[] {
+    const unique: Array<{ id: string | null; name: string | null; message: string }> = [];
+    for (const f of findings || []) {
+      if (!f || !f.entry) continue;
+      const { id, name } = f.entry;
+      const key = id || name;
+      if (!key || unique.some((u) => (u.id || u.name) === key)) continue;
+      if (name && COMPAT_CORE_PREFIXES.some((p) => String(name).startsWith(p))) continue;
+      unique.push({ id, name, message: f.message });
+    }
+    if (!unique.length) return [];
+    const dir = dirP || profileDir();
+    const snap = snapshot('隔离不兼容插件: ' + unique.map((u) => u.id || u.name).join(','));
+    const file = path.join(dir, 'cordis.patch.yml');
+    let text = '';
+    try {
+      text = fs.readFileSync(file, 'utf8');
+    } catch {
+      return [];
+    }
+    if (!text.trim()) return [];
+    const applied: string[] = [];
+    for (const u of unique) {
+      if (!u.id) continue; // bundle 行无 id 无法 toggle → 仅报告
+      try {
+        const patched = togglePluginInPatch(text, u.id, false, u.name || u.id);
+        if (patched === text) continue; // 已是 disabled
+        text = patched;
+        applied.push(`隔离 ${u.id}（${u.name || u.id}：${u.message}）`);
+      } catch (err) {
+        log('guard', `隔离 ${u.id} 失败: ${(err as Error).message}`);
+      }
+    }
+    if (applied.length) {
+      try {
+        writeFileAtomic(file, text);
+        reportIncident('compat 自动隔离', `启动前版本兼容体检发现并隔离 ${applied.length} 个不兼容插件：\n\n${applied.join('\n')}${snap ? `\n\n已先创建快照 ${snap.id}（插件保护中心可随时回滚）` : ''}`);
+        log('guard', '版本兼容体检自动隔离: ' + applied.join('；'));
+      } catch (err) {
+        log('guard', '写隔离配置失败: ' + (err as Error).message);
+      }
+    }
+    return applied;
+  }
+
+  // 启动前预检：ENTRY_MODULE_MISSING 必然拖垮启动，无条件隔离；
+  // ENTRY_PEER_UNSATISFIED 默认也隔离（quarantinePeers=false 关闭）。
+  function quarantineFatal(opts?: { quarantinePeers?: boolean }): { checked: number; quarantined: string[] } {
+    const findings = compatFindings(profileDir());
+    const eligible = findings.filter((f) => f.code === 'ENTRY_MODULE_MISSING' || (opts && opts.quarantinePeers !== false && f.code === 'ENTRY_PEER_UNSATISFIED'));
+    const applied = quarantineEligible(eligible, undefined);
+    return { checked: findings.length, quarantined: applied };
+  }
+
+  // 手动隔离（UI/IPC）：按 patch 行 id 禁入指定插件。
+  function quarantineById(id: string): { ok: boolean; error?: string; snapshot?: string | null; alreadyDisabled?: boolean; restartRequired?: boolean } {
+    const dir = profileDir();
+    const row = patchEntryRows(dir).find((e) => e.id === id);
+    if (!row) return { ok: false, error: 'patch 行不存在: ' + String(id) };
+    if (row.name && COMPAT_CORE_PREFIXES.some((p) => String(row.name).startsWith(p))) {
+      return { ok: false, error: '内核同源插件不建议隔离（缺失时应走回滚/重装）: ' + id };
+    }
+    const snap = snapshot('手动隔离插件: ' + id);
+    const file = path.join(dir, 'cordis.patch.yml');
+    let text = '';
+    try {
+      text = fs.readFileSync(file, 'utf8');
+    } catch { /* 空 */ }
+    if (!text) return { ok: false, error: 'patch 文件不可读' };
+    let patched: string;
+    try {
+      patched = togglePluginInPatch(text, id, false, row.name || id);
+    } catch (err) {
+      return { ok: false, error: String((err as Error).message) };
+    }
+    if (patched === text) return { ok: true, alreadyDisabled: true };
+    try {
+      writeFileAtomic(file, patched);
+      reportIncident('compat 手动隔离', `手动隔离插件 ${id}（${row.name || id}）${snap ? `，快照 ${snap.id}` : ''}`);
+    } catch (err) {
+      return { ok: false, error: String((err as Error).message) };
+    }
+    return { ok: true, snapshot: snap ? snap.id : null, restartRequired: true };
+  }
+
+  // 完整版本兼容报告（UI 展示）：内核版本 + 每条 patch 条目的安装/入口/peer/
+  // inject/版本窗口状态。
+  function versionReport(): CompatReport {
+    const dir = profileDir();
+    const kernel: CompatReport['kernel'] = { name: '@deepseek-ai/dsh', version: kernelVersion() };
+    const entries: CompatRow[] = [];
+    for (const entry of patchEntryRows(dir)) {
+      const name = entry.name || entry.id;
+      const row: CompatRow = {
+        id: entry.id, name, enabled: !entry.disabled, fromBundle: entry.fromBundle,
+        installed: false, version: null, entryPoint: null, kernelWindow: null,
+        peers: [], inject: [], issues: [],
+      };
+      const pkgDir = name ? resolvePkgDir(dir, name) : null;
+      const pkg = pkgDir ? readJson(path.join(pkgDir, 'package.json'), null) as Record<string, unknown> | null : null;
+      if (pkgDir && pkg) {
+        row.installed = true;
+        row.version = typeof pkg.version === 'string' ? pkg.version : null;
+        row.entryPoint = resolveEntryPoint(pkgDir, pkg);
+        row.kernelWindow = pkg.dsh && typeof pkg.dsh === 'object' ? String((pkg.dsh as Record<string, unknown>).kernel || '') || null : null;
+        if (pkg.peerDependencies) {
+          const optional = pkg.peerDependenciesMeta && typeof pkg.peerDependenciesMeta === 'object' ? pkg.peerDependenciesMeta as Record<string, Record<string, unknown>> : {};
+          const peers = pkg.peerDependencies as Record<string, unknown>;
+          for (const dep of Object.keys(peers)) {
+            const want = String(peers[dep]);
+            const got = resolveDepVersion(dir, dep);
+            const optionalFlag = !!(optional[dep] && optional[dep].optional === true);
+            let verdict: CompatPeer['verdict'] = got ? peerCheck(got, want) : 'missing';
+            if (optionalFlag) verdict = 'optional'; // 可选 peer：缺失/漂移都不算问题
+            row.peers.push({ dep, required: want, actual: got, verdict, ok: verdict === 'ok' || verdict === 'optional', optional: optionalFlag });
+          }
+        }
+        if (pkg.dsh) {
+          const dshMeta = pkg.dsh as Record<string, unknown>;
+          const inject = dshMeta.client && typeof dshMeta.client === 'object' ? (dshMeta.client as Record<string, unknown>).inject : null;
+          if (Array.isArray(inject)) {
+            for (const dep of inject as string[]) {
+              if (!String(dep).includes('/') && !String(dep).startsWith('@')) {
+                row.inject.push({ dep, ok: true, alias: true }); // 内核别名机制
+                continue;
+              }
+              row.inject.push({ dep, ok: !!resolvePkgDir(dir, dep) });
+            }
+          }
+        }
+        const bw = kernelWindowCheck(pkg, kernel.version);
+        if (bw) row.issues.push(bw);
+      }
+      entries.push(row);
+    }
+    return { at: new Date().toISOString(), profile: getProfile(), kernel, entries };
+  }
+
   // ── 修复执行器（只动插件/配置层）────────────────────────────────────
   function repair(findings?: Finding[]): { applied: string[] } {
     const applied: string[] = [];
@@ -510,6 +981,13 @@ function createGuard(opts: GuardOpts): GuardApi {
     if (list.some((f) => f.code === 'JUNCTION_FOREIGN' || f.code === 'JUNCTION_DANGLING')) {
       const result = repairJunctions();
       if (result.repaired.length) applied.push('恢复共享模块指向: ' + result.repaired.slice(0, 5).join(', ') + (result.repaired.length > 5 ? ` 等 ${result.repaired.length} 个` : ''));
+    }
+
+    // 版本兼容防线：模块缺失 / peer 不满足 / 内核窗口违例 → 自动隔离
+    //（快照 + patch disabled + incident）。
+    if (list.some((f) => f.code === 'ENTRY_MODULE_MISSING' || f.code === 'ENTRY_PEER_UNSATISFIED' || f.code === 'KERNEL_RANGE_VIOLATION')) {
+      const zapped = quarantineEligible(list, dir);
+      applied.push(...zapped);
     }
 
     return { applied };
@@ -742,6 +1220,8 @@ function createGuard(opts: GuardOpts): GuardApi {
     healthCheck, repair, repairJunctions, junctionFindings,
     reportIncident, listIncidents, readIncident, resolveIncident,
     attributeBootFailure,
+    // 版本兼容防线（v0.2）
+    compatFindings, versionReport, quarantineFatal, quarantineById,
   };
 }
 

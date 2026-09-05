@@ -225,3 +225,87 @@ test('repair removes duplicate patch rows that conflict with bundle entry ids (i
 
   rmSync(home, { recursive: true, force: true });
 });
+
+// ── 版本兼容防线（v0.2）──────────────────────────────────────────────
+// 语义：把「插件与内核/依赖对不上」静态拦在启动前 —— patch 行引用的插件包
+// 缺失（实战连环启动失败根因）、peer 依赖不满足 → 自动隔离（快照 + patch
+// disabled + incident），而不是等 loader import 时整棵插件树崩掉。
+// 测试环境无 semver 包 → peer 比对自动降级为提示级，本组只断言不依赖
+// semver 的链路（模块缺失 / 隔离 / 报告形状）。
+
+test('compat flags missing plugin packages and quarantines them pre-boot', () => {
+  const t0 = { after: (fn) => fn };
+  const { home, profile, guard } = makeHome(t0);
+  // patch 行引用一个不存在的插件包（9/3 连环事故形态：行在包被清）。
+  writeFileSync(join(profile, 'cordis.patch.yml'),
+    '- insert:\n    - id: ghost-app\n      name: \'ghost-app\'\n' +
+    '- insert:\n    - id: sub\n      name: \'sub\'\n');
+  // sub 是真实安装的插件（带入口文件），不应被误隔离。
+  mkdirSync(join(profile, 'node_modules', 'sub', 'lib'), { recursive: true });
+  writeFileSync(join(profile, 'node_modules', 'sub', 'package.json'),
+    JSON.stringify({ name: 'sub', version: '1.0.0', main: 'lib/index.js' }));
+  writeFileSync(join(profile, 'node_modules', 'sub', 'lib', 'index.js'), 'export {};\n');
+
+  const { findings } = guard.healthCheck();
+  const missing = findings.filter((f) => f.code === 'ENTRY_MODULE_MISSING');
+  assert.ok(missing.some((f) => f.message.includes('ghost-app')), 'ghost-app must be flagged, got: ' + JSON.stringify(missing));
+  assert.ok(!missing.some((f) => f.message.includes('sub')), 'installed plugin must not be flagged');
+
+  // 启动前预检自动隔离：ghost-app 被禁入，sub 保留。
+  const pre = guard.quarantineFatal({});
+  assert.equal(pre.quarantined.length, 1, 'only ghost-app should be quarantined, got: ' + JSON.stringify(pre.quarantined));
+  const patchAfter = readFileSync(join(profile, 'cordis.patch.yml'), 'utf8');
+  assert.ok(/disabled: true/.test(patchAfter), 'patch must carry a disabled row, got:\n' + patchAfter);
+  assert.ok(patchAfter.includes('ghost-app'), 'quarantined entry must remain listed (disabled), got:\n' + patchAfter);
+
+  // 隔离后复检：不再报模块缺失；且已留 incident 与快照（可回滚）。
+  const after = guard.healthCheck().findings;
+  assert.ok(!after.some((f) => f.code === 'ENTRY_MODULE_MISSING' && f.message.includes('ghost-app')), 're-check must be clean');
+  assert.ok(guard.listIncidents().length >= 1, 'auto-quarantine must leave an incident');
+  assert.ok(guard.listSnapshots().length >= 1, 'auto-quarantine must snapshot first');
+
+  rmSync(home, { recursive: true, force: true });
+});
+
+test('quarantineById manually disables a patch row with a snapshot', () => {
+  const t0 = { after: (fn) => fn };
+  const { home, profile, guard } = makeHome(t0);
+  writeFileSync(join(profile, 'cordis.patch.yml'),
+    '- insert:\n    - id: sub\n      name: \'sub\'\n      config:\n        x: 1\n');
+  mkdirSync(join(profile, 'node_modules', 'sub', 'lib'), { recursive: true });
+  writeFileSync(join(profile, 'node_modules', 'sub', 'package.json'),
+    JSON.stringify({ name: 'sub', version: '1.0.0', main: 'lib/index.js' }));
+  writeFileSync(join(profile, 'node_modules', 'sub', 'lib', 'index.js'), 'export {};\n');
+
+  const res = guard.quarantineById('sub');
+  assert.equal(res.ok, true, 'quarantineById must succeed');
+  assert.equal(res.restartRequired, true);
+  const patchAfter = readFileSync(join(profile, 'cordis.patch.yml'), 'utf8');
+  assert.ok(/disabled: true/.test(patchAfter), 'patch must carry a disabled row, got:\n' + patchAfter);
+  // 已有对应快照（手动隔离前自动创建）。
+  const snaps = guard.listSnapshots();
+  assert.ok(snaps.some((s) => s.reason.includes('隔离')), 'a snapshot must precede manual quarantine');
+  rmSync(home, { recursive: true, force: true });
+});
+
+test('versionReport lists kernel version and per-entry install state', () => {
+  const t0 = { after: (fn) => fn };
+  const { home, profile, guard } = makeHome(t0);
+  writeFileSync(join(profile, 'cordis.patch.yml'),
+    '- insert:\n    - id: ghost-app\n      name: \'ghost-app\'\n' +
+    '- insert:\n    - id: sub\n      name: \'sub\'\n');
+  mkdirSync(join(profile, 'node_modules', 'sub', 'lib'), { recursive: true });
+  writeFileSync(join(profile, 'node_modules', 'sub', 'package.json'),
+    JSON.stringify({ name: 'sub', version: '1.0.0', main: 'lib/index.js' }));
+  writeFileSync(join(profile, 'node_modules', 'sub', 'lib', 'index.js'), 'export {};\n');
+
+  const rep = guard.versionReport();
+  assert.equal(rep.kernel.name, '@deepseek-ai/dsh');
+  assert.equal(rep.kernel.version, '1.0.0'); // makeHome 闭包写入的 fake 版本
+  const ghost = rep.entries.find((e) => e.id === 'ghost-app');
+  assert.ok(ghost && ghost.installed === false, 'ghost-app must report not installed');
+  const sub = rep.entries.find((e) => e.id === 'sub');
+  assert.ok(sub && sub.installed === true && sub.entryPoint && sub.entryPoint.endsWith('index.js'), 'sub must resolve its entry point');
+  assert.equal(sub.issues.length, 0, 'healthy plugin must carry no issues');
+  rmSync(home, { recursive: true, force: true });
+});

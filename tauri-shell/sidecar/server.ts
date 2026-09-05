@@ -571,7 +571,18 @@ async function guardedStartAndWait(overlays: string[]): Promise<{ webUrl: string
     snapshot(r: string): { id: string } | null;
     markGood(id: string): void;
     reportIncident(t: string, d: string): { ok: boolean };
+    quarantineFatal(o?: { quarantinePeers?: boolean }): { checked: number; quarantined: string[] };
   })();
+  // 版本兼容防线（v0.2）：启动前静态核对插件与内核的对应关系 —— patch 引用的
+  // 插件包/入口缺失（实战根因：行在包被清 → ERR_MODULE_NOT_FOUND → 整棵插件
+  // 树起不来）与关键 peer 不满足 → 自动隔离（快照 + patch disabled + incident），
+  // 让内核照常启动而非整树崩溃。快照先行保证任何时刻可回滚。
+  try {
+    const pre = g.quarantineFatal({});
+    if (pre.quarantined.length) say('版本兼容预检: 自动隔离 ' + pre.quarantined.length + ' 个不兼容插件');
+  } catch (e) {
+    say('版本兼容预检失败（继续启动）: ' + String(((e as Error).message) || e));
+  }
   const snap = g.snapshot('boot');
   try {
     const r = await (bootMod.startAndWait as (o: string[]) => Promise<{ webUrl: string; port: number }>)(overlays);
@@ -1163,6 +1174,14 @@ const batch: Record<string, (p: RpcParams) => unknown> = {
       case 'repair': {
         const r = (g.repair as () => { applied: unknown })();
         return { ok: true, applied: r.applied };
+      }
+      case 'version':
+        // 版本兼容防线（v0.2）：内核版本 + 每条 patch 条目的安装/入口/peer/inject 状态
+        return { ok: true, report: (g.versionReport as () => unknown)() };
+      case 'quarantine': {
+        const r = (g.quarantineById as (v: unknown) => Record<string, unknown>)(String(value || ''));
+        if (r.ok && r.restartRequired) log('guard', '手动隔离插件: ' + String(value));
+        return r;
       }
       case 'incident':
         return (g.readIncident as (v: unknown) => Record<string, unknown>)(value) as Record<string, unknown>;
