@@ -391,9 +391,10 @@ if (existsSync(vendoredBashFix)) {
 // 已停止」）。从 dev 树回填已编译产物（同 vendored 回填模式；交叉打包已被
 // 上方 targetPlatform===process.platform 门禁拒绝，这里产物必属本机平台）。
 const fsExtNative = path.join(dd, 'node_modules', 'fs-ext', 'build');
-if (existsSync(path.join(fsExtNative, 'Release', 'fs_ext.node'))) {
-  cpSync(fsExtNative, path.join(nmDest, 'fs-ext', 'build'), { recursive: true });
-  console.log('[stage] 已回填 fs-ext 原生构建（fs_ext.node，内核 0.1.3 会话锁依赖）');
+const fsExtRelease = path.join(fsExtNative, 'Release');
+if (existsSync(path.join(fsExtRelease, 'fs_ext.node'))) {
+  cpSync(fsExtRelease, path.join(nmDest, 'fs-ext', 'build', 'Release'), { recursive: true });
+  console.log('[stage] 已回填 fs-ext 原生运行时（build/Release/fs_ext.node）');
 } else {
   throw new Error('[stage] dev 树缺少 fs-ext 原生构建（node_modules/fs-ext/build/Release/fs_ext.node）——先在 dev 树 npm install 触发 node-gyp 编译，或换用支持预编译分发的 fs-ext 版本');
 }
