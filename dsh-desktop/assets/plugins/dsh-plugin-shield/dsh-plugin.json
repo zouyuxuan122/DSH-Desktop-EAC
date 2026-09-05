@@ -1,0 +1,33 @@
+{
+  "$schema": "https://raw.githubusercontent.com/Yan-Zero/dsh-std/614dfa1ac168db79fcf4577cf0ebb34e2e3b944b/packages/manifest/schema/dsh-plugin-0.15.schema.json",
+  "manifestVersion": "0.15",
+  "id": "io.github.zouyuxuan122.dsh-desktop-eac.dsh-plugin-shield",
+  "name": "dsh-plugin-shield",
+  "version": "0.1.0",
+  "facets": {
+    "host": {
+      "entry": "lib/index.js",
+      "apiVersion": "v1alpha1"
+    }
+  },
+  "requires": {
+    "contracts": []
+  },
+  "permissions": [],
+  "contributes": {
+    "commands": []
+  },
+  "subscriptions": [],
+  "license": "MIT",
+  "source": {
+    "repository": "https://github.com/zouyuxuan122/DSH-Desktop-EAC"
+  },
+  "overrides": [],
+  "x-eac": {
+    "role": "identity-metadata",
+    "note": "EAC 原研插件（私有维护，不参与内置插件自动更新）。EAC 经 companion-sync 注册表加载（非 std adapter）；facets 留空 = 尚未参与 std 协商",
+    "maintenance": "eac-private",
+    "autoUpdate": false,
+    "ledger": "assets/SOURCES.json#C030"
+  }
+}
