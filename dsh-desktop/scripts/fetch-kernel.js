@@ -88,6 +88,33 @@ function resolvePnpmEntry() {
     const version = capture(process.execPath, [entry, '--version']);
     return { entry, version };
 }
+function extractKernelArchive(tgzPath) {
+    const result = cp.spawnSync('tar', ['-xzf', path.basename(tgzPath)], { cwd: WORK, stdio: 'inherit' });
+    if (result.error !== undefined)
+        throw result.error;
+    if (result.status === 0)
+        return;
+    const srcDir = findKernelSourceDirectory();
+    // Windows 的 bsdtar 会在不支持的 symlink 上返回非零，但仍会完整解出
+    // 内核构建所需源码。只接受经严格校验的这一个已知降级路径。
+    if (process.platform === 'win32' && srcDir !== undefined && hasKernelBuildInputs(srcDir)) {
+        console.warn(`fetch-kernel: tar 因 Windows 不支持的链接条目返回 ${String(result.status)}，已校验源码完整，继续构建`);
+        return;
+    }
+    throw new Error(`解包失败（${String(result.status)}）: tar -xzf ${path.basename(tgzPath)}`);
+}
+function findKernelSourceDirectory() {
+    const srcDir = fs.readdirSync(WORK).find((entry) => entry.startsWith('deepseek-harness-') && fs.statSync(path.join(WORK, entry)).isDirectory());
+    return srcDir === undefined ? undefined : path.join(WORK, srcDir);
+}
+function hasKernelBuildInputs(src) {
+    return [
+        'package.json',
+        'scripts/pnpm-invocation.ts',
+        'scripts/release/pack.ts',
+        'scripts/release/tarball.ts',
+    ].every((file) => fs.existsSync(path.join(src, file)));
+}
 function main() {
     const tag = process.argv[2] || DEFAULT_TAG;
     const version = tag.replace(/^dsh-v/, '');
@@ -123,11 +150,10 @@ function main() {
         run('curl', curlArgs, WORK);
     }
     console.log('fetch-kernel: 解包');
-    run('tar', ['-xzf', path.basename(tgzPath)], WORK);
-    const srcDir = fs.readdirSync(WORK).find((e) => e.startsWith('deepseek-harness-') && fs.statSync(path.join(WORK, e)).isDirectory());
-    if (!srcDir)
+    extractKernelArchive(tgzPath);
+    const src = findKernelSourceDirectory();
+    if (src === undefined)
         throw new Error('解包后找不到源码目录');
-    const src = path.join(WORK, srcDir);
     // 补丁 1：pack.ts 走 pnpmInvocation（Windows spawn('pnpm') ENOENT）。
     const packTs = path.join(src, 'scripts', 'release', 'pack.ts');
     let pack = fs.readFileSync(packTs, 'utf8');

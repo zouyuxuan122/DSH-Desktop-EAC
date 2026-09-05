@@ -47,6 +47,22 @@ const targetDir = path.join(crateRoot, 'target');
 const manifest = path.join(crateRoot, 'Cargo.toml');
 const artifactBase = `dsh_${moduleName}_native`;
 
+const WINDOWS_MSVC_TARGET = 'x86_64-pc-windows-msvc';
+
+function windowsCargoTarget(): string | undefined {
+  if (process.platform !== 'win32') return undefined;
+  const configured = process.env.CARGO_BUILD_TARGET;
+  if (configured !== undefined && configured !== WINDOWS_MSVC_TARGET) {
+    throw new Error(`[build-native] Windows 原生模块要求 ${WINDOWS_MSVC_TARGET}，当前 CARGO_BUILD_TARGET=${configured}`);
+  }
+  return WINDOWS_MSVC_TARGET;
+}
+
+function cargoReleaseDir(): string {
+  const target = windowsCargoTarget();
+  return target === undefined ? path.join(targetDir, 'release') : path.join(targetDir, target, 'release');
+}
+
 /** 取工具链 sysroot（失败抛出 —— 没有 rustc 时无法构建）。 */
 function sysroot(): string {
   const r = cp.spawnSync('rustc', ['--print', 'sysroot'], { encoding: 'utf8' });
@@ -80,7 +96,10 @@ function runCargo(sub: string, rest: string[]): number {
     env.CARGO_ENCODED_RUSTFLAGS = ['-C', `linker=${linker}`].join('\x1f');
     delete env.RUSTFLAGS;
   }
-  const r = cp.spawnSync('cargo', [sub, '--manifest-path', manifest, ...rest], {
+  const args = [sub, '--manifest-path', manifest, ...rest];
+  const target = windowsCargoTarget();
+  if (target !== undefined) args.push('--target', target);
+  const r = cp.spawnSync('cargo', args, {
     stdio: 'inherit',
     env,
     cwd: crateRoot,
@@ -90,7 +109,7 @@ function runCargo(sub: string, rest: string[]): number {
 
 /** 复制 cargo cdylib 产物 → index.node（存在性断言）。 */
 function copyArtifact(): void {
-  const releaseDir = path.join(targetDir, 'release');
+  const releaseDir = cargoReleaseDir();
   const candidates =
     process.platform === 'win32' ? [`${artifactBase}.dll`]
     : process.platform === 'darwin' ? [`lib${artifactBase}.dylib`]

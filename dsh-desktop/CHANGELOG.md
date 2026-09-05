@@ -49,6 +49,8 @@ next2（功能包体系：.dshpack 打包分发插件+预设+技能，声明官�
 
 ## 5.3.6（内置输入灵动岛与分发契约补强）· 2026-09-03
 
+- Windows 首次源码构建兼容：内核归档工具仅在必需源码输入完整时容忍 Windows `tar` 对不支持链接条目的非零退出；原生 N-API 模块统一选择 `x86_64-pc-windows-msvc` 并从目标专属目录回填 `index.node`，避免 GNU 默认工具链与 `lld-link` 混用导致的链接失败。Linux/macOS 与显式非 MSVC Windows target 保持严格拒绝。
+
 - 内置 `dsh-composer-dynamic-island` 2.1.0（says693，MIT），作为推荐插件
   同步到独立 `web-desktop` profile；不修改 DSH 内核与插件运行时代码。
 - 为 EAC Web loader 补齐 React、Settings 与 Slots 的加载依赖元数据。
