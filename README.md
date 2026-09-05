@@ -130,6 +130,9 @@ npm test                       # 运行回归测试套件（259 项）
 
 ## Deepseek Harness EAC IDE（内置插件版独立 IDE）
 
+> **🎉 已正式发布**：独立 IDE 仓库 [zouyuxuan122/Deepseek-Harness-EAC-IDE](https://github.com/zouyuxuan122/Deepseek-Harness-EAC-IDE)
+> —— 产品介绍、截图与 [下载（ide-v1.0.0：安装器 / 绿色版 zip）](https://github.com/zouyuxuan122/Deepseek-Harness-EAC-IDE/releases)。
+
 在 vscode-plugin 分支上，可以把 `vscode/` 扩展与 dsh 运行时组装成一个**内置插件的独立 IDE**
 （类似 Trae）：基于 VS Code 1.134 底座，插件作为内置扩展（`resources/app/extensions/dsh-eac-vscode`）、
 运行时资产捆绑在扩展目录内（`runtime/`，含 desktop-core / dsh 内核 / 内置 Node），启动即用、无需安装扩展。
