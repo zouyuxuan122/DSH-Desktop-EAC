@@ -145,6 +145,9 @@ window.__ModuleLoader__.load({
       { id: "openai", label: "OpenAI", baseURL: "https://api.openai.com/v1", keyEnv: "OPENAI_API_KEY", models: ["gpt-4o-mini", "gpt-4o"] },
       { id: "siliconflow", label: "硅基流动 SiliconFlow", baseURL: "https://api.siliconflow.cn/v1", keyEnv: "SILICONFLOW_API_KEY", models: ["Qwen/Qwen2.5-VL-32B-Instruct", "Pro/Qwen/Qwen2.5-VL-7B-Instruct"] },
       { id: "moonshot", label: "月之暗面 Kimi", baseURL: "https://api.moonshot.cn/v1", keyEnv: "MOONSHOT_API_KEY", models: ["moonshot-v1-8k-vision-preview"] },
+      // OrcaRouter: OpenAI-compatible gateway that exposes many vision-capable
+      // models through a single endpoint (routing/failover included).
+      { id: "orcarouter", label: "OrcaRouter 智能网关", baseURL: "https://api.orcarouter.ai/v1", keyEnv: "ORCAROUTER_API_KEY", models: ["orcarouter/fusion-flash", "orcarouter/fusion", "openai/gpt-4o-mini", "deepseek/deepseek-v4-flash-vision-exp"] },
       { id: "custom", label: "自定义（手动填写）", baseURL: "", keyEnv: "VISION_API_KEY", models: [] }
     ];
 

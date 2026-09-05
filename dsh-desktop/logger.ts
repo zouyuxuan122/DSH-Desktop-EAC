@@ -66,6 +66,7 @@ const PII_PREFIXES_RULES_UNSORTED: PrefixRule[] = [
   { prefix: 'ASIA', head: 4, tail: 4 }, // AWS STS
   { prefix: 'sk-ant-', head: 5, tail: 4 }, // Anthropic (tests expected head=5: "sk-an")
   { prefix: 'sk-or-',  head: 5, tail: 4 }, // OpenRouter (head=5 → "sk-or")
+  { prefix: 'sk-orca-', head: 7, tail: 4 }, // OrcaRouter (head=7 → "sk-orca")
   { prefix: 'ds-',     head: 5, tail: 4 }, // Deepseek
   { prefix: 'sk-',     head: 4, tail: 4 }, // OpenAI (fallback)
   { prefix: 'pk-',     head: 4, tail: 4 }, // Stripe public
