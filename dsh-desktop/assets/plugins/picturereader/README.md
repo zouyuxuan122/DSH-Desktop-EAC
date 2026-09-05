@@ -1,11 +1,11 @@
 # picturereader
 
-> **v3.3.0** — 给纯文本模型（DeepSeek / text-only）的全能「看图 / 读文档 / 修图」能力。
+> **v3.3.2** — 给纯文本模型（DeepSeek / text-only）的全能「看图 / 读文档 / 修图」能力。
 > 融合 **视觉孪生 adapter**（把任意文本模型原位包装成「支持图片」→ DSH 原生缩略图 + 图片块自动分析）、**三模式路由**、**本地像素级工具链**（scan / OCR×4 引擎 / crop / palette / compare / batch）、**文档转图片**（pdf / word / excel / ppt）、**本地修图工具 `image_edit`**（Pillow/OpenCV 纯 CPU：缩放 / 旋转 / 滤镜 / 合成 / 水印 / 去背景 / 超分等）与**可选外部 VLM 桥**。一个插件全包。
 >
 > **v3.3.0 新增**：**macOS 原生 Vision OCR 引擎**（`engine="macos"`，`scripts/setup-macos.mjs` 一键编译，PR #4 合入）；OCR 引擎选项按平台条件显示（macos 仅 macOS、windows 仅 Windows，paddle/rapid 跨平台始终显示）；修复 PaddleOCR 新环境首次调用三个缺陷（stdout 污染 / w/h→width/height / 缓存路径写死，issue #2）；设置卡 UI 重做（settings-panel 设计语言）；调试日志门控（llm/stream 桥不再刷屏）；peerDependencies 兼容 DSH 0.1.1-rc.2（issue #3）。
 
-[![dsh-plugin](https://awesome-dsh-plugin.com/badge.svg)](https://github.com/awesome-dsh-plugin/awesome-dsh-plugin)
+[![dsh-plugin](https://awesome-dsh-plugin.com/badge.svg)](https://github.com/awesome-dsh-plugin/awesome-dsh-plugin) [![dsh.so security](https://www.dsh.so/badge/picturereader.svg)](https://www.dsh.so/artifact/picturereader) [![dsh.so install](https://www.dsh.so/badge/install/picturereader.svg)](https://www.dsh.so/artifact/picturereader)
 
 ---
 
@@ -18,7 +18,7 @@ DeepSeek 等纯文本模型没有视觉编码器，无法直接看图片；DSH �
 picturereader 现在解决三件事：
 
 1. **把「看图/读文档」翻译成纯文本模型能理解的结构化证据**（像素级 hue/结构/材质分析 + OCR 实读 + 可选 VLM 语义描述），并沉淀为读图方法论 skill。
-2. **通过「视觉孪生 adapter」让纯文本模型在 DSH 里获得原生缩略图体验**：勾选模型即生成「(视觉)」变体，粘贴图片显示原生缩略图、图片块进会话、并被自动分析成文本路径 + 本地证据再交给模型——模型拿到的永远是纯文本，不会触发 `UNSUPPORTED_CONTENT`。
+2. **通过「视觉孪生 adapter」让纯文本模型在 DSH 里获得原生缩略图体验**：勾选模型即生成「(视觉)」变体，粘贴图片显示原生缩略图、图片块进会话、并被自动分析成文本路径 + 本地证据再交给模型。即使上游先降级为 `attachment sha256` 文本，图片桥也会仅从本机附件对象库恢复经过文件头校验的图片并注入本地工具路径；模型拿到的永远是纯文本，不会触发 `UNSUPPORTED_CONTENT`。
 3. **本地直接修图 / 批量处理图片**：`image_edit` 提供缩放、旋转、滤镜、合成、水印、去背景、拼接、透视校正等纯 CPU 动作，图片不出本机。
 
 > **版本兼容性**：本版本专门兼容 **dsh 0.1.1-rc.2** 及 **dsheac 5.1.0**，已针对这两个版本进行适配测试与优化，确保稳定运行。同时兼容 DeepSeek Harness EAC 4.2.0 与 `@deepseek-ai/dsh-client-ui-workspace` rc.7。`peerDependencies` 采用 `^0.1.0-rc.6 || ^0.1.1-rc.2` 联合区间，覆盖两条 0.1.x 发布线。
@@ -406,6 +406,12 @@ await main()
 | 设置持久化 | ✅ | vision_models / ocr_engine / mode 全部保留 |
 
 ## 版本更新日志
+
+### v3.3.2（本次）
+
+- **修复文本模型附件降级链路**：当模型入口将图片改写为 `[image omitted ...; attachment sha256:…]` 时，图片桥会在本地附件对象库中按 SHA 前缀查找唯一对象，验证 PNG/JPEG/GIF/BMP/WebP 文件头后导出并注入 `image_scan` / `image_ocr` 引导；找不到、前缀歧义或非图片对象时保持原文本，不猜测路径。
+- 修复全局 SHA 匹配正则的状态残留，避免同轮多次检测后遗漏附件。
+- 新增 SHA 降级恢复与无效 SHA 保持原文本的回归用例；`npm test` 全量 **148 通过 / 0 失败**。
 
 ### v3.3.1（本次）
 
