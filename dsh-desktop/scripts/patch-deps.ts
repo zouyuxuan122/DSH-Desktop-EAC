@@ -644,6 +644,69 @@ const SUBMENU_BTN_NEW_012 = 'd.jsxs("button",{type:"button",role:"menuitem",clas
 const SUBMENU_LABEL_ANCHOR_012 = 'd.jsx("span",{className:Pe.itemLabel,children:fe.label})';
 const SUBMENU_LABEL_NEW_012 = 'd.jsx("span",{className:Pe.itemLabel,style:{whiteSpace:"normal",overflow:"visible","' + SUBMENU_ITEM_MARKER + '":"1"},children:fe.label})';
 
+// Menu 二级菜单容器补丁（变量名捕获版）：上游两代压缩产物里 renderEntry 的
+// 入口行变量与 submenu-id setter 变量名不同 —— rc.2 用 B/z，0.1.2-alpha.1 用
+// $/J。旧补丁把 B/z 写死拼进重建的容器，0.1.2 里 B 是列表 ref（B.submenu 为
+// undefined）：鼠标一悬停挂载二级菜单就 undefined.map 抛错，错误边界卸载整个
+// conversation.hero.agentPreset slot —— 菜单连同「标准模式」字样一起消失
+//（issue #295 / #297）。入口与 setter 一律从 itemWrap 锚点正则捕获；已打过
+// 旧补丁的包走修复分支（rc.2 包捕获即 B/z，修复为无操作，天然幂等）。
+// itemWrap 头必须 enter/leave 成对出现且 setter 一致（反向引用锁死）：
+// 0.1.2 为 J(re?$.id:null) / J(null)；rc.2 为 z(se?B.id:null) / z(null)。
+// 配对写法让已注入 div 自带的 z(B.id)/z(null) 永远匹配不上，不会污染捕获。
+const MENU_PAIR_RE = /onMouseEnter:\(\)=>\{(?:clearTimeout\(window\.__dshMenuTimer\);)?([A-Za-z_$][\w$]*)\((?:re|se)\?([A-Za-z_$][\w$]*)\.id:null\)\},onMouseLeave:\(\)=>\{(?:clearTimeout\(window\.__dshMenuTimer\);)?(?:window\.__dshMenuTimer=setTimeout\(\(\)=>)?\1\(null\)/g;
+
+// 在 anchorIdx 之前的临近 scope 里抓最近一对（entry, setter）。
+function captureMenuVars(src: string, anchorIdx: number): { entry: string; setter: string } | undefined {
+  const scope = src.slice(Math.max(0, anchorIdx - 3000), anchorIdx);
+  MENU_PAIR_RE.lastIndex = 0;
+  let m: RegExpExecArray | null = null;
+  let last: RegExpExecArray | null = null;
+  while ((m = MENU_PAIR_RE.exec(scope)) !== null) last = m;
+  if (!last) return undefined;
+  return { entry: last[2], setter: last[1] };
+}
+
+function patchMenuSubmenuContainerSource(source: string): string | undefined {
+  const markerIdx = source.indexOf(MENU_SUBMENU_HOVER_MARKER);
+  if (markerIdx >= 0) {
+    // 修复分支：容器已被旧补丁重建，把写死的变量改回捕获值。
+    const vars = captureMenuVars(source, markerIdx);
+    if (!vars) return undefined;
+    const divStart = source.lastIndexOf('role:"menu",', markerIdx);
+    const mapIdx = source.indexOf(MENU_SUBMENU_ANCHOR, markerIdx);
+    if (divStart < 0 || mapIdx < 0 || markerIdx - divStart > 800 || mapIdx - divStart > 2000) return undefined;
+    const head = source.slice(0, divStart);
+    let div = source.slice(divStart, mapIdx);
+    const tail = source.slice(mapIdx);
+    div = div.replace(
+      /onMouseEnter:\(\)=>\{clearTimeout\(window\.__dshMenuTimer\);[A-Za-z_$][\w$]*\([A-Za-z_$][\w$]*\.id\)\}/,
+      'onMouseEnter:()=>{clearTimeout(window.__dshMenuTimer);' + vars.setter + '(' + vars.entry + '.id)}');
+    div = div.replace(
+      /window\.__dshMenuTimer=setTimeout\(\(\)=>[A-Za-z_$][\w$]*\(null\),400\)/,
+      'window.__dshMenuTimer=setTimeout(()=>'+vars.setter+'(null),400)');
+    div = div.replace(/children:[A-Za-z_$][\w$]*\./, 'children:' + vars.entry + '.');
+    return head + div + tail;
+  }
+  // 新打分支：上游原始形态。
+  if (source.includes('minWidth:' + MENU_SUBMENU_MINW)) return source;
+  const submenuIdx = source.indexOf(MENU_SUBMENU_ANCHOR);
+  const roleIdx = submenuIdx >= 0 ? source.lastIndexOf('role:"menu",', submenuIdx) : -1;
+  // role:"menu", 必须紧邻 submenu.map（submenu 容器的 role），距离过大说明命中了别处
+  if (submenuIdx < 0 || roleIdx < 0 || submenuIdx - roleIdx > 400) return undefined;
+  const vars = captureMenuVars(source, submenuIdx);
+  if (!vars) return undefined;
+  // 校验 children: 后的入口变量与捕获一致，防止 role 锚点命中别处。
+  const childM = MENU_CHILDREN_RE.exec(source.slice(roleIdx, submenuIdx + 40));
+  if (!childM || childM[1] !== vars.entry) return undefined;
+  const newBlock = 'role:"menu",onMouseEnter:()=>{clearTimeout(window.__dshMenuTimer);' + vars.setter + '(' + vars.entry + '.id)},'
+    + 'onMouseLeave:()=>{clearTimeout(window.__dshMenuTimer);window.__dshMenuTimer=setTimeout(()=>'+vars.setter+'(null),400)},'
+    + 'style:{maxHeight:"' + MENU_SUBMENU_MAXH + '",overflowY:"auto",minWidth:' + MENU_SUBMENU_MINW + '},/*' + MENU_SUBMENU_HOVER_MARKER + '*/children:' + vars.entry + '.';
+  return source.slice(0, roleIdx) + newBlock + source.slice(submenuIdx);
+}
+
+const MENU_CHILDREN_RE = /children:([A-Za-z_$][\w$]*)\.submenu\.map\(/;
+
 function patchMenuSubmenuScroll(file?: string): boolean {
   let target: string | undefined = file;
   if (!target) {
@@ -672,21 +735,14 @@ function patchMenuSubmenuScroll(file?: string): boolean {
   // 旧版 bundle 已有 hover marker 时，后续新增的 minWidth / root pointerleave
   // 改动仍要能补打上（锚点替换后原始文本消失，自然幂等）。
 
-  // 1) submenu 容器：悬停保持 + 高度/宽度自适应（minWidth 缺失才重建整段）
-  if (!src.includes('minWidth:' + MENU_SUBMENU_MINW)) {
-    const submenuIdx = src.indexOf(MENU_SUBMENU_ANCHOR);
-    const roleIdx = submenuIdx >= 0 ? src.lastIndexOf('role:"menu",', submenuIdx) : -1;
-    // role:"menu", 必须紧邻 submenu.map（submenu 容器的 role），距离过大说明命中了别处
-    if (submenuIdx < 0 || roleIdx < 0 || submenuIdx - roleIdx > 400) {
-      console.log('[patch-deps] Menu submenu 未匹配到目标代码（版本可能已更新），跳过');
-      return false;
-    }
-    // 替换 role:"menu", 到 submenu.map( 之间整段（旧版可能已注入 style + scroll marker）：
-    // 二级菜单悬停保持（onMouseEnter 取消关闭定时器并重新激活，onMouseLeave 关闭），
-    // 高度自适应视口（内容少自然高度，超高才滚动）、宽度对齐一级菜单，配合
-    // itemWrap / root 延迟关闭让鼠标可跨过一级菜单与二级菜单之间的间隙。
-    const newBlock = 'role:"menu",onMouseEnter:()=>{clearTimeout(window.__dshMenuTimer);z(B.id)},' + SUBMENU_LEAVE_NEW + ',style:{maxHeight:"' + MENU_SUBMENU_MAXH + '",overflowY:"auto",minWidth:' + MENU_SUBMENU_MINW + '},/*' + MENU_SUBMENU_HOVER_MARKER + '*/children:B.';
-    src = src.slice(0, roleIdx) + newBlock + src.slice(submenuIdx);
+  // 1) submenu 容器：悬停保持 + 高度/宽度自适应（变量名捕获版，见上）。
+  const container = patchMenuSubmenuContainerSource(src);
+  if (container === undefined) {
+    console.log('[patch-deps] Menu submenu 未匹配到目标代码（版本可能已更新），跳过');
+    return false;
+  }
+  if (container !== src) {
+    src = container;
     changed = true;
     console.log('[patch-deps] 已补丁主 bundle：二级菜单悬停保持 + 高度/宽度自适应');
   }
@@ -798,6 +854,7 @@ if (require.main === module) {
 module.exports = {
   patchAgentPresetMenu,
   patchMenuSubmenuScroll,
+  patchMenuSubmenuContainerSource,
   patchClientModulesResolve,
   patchModelImageInputSource,
   patchModelImageInputToggle,
