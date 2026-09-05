@@ -17,9 +17,9 @@
  * @module picturereader/bridge
  */
 
-import { mkdir, writeFile } from 'node:fs/promises';
-import { join } from 'node:path';
-import os from 'node:os';
+import { mkdir, writeFile, readFile, readdir } from 'node:fs/promises';
+import { join, basename } from 'node:path';
+import os, { homedir } from 'node:os';
 import { getRuntimeConfig } from './runtime.js';
 import { routePolicyText, routeModeTag } from './routing.js';
 
@@ -31,6 +31,79 @@ const EXT_BY_MEDIA = {
   'image/bmp': '.bmp',
   'image/avif': '.avif',
 };
+
+const ATTACHMENT_OBJECTS_DIR = join(homedir(), '.dsh', 'attachments', 'v1', 'objects');
+const SHA_ATTACHMENT_RE = /\[image omitted because this model accepts text only;\s*attachment sha256:([a-f0-9]{8,64})\]/gi;
+
+function imageExtensionFromBytes(data) {
+  if (data.length >= 8 && data.subarray(0, 8).equals(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]))) return '.png';
+  if (data.length >= 3 && data.subarray(0, 3).equals(Buffer.from([0xff, 0xd8, 0xff]))) return '.jpg';
+  if (data.length >= 6 && (data.subarray(0, 6).toString('ascii') === 'GIF87a' || data.subarray(0, 6).toString('ascii') === 'GIF89a')) return '.gif';
+  if (data.length >= 2 && data.subarray(0, 2).toString('ascii') === 'BM') return '.bmp';
+  if (data.length >= 12 && data.subarray(0, 4).toString('ascii') === 'RIFF' && data.subarray(8, 12).toString('ascii') === 'WEBP') return '.webp';
+  return null;
+}
+
+export function hasShaAttachmentReference(messages) {
+  return (messages ?? []).some((message) => {
+    if (!Array.isArray(message?.content)) return false;
+    return message.content.some((block) => {
+      if (block?.type !== 'text' || typeof block.text !== 'string') return false;
+      SHA_ATTACHMENT_RE.lastIndex = 0;
+      return SHA_ATTACHMENT_RE.test(block.text);
+    });
+  });
+}
+
+async function resolveShaAttachment(prefix, objectsDir = ATTACHMENT_OBJECTS_DIR) {
+  const normalized = String(prefix ?? '').toLowerCase();
+  if (!/^[a-f0-9]{8,64}$/.test(normalized)) return null;
+  try {
+    const candidates = await readdir(join(objectsDir, normalized.slice(0, 2)), { withFileTypes: true });
+    const matches = candidates.filter((entry) => entry.isFile() && entry.name.startsWith(normalized));
+    if (matches.length !== 1) return null;
+    return join(objectsDir, normalized.slice(0, 2), matches[0].name);
+  } catch {
+    return null;
+  }
+}
+
+const exportedShaPaths = new Map();
+export async function exportShaAttachment(prefix, dir, objectsDir = ATTACHMENT_OBJECTS_DIR) {
+  const source = await resolveShaAttachment(prefix, objectsDir);
+  if (!source) return null;
+  const hash = basename(source);
+  const cacheKey = join(dir, hash);
+  const cached = exportedShaPaths.get(cacheKey);
+  if (cached) return cached;
+  const data = await readFile(source);
+  const ext = imageExtensionFromBytes(data);
+  if (!ext) return null;
+  await mkdir(dir, { recursive: true });
+  const path = join(dir, `attachment_${hash.slice(0, 12)}${ext}`);
+  await writeFile(path, data);
+  exportedShaPaths.set(cacheKey, path);
+  return path;
+}
+
+function imageToolGuidance(path, mode, name = '') {
+  const policy = routePolicyText(mode, { vlmConfigured: true });
+  return `用户粘贴了一张图片${name}，已导出到：${path}\n` +
+    `${routeModeTag(mode)}\n` +
+    policy +
+    `\n请先用 image_scan 分析 ${path}（如含文字再用 image_ocr）。`;
+}
+
+async function bridgeShaAttachmentText(text, dir, mode, objectsDir) {
+  SHA_ATTACHMENT_RE.lastIndex = 0;
+  const references = [...String(text).matchAll(SHA_ATTACHMENT_RE)];
+  let bridged = String(text);
+  for (const reference of references) {
+    const path = await exportShaAttachment(reference[1], dir, objectsDir);
+    if (path) bridged = bridged.replace(reference[0], imageToolGuidance(path, mode));
+  }
+  return bridged;
+}
 
 /** 判断消息是否含 image content block。 */
 export function hasImageBlock(messages) {
@@ -82,41 +155,44 @@ export async function exportImage(attachment, ctx, dir) {
  * @param {string} dir - 图片导出目录。
  * @returns {Promise<Array>} 处理后消息（图片消息被替换成 fresh frozen 对象）。
  */
-export async function bridgeMessages(messages, ctx, dir) {
+export async function bridgeMessages(messages, ctx, dir, { attachmentObjectsDir } = {}) {
   const mode = getRuntimeConfig()?.mode ?? 'smart';
-  const policy = routePolicyText(mode, { vlmConfigured: true });
   const next = [];
   for (const message of messages) {
     const content = message?.content;
-    if (!Array.isArray(content) || !content.some((b) => b?.type === 'image')) {
+    if (!Array.isArray(content)) {
       next.push(message);
       continue;
     }
     const blocks = [];
+    let changed = false;
     for (const block of content) {
-      if (block?.type !== 'image') {
-        blocks.push(block);
+      if (block?.type === 'image') {
+        let path;
+        try {
+          path = await exportImage(block.attachment, ctx, dir);
+        } catch {
+          // 导出失败时回退成纯提示，不让整轮崩。
+          blocks.push({ type: 'text', text: '[图片附件已粘贴，将尝试读取分析]' });
+          changed = true;
+          continue;
+        }
+        const name = block.attachment.name ? `（${block.attachment.name}）` : '';
+        blocks.push({ type: 'text', text: imageToolGuidance(path, mode, name) });
+        changed = true;
         continue;
       }
-      let path;
-      try {
-        path = await exportImage(block.attachment, ctx, dir);
-      } catch {
-        // 导出失败时回退成纯提示，不让整轮崩。
-        blocks.push({ type: 'text', text: '[图片附件已粘贴，将尝试读取分析]' });
-        continue;
+      if (block?.type === 'text' && typeof block.text === 'string') {
+        const text = await bridgeShaAttachmentText(block.text, dir, mode, attachmentObjectsDir);
+        if (text !== block.text) {
+          blocks.push({ ...block, text });
+          changed = true;
+          continue;
+        }
       }
-      const name = block.attachment.name ? `（${block.attachment.name}）` : '';
-      blocks.push({
-        type: 'text',
-        text:
-          `用户粘贴了一张图片${name}，已导出到：${path}\n` +
-          `${routeModeTag(mode)}\n` +
-          policy +
-          `\n请先用 image_scan 分析 ${path}（如含文字再用 image_ocr）。`,
-      });
+      blocks.push(block);
     }
-    next.push(deepFreeze({ ...message, content: blocks }));
+    next.push(changed ? deepFreeze({ ...message, content: blocks }) : message);
   }
   return next;
 }
@@ -136,10 +212,11 @@ export function attachImageBridge(ctx) {
   // llm/stream 兜底：还带着 image block 的非多模态请求，降级后放行。
   ctx.on('llm/stream', (options, next) => {
     const hasImage = hasImageBlock(options?.messages);
+    const hasShaAttachment = hasShaAttachmentReference(options?.messages);
     if (debug) {
-      console.log('[picturereader] llm/stream fired, model=', options?.model, 'hasImage=', hasImage, 'messagesCount=', options?.messages?.length);
-      if (hasImage) {
-        console.log('[picturereader] Image blocks detected in messages, processing...');
+      console.log('[picturereader] llm/stream fired, model=', options?.model, 'hasImage=', hasImage, 'hasShaAttachment=', hasShaAttachment, 'messagesCount=', options?.messages?.length);
+      if (hasImage || hasShaAttachment) {
+        console.log('[picturereader] Image input detected, processing...');
       }
     }
     return (async function* () {
@@ -151,9 +228,9 @@ export function attachImageBridge(ctx) {
         const model = options?.model || '';
         const inWhitelist = multimodal.includes(model);
 
-        if (debug) console.log('[picturereader] Bridge config:', { guardOn, inWhitelist, hasImage, mode: rt?.mode });
+        if (debug) console.log('[picturereader] Bridge config:', { guardOn, inWhitelist, hasImage, hasShaAttachment, mode: rt?.mode });
 
-        if (guardOn && !inWhitelist && hasImage) {
+        if (guardOn && !inWhitelist && (hasImage || hasShaAttachment)) {
           const exportDir = (rt?.bridge?.exportDir || '').trim() || join(os.tmpdir(), 'picturereader-bridge');
           if (debug) console.log('[picturereader] Processing images, exportDir:', exportDir);
           const before = options.messages.reduce((n, m) => n + (Array.isArray(m?.content) ? m.content.filter(b => b?.type === 'image').length : 0), 0);
@@ -168,7 +245,7 @@ export function attachImageBridge(ctx) {
             if (debug) console.log('[picturereader] Messages not changed, using original');
           }
         } else {
-          if (debug) console.log('[picturereader] Skipping image processing:', { guardOn, inWhitelist, hasImage });
+          if (debug) console.log('[picturereader] Skipping image processing:', { guardOn, inWhitelist, hasImage, hasShaAttachment });
         }
       } catch (error) {
         console.log('[picturereader] llm/stream downgrade failed:', String(error && error.message || error));

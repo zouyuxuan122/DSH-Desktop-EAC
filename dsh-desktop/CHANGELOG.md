@@ -47,6 +47,11 @@ next2（功能包体系：.dshpack 打包分发插件+预设+技能，声明官�
 官方版本升级自动检出并一键迁移/回滚 —— 核心在 L2 功能包引擎 + CLI，
 交互集成进 dsh-unified-market 插件；详见下方「功能包体系（Feature Pack）」批次）
 
+## 5.4.0（picturereader 3.3.2 内置更新）· 2026-09-06
+
+- 内置 `picturereader` 升级至 3.3.2：图片在纯文本模型入口被预先改写为 `attachment sha256` 提示时，桥接层会仅从本地附件对象库定位唯一对象、校验文件头并导出为受支持图片，随后注入 `image_scan` / `image_ocr` 本地分析路径；缺失、歧义或非图片对象保持原提示。
+- 删除无引用的旧 `settings-compat.js` 遗留文件，同步插件 manifest 与来源台账版本。
+
 ## 5.3.6（内置输入灵动岛与分发契约补强）· 2026-09-03
 
 - Windows 首次源码构建兼容：内核归档工具仅在必需源码输入完整时容忍 Windows `tar` 对不支持链接条目的非零退出；原生 N-API 模块统一选择 `x86_64-pc-windows-msvc` 并从目标专属目录回填 `index.node`，避免 GNU 默认工具链与 `lld-link` 混用导致的链接失败。Linux/macOS 与显式非 MSVC Windows target 保持严格拒绝。

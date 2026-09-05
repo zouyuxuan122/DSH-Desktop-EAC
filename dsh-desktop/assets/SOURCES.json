@@ -1193,13 +1193,13 @@
       "name": "picturereader",
       "type": "plugin",
       "origin": "upstream",
-      "version": "3.3.1",
+      "version": "3.3.2",
       "path": "dsh-desktop/assets/plugins/picturereader",
       "registryStatus": "注册表默认启用",
       "audit": {
         "verdict": "catalog-hit",
         "compare": "same-version-modified",
-        "note": "停用旧内核settings namespace白名单补丁调用，保留兼容说明；额外node_modules文件属于内嵌运行依赖，单独分类。",
+        "note": "同步 picturereader 3.3.2：补齐文本模型将 image block 预降级为 attachment sha256 提示时的本地附件恢复；仍保留 EAC 内核 settings namespace 适配说明与内嵌运行依赖分类。",
         "basis": "package.repository明确声明",
         "conflict": null
       },

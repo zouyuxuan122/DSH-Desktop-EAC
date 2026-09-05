@@ -30,8 +30,7 @@ import { createImageBatchTool } from './image-batch.js';
 import { createDocumentToImageTool } from './doc-tools.js';
 import { createImageEditTool } from './image-edit.js';
 import { NS } from './config.js';
-// 0.1.3：dsh-settings 移除 settingsNamespace 独立导出 —— 改走内嵌兼容垫片。
-import { settingsNamespace } from './settings-compat.js';
+import { settingsNamespace } from '@deepseek-ai/dsh-settings';
 import z from '@deepseek-ai/schemastery';
 import { ensureSettingsNamespaceExposed } from './settings-expose.js';
 import { setRuntimeSource, getRuntimeConfig } from './runtime.js';
