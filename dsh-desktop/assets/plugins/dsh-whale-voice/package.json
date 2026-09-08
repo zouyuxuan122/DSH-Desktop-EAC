@@ -1,0 +1,23 @@
+{
+  "name": "dsh-whale-voice",
+  "version": "0.2.0",
+  "description": "Offline local Whisper voice input for DeepSeek Harness.",
+  "type": "module",
+  "main": "lib/index.js",
+  "exports": {
+    ".": "./lib/index.js",
+    "./client": "./lib/client.js",
+    "./package.json": "./package.json"
+  },
+  "files": ["lib", "cordis.patch.yml", "README.md"],
+  "scripts": { "test": "node tests/smoke-test.mjs" },
+  "dsh": {
+    "bundle": { "patch": "./cordis.patch.yml" },
+    "client": {
+      "platform": "web",
+      "inject": ["@deepseek-ai/dsh-client-ui-settings"],
+      "immediately": true
+    }
+  },
+  "license": "MIT"
+}

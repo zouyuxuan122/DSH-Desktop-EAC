@@ -201,6 +201,12 @@ export const COMPANION_PLUGINS: CompanionPluginDef[] = [
   // DeepSeek 余额小鲸鱼挂件（MeteorNOX/DeepSeek-Balance-Whale-Widget，MIT）。
   // 默认关闭：用户到「设置 → 插件 → 管理」或「增强功能」分区自行启用（需 DEEPSEEK_API_KEY 凭据）。
   { id: 'dsh-whale-widget', name: 'dsh-whale-widget', dir: 'dsh-whale-widget', disabled: true },
+  // 会话 Token 与费用估算：本地累计快照、可自定义定价和对话/侧栏显示。
+  // 默认关闭，避免未经选择就在会话页面增加统计信息。
+  { id: 'whale-meter', name: 'dsh-whale-meter', dir: 'dsh-whale-meter', disabled: true },
+  // 本地 Whisper 语音输入：默认 tiny；仅在用户点击「保存并下载运行库和模型」
+  // 后下载运行库与模型，初始安装包不包含大型 AI 运行时。
+  { id: 'whale-voice', name: 'dsh-whale-voice', dir: 'dsh-whale-voice', disabled: true },
   // 多智能体团队协作（NanmiCoder/dsh-agent-teams，MIT）：队长 + 子代理成员 +
   // 依赖感知任务 DAG + 活动面板。5.3.1 起默认启用（EAC 适配版；对话框
   // composer dock 有可见入口，设置「增强功能」分区保留停用开关）。

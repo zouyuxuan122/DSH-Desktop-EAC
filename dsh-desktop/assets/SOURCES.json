@@ -1188,6 +1188,56 @@
       }
     },
     {
+      "id": "C046a",
+      "line": "main",
+      "name": "dsh-whale-meter",
+      "type": "plugin",
+      "origin": "contribution",
+      "version": "0.1.0",
+      "path": "dsh-desktop/assets/plugins/dsh-whale-meter",
+      "registryStatus": "注册表默认禁用",
+      "audit": {
+        "verdict": "contributor-origin",
+        "compare": "首次收录",
+        "note": "按会话累计 DSH tokenUsage，提供本地费用估算、可自定义价格及对话/侧栏展示。",
+        "basis": "贡献者仓库源码与 MIT 许可证",
+        "conflict": null
+      },
+      "upstream": {
+        "repository": "https://github.com/ntpzz/dsh-whale-chan-pack",
+        "refType": "commit",
+        "pinnedHead": "9a620f0",
+        "catalogName": null,
+        "catalogEntry": null,
+        "provenance": "贡献者维护仓库 plugins/dsh-whale-meter"
+      }
+    },
+    {
+      "id": "C046b",
+      "line": "main",
+      "name": "dsh-whale-voice",
+      "type": "plugin",
+      "origin": "contribution",
+      "version": "0.2.0",
+      "path": "dsh-desktop/assets/plugins/dsh-whale-voice",
+      "registryStatus": "注册表默认禁用；首次准备模型时下载本地运行库",
+      "audit": {
+        "verdict": "contributor-origin",
+        "compare": "首次收录",
+        "note": "本地 Whisper 语音输入；模型、语言、设备、麦克风及 32×32 自定义图标均在 DSH 设置页配置。",
+        "basis": "贡献者仓库源码与 MIT 许可证",
+        "conflict": null
+      },
+      "upstream": {
+        "repository": "https://github.com/ntpzz/dsh-whale-chan-pack",
+        "refType": "commit",
+        "pinnedHead": "9a620f0",
+        "catalogName": null,
+        "catalogEntry": null,
+        "provenance": "贡献者维护仓库 plugins/dsh-whale-voice"
+      }
+    },
+    {
       "id": "C047",
       "line": "main",
       "name": "picturereader",

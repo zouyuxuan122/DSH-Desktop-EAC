@@ -1,0 +1,4 @@
+# dsh-whale-voice bundle patch
+- insert:
+    - id: whale-voice
+      name: dsh-whale-voice

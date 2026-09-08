@@ -1,0 +1,23 @@
+{
+  "name": "dsh-whale-meter",
+  "version": "0.1.0",
+  "description": "Persistent per-session token usage and cost estimates for DeepSeek Harness.",
+  "type": "module",
+  "main": "lib/index.js",
+  "exports": {
+    ".": "./lib/index.js",
+    "./client": "./lib/client.js",
+    "./package.json": "./package.json"
+  },
+  "files": ["lib", "cordis.patch.yml", "README.md"],
+  "scripts": { "test": "node tests/smoke-test.mjs" },
+  "dsh": {
+    "bundle": { "patch": "./cordis.patch.yml" },
+    "client": {
+      "platform": "web",
+      "inject": ["@deepseek-ai/dsh-client-ui-settings", "@deepseek-ai/dsh-client-ui-sidebar"],
+      "immediately": true
+    }
+  },
+  "license": "MIT"
+}

@@ -1,0 +1,4 @@
+# dsh-whale-meter bundle patch
+- insert:
+    - id: whale-meter
+      name: dsh-whale-meter
