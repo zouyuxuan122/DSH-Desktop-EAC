@@ -160,13 +160,14 @@ test('actual StatsLineShadow renders current legacy nodes and preserves projecti
     };
     assert.throws(() => renderToStaticMarkup(React.createElement(load(source), props)), /legacy/);
     const html = renderToStaticMarkup(React.createElement(load(text), props));
-    assert.match(html, /stats.counts/);
-    assert.match(html, /stats.toolCall/);
+    assert.match(html, /1 轮 · 1 步/);
+    assert.match(html, /工具调用/);
     assert.match(html, /90.25/);
-    assert.match(html, /stats.tokensPerSecond/);
+    assert.doesNotMatch(html, /stats\./);
+    assert.doesNotMatch(html, /tok\/s/);
     props.useProjection = key => key === 'sessionStats'
       ? { turns: 7, steps: 8, llmMs: 0, toolMs: 0, ttftSteps: 0, decodeMs: 0 } : undefined;
-    assert.match(renderToStaticMarkup(React.createElement(load(text), props)), /&quot;turns&quot;:7/);
+    assert.match(renderToStaticMarkup(React.createElement(load(text), props)), /7 轮 · 8 步/);
   });
 
 test('installed alpha.2 declarations pin lifecycle, chat legacy and input owners', () => {

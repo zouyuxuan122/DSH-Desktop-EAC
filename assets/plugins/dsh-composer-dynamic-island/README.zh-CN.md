@@ -19,14 +19,14 @@
 
 适配器会检测当前 DSH 输入区或 Composer 表面中的控件，并允许用户选择将哪些控件收纳进向上展开的灵动岛。它能够发现：
 
-- `conversation.input.left`、`conversation.input.right` 和 `conversation.input.model` 中的原生控件与贡献项；
+- `conversation.input.left` 和 `conversation.input.right` 中的原生控件与贡献项；
 - 后续新增的 `conversation.input.*` 或 `composer.*` 槽位中的按钮型贡献；
 - 通过 `data-plugin`、`data-plugin-id`、`data-extension`、`data-extension-id` 或 `data-contribution` 标记的嵌套按钮贡献；
 - 已确认 Composer 工具栏中的无标记按钮，作为可手动选择的集成项。
 
 发现范围始终限制在已确认的输入区或 Composer 表面内。文本/搜索输入框、`textarea`、`contenteditable` 区域和 ARIA 文本框永远不会被收纳，即使它们带有插件标记。Composer 之外的搜索、设置和普通表单控件不会被扫描。
 
-默认收起左侧插件控件和 WebUI 团队模式选择器。原生工具、权限控件、模型控件以及发送/停止按钮保持原位。现有控件仍由原来的 React 父节点管理；适配器只修改展示属性与样式，不会把节点移动到其他父节点。
+默认收起左侧插件控件和 WebUI 团队模式选择器。模型选择器始终使用宿主原生控件并保持原位；原生工具、权限控件以及发送/停止按钮也保持原位。现有控件仍由原来的 React 父节点管理；适配器只修改展示属性与样式，不会把节点移动到其他父节点。
 
 打开 DSH 设置并选择“输入灵动岛”，即可调整检测到的控件。选择会立即生效并保存在浏览器本地存储中。鼠标悬停或键盘聚焦三点按钮时打开灵动岛；在触摸设备上可点击固定；移开后关闭；按 Escape 可关闭并恢复焦点。
 

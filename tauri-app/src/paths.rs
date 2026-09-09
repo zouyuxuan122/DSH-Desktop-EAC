@@ -1,8 +1,8 @@
 //! 路径解析：开发模式直接用仓库根（与 Electron 版共享 vendor/node_modules），
 //! 打包模式用 Tauri resource 目录下 staging 脚本铺好的 app/node/npm。
 
-use std::path::PathBuf;
 use serde::{Deserialize, Serialize};
+use std::path::PathBuf;
 
 pub struct Paths {
     /// 应用 JS 根（shell-host.js / assets / node_modules 所在目录）。
@@ -11,7 +11,8 @@ pub struct Paths {
     pub node_exe: PathBuf,
     /// 内置 npm CLI 入口。
     pub npm_cli: PathBuf,
-    /// 用户数据目录（%APPDATA%/<identifier>，Tauri app_data_dir）。
+    /// 用户数据目录。安装版按发布版本隔离在
+    /// `%APPDATA%/<identifier>/releases/<version>`，避免更新包继承旧 AIO 数据。
     pub user_data: PathBuf,
     /// 日志目录。
     pub logs_dir: PathBuf,
@@ -58,11 +59,13 @@ impl Paths {
                 .join("npm-cli.js")
         };
         // 便携包在 exe 同级带 `.dsh-portable`，数据进入 `.dsh-aio-data`；
-        // 安装版继续使用独立 appData。环境变量始终优先，供自动化与高级用户覆盖。
+        // 安装版再按版本隔离一层，更新包不会复用旧 AIO 的根数据。
+        // 环境变量始终优先，供自动化与高级用户覆盖。
         let portable_data = portable_data_dir(packaged, resource_dir.as_deref());
+        let installed_data = installed_data_dir(&app_data_dir, &version);
         let user_data = match std::env::var("DSH_DESKTOP_USERDATA") {
             Ok(v) if !v.trim().is_empty() => PathBuf::from(v),
-            _ => portable_data.clone().unwrap_or(app_data_dir),
+            _ => portable_data.clone().unwrap_or(installed_data),
         };
         let dsh_home = match std::env::var("DSH_HOME") {
             Ok(v) if !v.trim().is_empty() => PathBuf::from(v),
@@ -153,9 +156,10 @@ impl Paths {
         if seed_home_is_empty(&self.dsh_home)? {
             copy_tree(&seed, &self.dsh_home)?;
             clear_legacy_plugin_preferences(&self.settings_file())?;
-            write_seed_marker(&marker_file, &ProfileSeedMarker::committed(
-                &self.version, &seed_fingerprint, None,
-            ))?;
+            write_seed_marker(
+                &marker_file,
+                &ProfileSeedMarker::committed(&self.version, &seed_fingerprint, None),
+            )?;
             return Ok(true);
         }
         ensure_plain_directory(&self.dsh_home)?;
@@ -164,7 +168,10 @@ impl Paths {
                 if let Some(backup_name) = marker.backup_name.as_deref() {
                     rollback_pending_profile(&self.dsh_home, backup_name)?;
                     let _ = std::fs::remove_file(&marker_file);
-                    return Err("previous profile seed did not pass boot health; old profile restored".into());
+                    return Err(
+                        "previous profile seed did not pass boot health; old profile restored"
+                            .into(),
+                    );
                 }
                 // There was no old profile to restore. Keep testing the exact
                 // seed already active and commit it after a healthy boot.
@@ -176,9 +183,10 @@ impl Paths {
             {
                 if let Some(backup_name) = marker.backup_name.as_deref() {
                     cleanup_profile_backup(&self.dsh_home, backup_name)?;
-                    write_seed_marker(&marker_file, &ProfileSeedMarker::committed(
-                        &self.version, &seed_fingerprint, None,
-                    ))?;
+                    write_seed_marker(
+                        &marker_file,
+                        &ProfileSeedMarker::committed(&self.version, &seed_fingerprint, None),
+                    )?;
                 }
                 return Ok(false);
             }
@@ -194,7 +202,10 @@ impl Paths {
             .map_err(|_| "system clock is before unix epoch".to_string())?
             .as_nanos();
         let candidate_name = format!(".{DESKTOP_PROFILE}-aio-seed-{}-{nonce}", std::process::id());
-        let backup_name = format!(".{DESKTOP_PROFILE}-aio-backup-{}-{nonce}", std::process::id());
+        let backup_name = format!(
+            ".{DESKTOP_PROFILE}-aio-backup-{}-{nonce}",
+            std::process::id()
+        );
         let candidate = profiles.join(&candidate_name);
         let backup = profiles.join(&backup_name);
         copy_tree(&seed_profile, &candidate)?;
@@ -213,10 +224,16 @@ impl Paths {
                 let _ = std::fs::rename(&backup, &active);
             }
             let _ = std::fs::remove_dir_all(&candidate);
-            return Err(format!("activate {} -> {}: {e}", candidate.display(), active.display()));
+            return Err(format!(
+                "activate {} -> {}: {e}",
+                candidate.display(),
+                active.display()
+            ));
         }
         let pending = ProfileSeedMarker::pending(
-            &self.version, &seed_fingerprint, had_active.then_some(backup_name),
+            &self.version,
+            &seed_fingerprint,
+            had_active.then_some(backup_name),
         );
         if let Err(e) = write_seed_marker(&marker_file, &pending) {
             let _ = std::fs::remove_dir_all(&active);
@@ -234,19 +251,28 @@ impl Paths {
     /// to retry without ever reactivating old plugins.
     pub fn commit_distribution_profile_seed(&self) -> Result<bool, String> {
         let marker_file = self.dsh_home.join(PROFILE_SEED_MARKER);
-        let Some(marker) = read_seed_marker(&marker_file)? else { return Ok(false) };
+        let Some(marker) = read_seed_marker(&marker_file)? else {
+            return Ok(false);
+        };
         if marker.state != "pending-health" {
             return Ok(false);
         }
         let committed = ProfileSeedMarker::committed(
-            &marker.app_version, &marker.seed_fingerprint, marker.backup_name.clone(),
+            &marker.app_version,
+            &marker.seed_fingerprint,
+            marker.backup_name.clone(),
         );
         write_seed_marker(&marker_file, &committed)?;
         if let Some(backup_name) = committed.backup_name.as_deref() {
             cleanup_profile_backup(&self.dsh_home, backup_name)?;
-            write_seed_marker(&marker_file, &ProfileSeedMarker::committed(
-                &committed.app_version, &committed.seed_fingerprint, None,
-            ))?;
+            write_seed_marker(
+                &marker_file,
+                &ProfileSeedMarker::committed(
+                    &committed.app_version,
+                    &committed.seed_fingerprint,
+                    None,
+                ),
+            )?;
         }
         let plugin_cache = self.dsh_home.join("plugin-artifact-cache");
         if plugin_cache.exists() {
@@ -266,6 +292,10 @@ pub const DESKTOP_PROFILE_BUNDLES: [&str; 2] =
 
 pub fn dirs_home() -> Option<PathBuf> {
     std::env::var("USERPROFILE").ok().map(PathBuf::from)
+}
+
+fn installed_data_dir(app_data_dir: &std::path::Path, version: &str) -> PathBuf {
+    app_data_dir.join("releases").join(version)
 }
 
 fn seed_home_is_empty(home: &std::path::Path) -> Result<bool, String> {
@@ -293,10 +323,17 @@ fn clear_legacy_plugin_preferences(file: &std::path::Path) -> Result<(), String>
         return Ok(());
     }
     let mut settings = crate::settings::load_at(file);
-    let Some(object) = settings.as_object_mut() else { return Ok(()) };
+    let Some(object) = settings.as_object_mut() else {
+        return Ok(());
+    };
     let mut changed = false;
-    for key in ["removedPlugins", "pluginAutoUpdate", "shareWebProfile",
-        "desktopProfileMigrated", "legacySkinChoice"] {
+    for key in [
+        "removedPlugins",
+        "pluginAutoUpdate",
+        "shareWebProfile",
+        "desktopProfileMigrated",
+        "legacySkinChoice",
+    ] {
         changed |= object.remove(key).is_some();
     }
     if changed {
@@ -318,13 +355,23 @@ struct ProfileSeedMarker {
 
 impl ProfileSeedMarker {
     fn pending(version: &str, fingerprint: &str, backup_name: Option<String>) -> Self {
-        Self { schema: 1, app_version: version.into(), seed_fingerprint: fingerprint.into(),
-            state: "pending-health".into(), backup_name }
+        Self {
+            schema: 1,
+            app_version: version.into(),
+            seed_fingerprint: fingerprint.into(),
+            state: "pending-health".into(),
+            backup_name,
+        }
     }
 
     fn committed(version: &str, fingerprint: &str, backup_name: Option<String>) -> Self {
-        Self { schema: 1, app_version: version.into(), seed_fingerprint: fingerprint.into(),
-            state: "committed".into(), backup_name }
+        Self {
+            schema: 1,
+            app_version: version.into(),
+            seed_fingerprint: fingerprint.into(),
+            state: "committed".into(),
+            backup_name,
+        }
     }
 }
 
@@ -337,7 +384,8 @@ fn read_seed_marker(file: &std::path::Path) -> Result<Option<ProfileSeedMarker>,
                 || !matches!(marker.state.as_str(), "pending-health" | "committed")
                 || marker.seed_fingerprint.len() != 16
                 || marker.backup_name.as_deref().is_some_and(|name| {
-                    name.contains(['/', '\\']) || !name.starts_with(&format!(".{DESKTOP_PROFILE}-aio-backup-"))
+                    name.contains(['/', '\\'])
+                        || !name.starts_with(&format!(".{DESKTOP_PROFILE}-aio-backup-"))
                 })
             {
                 return Err("profile seed marker is invalid".into());
@@ -350,7 +398,9 @@ fn read_seed_marker(file: &std::path::Path) -> Result<Option<ProfileSeedMarker>,
 }
 
 fn write_seed_marker(file: &std::path::Path, marker: &ProfileSeedMarker) -> Result<(), String> {
-    let parent = file.parent().ok_or_else(|| "profile seed marker has no parent".to_string())?;
+    let parent = file
+        .parent()
+        .ok_or_else(|| "profile seed marker has no parent".to_string())?;
     std::fs::create_dir_all(parent).map_err(|e| format!("create {}: {e}", parent.display()))?;
     let temporary = parent.join(format!(".{PROFILE_SEED_MARKER}.tmp-{}", std::process::id()));
     let mut bytes = serde_json::to_vec_pretty(marker).map_err(|e| e.to_string())?;
@@ -359,8 +409,13 @@ fn write_seed_marker(file: &std::path::Path, marker: &ProfileSeedMarker) -> Resu
     if file.exists() {
         std::fs::remove_file(file).map_err(|e| format!("replace {}: {e}", file.display()))?;
     }
-    std::fs::rename(&temporary, file)
-        .map_err(|e| format!("activate {} -> {}: {e}", temporary.display(), file.display()))
+    std::fs::rename(&temporary, file).map_err(|e| {
+        format!(
+            "activate {} -> {}: {e}",
+            temporary.display(),
+            file.display()
+        )
+    })
 }
 
 fn ensure_plain_directory(directory: &std::path::Path) -> Result<(), String> {
@@ -368,8 +423,12 @@ fn ensure_plain_directory(directory: &std::path::Path) -> Result<(), String> {
     ancestors.reverse();
     for entry in ancestors {
         match std::fs::symlink_metadata(entry) {
-            Ok(meta) if meta.file_type().is_symlink() => return Err("linked profile boundary rejected".into()),
-            Ok(meta) if entry == directory && !meta.is_dir() => return Err("profile boundary is not a directory".into()),
+            Ok(meta) if meta.file_type().is_symlink() => {
+                return Err("linked profile boundary rejected".into())
+            }
+            Ok(meta) if entry == directory && !meta.is_dir() => {
+                return Err("profile boundary is not a directory".into())
+            }
             Err(e) if e.kind() == std::io::ErrorKind::NotFound => continue,
             Err(e) => return Err(format!("inspect {}: {e}", entry.display())),
             _ => {}
@@ -384,7 +443,8 @@ fn cleanup_profile_backup(home: &std::path::Path, backup_name: &str) -> Result<(
     let backup = profiles.join(backup_name);
     if backup.exists() {
         ensure_plain_directory(&backup)?;
-        std::fs::remove_dir_all(&backup).map_err(|e| format!("remove {}: {e}", backup.display()))?;
+        std::fs::remove_dir_all(&backup)
+            .map_err(|e| format!("remove {}: {e}", backup.display()))?;
     }
     Ok(())
 }
@@ -397,7 +457,8 @@ fn rollback_pending_profile(home: &std::path::Path, backup_name: &str) -> Result
     ensure_plain_directory(&backup)?;
     if active.exists() {
         ensure_plain_directory(&active)?;
-        std::fs::remove_dir_all(&active).map_err(|e| format!("remove {}: {e}", active.display()))?;
+        std::fs::remove_dir_all(&active)
+            .map_err(|e| format!("remove {}: {e}", active.display()))?;
     }
     std::fs::rename(&backup, &active)
         .map_err(|e| format!("restore {} -> {}: {e}", backup.display(), active.display()))
@@ -410,7 +471,11 @@ fn tree_fingerprint(root: &std::path::Path) -> Result<String, String> {
             *hash = hash.wrapping_mul(0x100000001b3);
         }
     }
-    fn walk(root: &std::path::Path, directory: &std::path::Path, hash: &mut u64) -> Result<(), String> {
+    fn walk(
+        root: &std::path::Path,
+        directory: &std::path::Path,
+        hash: &mut u64,
+    ) -> Result<(), String> {
         let mut entries = std::fs::read_dir(directory)
             .map_err(|e| format!("read {}: {e}", directory.display()))?
             .collect::<Result<Vec<_>, _>>()
@@ -418,9 +483,16 @@ fn tree_fingerprint(root: &std::path::Path) -> Result<String, String> {
         entries.sort_by_key(|entry| entry.file_name());
         for entry in entries {
             let file = entry.path();
-            let relative = file.strip_prefix(root).map_err(|_| "profile seed path escaped root".to_string())?;
-            mix(hash, relative.to_string_lossy().replace('\\', "/").as_bytes());
-            let kind = entry.file_type().map_err(|e| format!("inspect {}: {e}", file.display()))?;
+            let relative = file
+                .strip_prefix(root)
+                .map_err(|_| "profile seed path escaped root".to_string())?;
+            mix(
+                hash,
+                relative.to_string_lossy().replace('\\', "/").as_bytes(),
+            );
+            let kind = entry
+                .file_type()
+                .map_err(|e| format!("inspect {}: {e}", file.display()))?;
             if kind.is_symlink() {
                 return Err("linked profile seed entry rejected".into());
             } else if kind.is_dir() {
@@ -428,7 +500,10 @@ fn tree_fingerprint(root: &std::path::Path) -> Result<String, String> {
                 walk(root, &file, hash)?;
             } else if kind.is_file() {
                 mix(hash, b"F");
-                mix(hash, &std::fs::read(&file).map_err(|e| format!("read {}: {e}", file.display()))?);
+                mix(
+                    hash,
+                    &std::fs::read(&file).map_err(|e| format!("read {}: {e}", file.display()))?,
+                );
             } else {
                 return Err("unsupported profile seed entry".into());
             }
@@ -532,7 +607,10 @@ mod tests {
         assert!(seed_home_is_empty(&root).unwrap());
         std::fs::write(root.join("settings.yaml"), b"private: unchanged").unwrap();
         assert!(!seed_home_is_empty(&root).unwrap());
-        assert_eq!(std::fs::read(root.join("settings.yaml")).unwrap(), b"private: unchanged");
+        assert_eq!(
+            std::fs::read(root.join("settings.yaml")).unwrap(),
+            b"private: unchanged"
+        );
         std::fs::remove_dir_all(root).unwrap();
     }
 
@@ -542,40 +620,99 @@ mod tests {
         let paths = test_paths(&root);
         let seed_home = root.join("resources/profile-seed");
         write_file(&seed_home, "settings.yaml", b"public-default: true\n");
-        write_file(&seed_home, "profiles/web-desktop/package.json", b"{\"name\":\"new-profile\"}\n");
-        write_file(&seed_home, "profiles/web-desktop/node_modules/new-plugin/index.js", b"new\n");
+        write_file(
+            &seed_home,
+            "profiles/web-desktop/package.json",
+            b"{\"name\":\"new-profile\"}\n",
+        );
+        write_file(
+            &seed_home,
+            "profiles/web-desktop/node_modules/new-plugin/index.js",
+            b"new\n",
+        );
         write_file(&paths.dsh_home, "settings.yaml", b"provider: private\n");
         write_file(&paths.dsh_home, ".credentials.yaml", b"apiKey: synthetic\n");
-        write_file(&paths.dsh_home, "sessions/a/events.jsonl", b"private session\n");
+        write_file(
+            &paths.dsh_home,
+            "sessions/a/events.jsonl",
+            b"private session\n",
+        );
         write_file(&paths.dsh_home, "attachments/v1/a", &[0, 1, 255]);
-        write_file(&paths.dsh_home, "profiles/web-desktop/package.json", b"{\"name\":\"old-profile\"}\n");
-        write_file(&paths.dsh_home, "profiles/web-desktop/node_modules/old-plugin/index.js", b"old\n");
-        write_file(&paths.dsh_home, "plugin-artifact-cache/old-plugin/lib/index.js", b"old cache\n");
+        write_file(
+            &paths.dsh_home,
+            "profiles/web-desktop/package.json",
+            b"{\"name\":\"old-profile\"}\n",
+        );
+        write_file(
+            &paths.dsh_home,
+            "profiles/web-desktop/node_modules/old-plugin/index.js",
+            b"old\n",
+        );
+        write_file(
+            &paths.dsh_home,
+            "plugin-artifact-cache/old-plugin/lib/index.js",
+            b"old cache\n",
+        );
         write_file(&paths.user_data, "settings.json",
             br#"{"exitAction":"minimize","removedPlugins":["balance"],"pluginAutoUpdate":true,"shareWebProfile":true,"legacySkinChoice":"ui-skin-old"}"#);
 
         assert!(paths.seed_distribution_profile().unwrap());
-        assert_eq!(std::fs::read(paths.dsh_home.join("settings.yaml")).unwrap(), b"provider: private\n");
-        assert_eq!(std::fs::read(paths.dsh_home.join(".credentials.yaml")).unwrap(), b"apiKey: synthetic\n");
-        assert_eq!(std::fs::read(paths.dsh_home.join("sessions/a/events.jsonl")).unwrap(), b"private session\n");
-        assert_eq!(std::fs::read(paths.dsh_home.join("attachments/v1/a")).unwrap(), [0, 1, 255]);
-        assert_eq!(std::fs::read(paths.dsh_home.join("profiles/web-desktop/package.json")).unwrap(),
-            b"{\"name\":\"new-profile\"}\n");
-        assert!(!paths.dsh_home.join("profiles/web-desktop/node_modules/old-plugin").exists());
-        let pending = read_seed_marker(&paths.dsh_home.join(PROFILE_SEED_MARKER)).unwrap().unwrap();
+        assert_eq!(
+            std::fs::read(paths.dsh_home.join("settings.yaml")).unwrap(),
+            b"provider: private\n"
+        );
+        assert_eq!(
+            std::fs::read(paths.dsh_home.join(".credentials.yaml")).unwrap(),
+            b"apiKey: synthetic\n"
+        );
+        assert_eq!(
+            std::fs::read(paths.dsh_home.join("sessions/a/events.jsonl")).unwrap(),
+            b"private session\n"
+        );
+        assert_eq!(
+            std::fs::read(paths.dsh_home.join("attachments/v1/a")).unwrap(),
+            [0, 1, 255]
+        );
+        assert_eq!(
+            std::fs::read(paths.dsh_home.join("profiles/web-desktop/package.json")).unwrap(),
+            b"{\"name\":\"new-profile\"}\n"
+        );
+        assert!(!paths
+            .dsh_home
+            .join("profiles/web-desktop/node_modules/old-plugin")
+            .exists());
+        let pending = read_seed_marker(&paths.dsh_home.join(PROFILE_SEED_MARKER))
+            .unwrap()
+            .unwrap();
         assert_eq!(pending.state, "pending-health");
-        let backup = paths.dsh_home.join("profiles").join(pending.backup_name.as_ref().unwrap());
+        let backup = paths
+            .dsh_home
+            .join("profiles")
+            .join(pending.backup_name.as_ref().unwrap());
         assert!(backup.join("node_modules/old-plugin/index.js").is_file());
         let app_settings = crate::settings::load_at(&paths.settings_file());
-        assert_eq!(app_settings.get("exitAction").and_then(|v| v.as_str()), Some("minimize"));
-        for key in ["removedPlugins", "pluginAutoUpdate", "shareWebProfile", "legacySkinChoice"] {
-            assert!(app_settings.get(key).is_none(), "{key} must not be inherited");
+        assert_eq!(
+            app_settings.get("exitAction").and_then(|v| v.as_str()),
+            Some("minimize")
+        );
+        for key in [
+            "removedPlugins",
+            "pluginAutoUpdate",
+            "shareWebProfile",
+            "legacySkinChoice",
+        ] {
+            assert!(
+                app_settings.get(key).is_none(),
+                "{key} must not be inherited"
+            );
         }
 
         assert!(paths.commit_distribution_profile_seed().unwrap());
         assert!(!backup.exists());
         assert!(!paths.dsh_home.join("plugin-artifact-cache").exists());
-        let committed = read_seed_marker(&paths.dsh_home.join(PROFILE_SEED_MARKER)).unwrap().unwrap();
+        let committed = read_seed_marker(&paths.dsh_home.join(PROFILE_SEED_MARKER))
+            .unwrap()
+            .unwrap();
         assert_eq!(committed.state, "committed");
         assert!(committed.backup_name.is_none());
         assert!(!paths.seed_distribution_profile().unwrap());
@@ -588,15 +725,28 @@ mod tests {
         let paths = test_paths(&root);
         let seed_home = root.join("resources/profile-seed");
         write_file(&seed_home, "settings.yaml", b"public-default: true\n");
-        write_file(&seed_home, "profiles/web-desktop/package.json", b"{\"name\":\"new-profile\"}\n");
+        write_file(
+            &seed_home,
+            "profiles/web-desktop/package.json",
+            b"{\"name\":\"new-profile\"}\n",
+        );
         write_file(&paths.dsh_home, "settings.yaml", b"provider: private\n");
-        write_file(&paths.dsh_home, "profiles/web-desktop/package.json", b"{\"name\":\"old-profile\"}\n");
+        write_file(
+            &paths.dsh_home,
+            "profiles/web-desktop/package.json",
+            b"{\"name\":\"old-profile\"}\n",
+        );
 
         assert!(paths.seed_distribution_profile().unwrap());
         assert!(paths.seed_distribution_profile().is_err());
-        assert_eq!(std::fs::read(paths.dsh_home.join("profiles/web-desktop/package.json")).unwrap(),
-            b"{\"name\":\"old-profile\"}\n");
-        assert_eq!(std::fs::read(paths.dsh_home.join("settings.yaml")).unwrap(), b"provider: private\n");
+        assert_eq!(
+            std::fs::read(paths.dsh_home.join("profiles/web-desktop/package.json")).unwrap(),
+            b"{\"name\":\"old-profile\"}\n"
+        );
+        assert_eq!(
+            std::fs::read(paths.dsh_home.join("settings.yaml")).unwrap(),
+            b"provider: private\n"
+        );
         assert!(!paths.dsh_home.join(PROFILE_SEED_MARKER).exists());
         std::fs::remove_dir_all(root).unwrap();
     }
@@ -607,11 +757,20 @@ mod tests {
         let paths = test_paths(&root);
         let seed_home = root.join("resources/profile-seed");
         write_file(&seed_home, "settings.yaml", b"public-default: true\n");
-        write_file(&seed_home, "profiles/web-desktop/package.json", b"{\"name\":\"new-profile\"}\n");
+        write_file(
+            &seed_home,
+            "profiles/web-desktop/package.json",
+            b"{\"name\":\"new-profile\"}\n",
+        );
 
         assert!(paths.seed_distribution_profile().unwrap());
-        assert_eq!(std::fs::read(paths.dsh_home.join("settings.yaml")).unwrap(), b"public-default: true\n");
-        let marker = read_seed_marker(&paths.dsh_home.join(PROFILE_SEED_MARKER)).unwrap().unwrap();
+        assert_eq!(
+            std::fs::read(paths.dsh_home.join("settings.yaml")).unwrap(),
+            b"public-default: true\n"
+        );
+        let marker = read_seed_marker(&paths.dsh_home.join(PROFILE_SEED_MARKER))
+            .unwrap()
+            .unwrap();
         assert_eq!(marker.state, "committed");
         assert!(marker.backup_name.is_none());
         std::fs::remove_dir_all(root).unwrap();
@@ -621,9 +780,16 @@ mod tests {
     fn shared_profile_preference_cannot_redirect_aio_to_old_plugins() {
         let root = test_root("dedicated-profile");
         let paths = test_paths(&root);
-        write_file(&paths.user_data, "settings.json", br#"{"shareWebProfile":true}"#);
+        write_file(
+            &paths.user_data,
+            "settings.json",
+            br#"{"shareWebProfile":true}"#,
+        );
         assert_eq!(paths.desktop_profile(), DESKTOP_PROFILE);
-        assert_eq!(paths.desktop_profile_dir(), paths.dsh_home.join("profiles/web-desktop"));
+        assert_eq!(
+            paths.desktop_profile_dir(),
+            paths.dsh_home.join("profiles/web-desktop")
+        );
         std::fs::remove_dir_all(root).unwrap();
     }
 
@@ -632,8 +798,22 @@ mod tests {
         let root = test_root("aio-portable");
         let _ = std::fs::create_dir_all(&root);
         std::fs::write(root.join(".dsh-portable"), b"").unwrap();
-        assert_eq!(portable_data_dir(true, Some(&root)), Some(root.join(".dsh-aio-data")));
+        assert_eq!(
+            portable_data_dir(true, Some(&root)),
+            Some(root.join(".dsh-aio-data"))
+        );
         assert_eq!(portable_data_dir(false, Some(&root)), None);
         let _ = std::fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn installed_data_isolated_per_release_without_touching_legacy_root() {
+        let root = test_root("installed-release-data");
+        let old = installed_data_dir(&root, "1.1.0");
+        let current = installed_data_dir(&root, "1.2.0");
+        assert_eq!(old, root.join("releases/1.1.0"));
+        assert_eq!(current, root.join("releases/1.2.0"));
+        assert_ne!(old, current);
+        assert_ne!(current, root);
     }
 }

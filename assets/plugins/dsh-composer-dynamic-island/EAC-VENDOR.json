@@ -4,7 +4,7 @@
   "tag": "v2.1.0",
   "commit": "2ccd12ff807c3bc983defd2177e15be1a416106f",
   "upstreamClientSha256": "22ea2dff2002dfd012d54aec8fd3c91d1d62544d5f54c10de755bdb05fc20f78",
-  "vendoredClientSha256": "07f5a0415ef58db60483d10d39d349739f4bbc4f8974cfbd3c4e4c4286479be3",
+  "vendoredClientSha256": "c0d54d704a056e11c1732c8eb287b0ca3e5ae49816cb7674727094c084646fb2",
   "vendoredClientSha256Encoding": "UTF-8 with LF line endings",
   "localPatches": [
     "cancel queued animation frames and reject layout after disposal",
@@ -16,6 +16,7 @@
     "refresh popup placement on open and captured scroll, with teardown cleanup",
     "support identity entrance transforms and measure overflowing button bounds",
     "keep popup placement within the composer column when side panels are open",
-    "close hover-open popups on Escape after restoring trigger focus"
+    "close hover-open popups on Escape after restoring trigger focus",
+    "keep the host-native model selector in its original React tree"
   ]
 }

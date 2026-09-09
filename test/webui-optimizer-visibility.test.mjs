@@ -3,13 +3,14 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import vm from 'node:vm';
 import { createRequire } from 'node:module';
+import { migrateWebuiPromptOptimize } from '../scripts/webui-prompt-optimize-compat.mjs';
 
 const require = createRequire(import.meta.url);
 const seed = process.env.DSH_PUBLIC_R5 ||
   'H:/CODEX/build-inputs/aio-1.2.0-public-seed-20260908-r5';
 const webui = `${seed}/profiles/web-desktop/node_modules/@dsh-external/dsh-webui/lib/client.js`;
 const available = fs.existsSync(webui);
-const source = available ? fs.readFileSync(webui, 'utf8') : '';
+const source = available ? migrateWebuiPromptOptimize(fs.readFileSync(webui, 'utf8')) : '';
 function between(text, start, end) {
   const from = text.indexOf(start);
   const to = text.indexOf(end, from + start.length);
@@ -17,7 +18,7 @@ function between(text, start, end) {
   return text.slice(from, to);
 }
 
-test('r5 optimizer defaults on; actual module cache sync needs the next registration pass',
+test('optimizer defaults on and stale local module cache is reconciled immediately',
   { skip: !available }, async () => {
     const settings = require('js-yaml').load(fs.readFileSync(`${seed}/settings.yaml`, 'utf8'));
     const flags = between(source, 'const WEBUI_MODULE_KEYS = ', '//#endregion');
@@ -39,12 +40,15 @@ test('r5 optimizer defaults on; actual module cache sync needs the next registra
     assert.equal(api.isModuleEnabled(settings['webui-modules'], 'promptOptimize'), true);
     const startupDecision = api.isModuleEnabled(api.readStoredModules(), 'promptOptimize');
     assert.equal(startupDecision, false);
-    api.syncServerModules();
+    let syncedModules;
+    api.syncServerModules(modules => { syncedModules = modules; });
     await synchronized;
     assert.equal(api.isModuleEnabled(api.readStoredModules(), 'promptOptimize'), true);
-    assert.equal(startupDecision, false, 'already-skipped startup registration is not rerun');
+    assert.equal(api.isModuleEnabled(syncedModules, 'promptOptimize'), true);
     assert.match(source, /PromptOptimizeButton\(\{ available, directory, useInput,/);
-    assert.match(source, /if \(on\("promptOptimize"\)\) applyPromptOptimize\(ctx\)/);
+    assert.match(source, /const mountPromptOptimize = \(\) => \{/);
+    assert.match(source, /syncServerModules\(\(modules\) => \{/);
+    assert.match(source, /if \(on\("promptOptimize"\)\) mountPromptOptimize\(\);/);
   });
 
 test('actual island selection keeps optimizer right-slot contribution visible by default',

@@ -27,8 +27,8 @@ The adapter detects controls from an active DSH input or composer surface and
 lets the user choose which controls collapse into an upward-expanding island.
 It discovers:
 
-- native controls and contributions in `conversation.input.left`,
-  `conversation.input.right`, and `conversation.input.model`;
+- native controls and contributions in `conversation.input.left` and
+  `conversation.input.right`;
 - button-style contributions in future `conversation.input.*` or `composer.*`
   slots;
 - nested button contributions marked with `data-plugin`, `data-plugin-id`,
@@ -42,7 +42,8 @@ textboxes are never collapsed, even when they carry a plugin marker. Search,
 settings, and ordinary form controls outside the composer are not scanned.
 
 Defaults collapse left-side plugin controls and the WebUI team-mode selector.
-Native tools, permission controls, model controls, and send/stop remain in
+The model selector always uses the host-native control and remains in its
+original position. Native tools, permission controls, and send/stop remain in
 their original positions. Existing controls remain owned by their original
 React parent; the adapter changes presentation attributes and styles without
 moving nodes to another parent.

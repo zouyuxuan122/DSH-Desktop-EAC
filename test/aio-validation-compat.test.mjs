@@ -37,7 +37,8 @@ test('AIO remains isolated from every legacy product by default', () => {
   const electron = read('main.js');
   const shortcuts = read('tauri-app/src/shortcuts.rs');
   assert.equal(conf.identifier, 'com.deepseek.dsh.desktop.aio');
-  assert.match(paths, /user_data\.join\("dsh-home"\)/);
+  assert.match(paths, /installed_data_dir\(&app_data_dir, &version\)/);
+  assert.match(paths, /app_data_dir\.join\("releases"\)\.join\(version\)/);
   assert.match(migrate, /DSH_AIO_IMPORT_LEGACY/);
   assert.match(migrate, /!= Ok\("1"\)/);
   assert.match(nsh, /taskkill \/F \/T \/IM "DSHEAC AIO\.exe"/);
@@ -73,6 +74,31 @@ test('AIO update smoke rejects client self-update exposure', () => {
   const smoke = read('update-smoke.js');
   assert.match(smoke, /client auto-update scripts/);
   assert.match(smoke, /plugin auto-update must default to disabled/);
+});
+
+test('AIO installer marks the watchdog state clean before forced restart cleanup', () => {
+  const script = read('scripts/verify-aio-installer.ps1');
+  assert.match(script, /function Mark-CleanExit\(/);
+  assert.match(script, /Mark-CleanExit \(Join-Path \$isolatedUserData 'run-state\.json'\)/);
+  assert.match(script, /WriteAllText\(\$StateFile, \(\$state \| ConvertTo-Json -Compress\)/);
+  assert.match(script, /if \(\$appProcess\.HasExited\) \{ continue \}/);
+  assert.doesNotMatch(script, /\$restartTail[\s\S]{0,300}if \(\$appProcess\.HasExited\) \{ break \}/);
+});
+
+test('staging restores the WebUI KaTeX fallback on the copied profile seed', () => {
+  const stage = read('tauri-app/scripts/stage.ts');
+  assert.match(stage, /patch-webui-katex\.mjs/);
+  assert.match(stage, /patch-webui-continue\.mjs/);
+  assert.match(stage, /patch-webui-prompt-optimize\.mjs/);
+  assert.match(stage, /patch-webui-native-model-selection\.mjs/);
+  assert.match(stage, /patch-webui-layout\.mjs/);
+  assert.match(stage, /patch-status-rotator\.mjs/);
+  assert.match(stage, /prepare-aio-staged-seed\.mjs/);
+  const patcher = read('scripts/patch-webui-katex.mjs');
+  assert.match(patcher, /migrateWebuiKatexFallback/);
+  const seed = read('scripts/prepare-aio-staged-seed.mjs');
+  assert.match(seed, /installWebuiUsageHost/);
+  assert.match(seed, /builtinNames/);
 });
 
 test('release scripts compute SHA-256 without PowerShell module autoloading', () => {

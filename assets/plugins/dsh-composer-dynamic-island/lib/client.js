@@ -14,7 +14,6 @@ window.__ModuleLoader__.load({
     const ITEM_ATTR = "data-dsh-island-item";
     const LEFT_SLOT = "conversation.input.left";
     const RIGHT_SLOT = "conversation.input.right";
-    const MODEL_SLOT = "conversation.input.model";
     const STORE_KEY = "dsh-composer-dynamic-island-config-v1";
     const MAX_PANEL_WIDTH = 520;
     const BUTTON_CONTROL_SELECTOR = 'button,[role="button"],input[type="button"],input[type="submit"],input[type="reset"]';
@@ -31,10 +30,9 @@ window.__ModuleLoader__.load({
       team: "团队模式",
       extension: "输入区插件",
       right: "右侧插件",
-      model: "模型控件",
       action: "发送操作",
     };
-    const ZONE_ORDER = ["native", "left", "team", "extension", "right", "model", "action"];
+    const ZONE_ORDER = ["native", "left", "team", "extension", "right", "action"];
 
     const CSS = [
       "[data-dsh-island-row]{position:relative!important;flex-wrap:nowrap!important;gap:8px!important;min-height:36px!important;isolation:isolate}",
@@ -314,7 +312,6 @@ window.__ModuleLoader__.load({
     function inputSlotZone(slotName) {
       if (slotName === LEFT_SLOT) return "left";
       if (slotName === RIGHT_SLOT) return "right";
-      if (slotName === MODEL_SLOT) return "model";
       return "extension";
     }
 
@@ -334,14 +331,13 @@ window.__ModuleLoader__.load({
         .filter((slot) => slot instanceof HTMLElement && INPUT_SLOT_PATTERN.test(slot.getAttribute("data-slot") ?? ""));
       const leftSlot = inputSlots.find((slot) => slot.getAttribute("data-slot") === LEFT_SLOT) ?? null;
       const rightSlot = inputSlots.find((slot) => slot.getAttribute("data-slot") === RIGHT_SLOT) ?? null;
-      const modelSlot = inputSlots.find((slot) => slot.getAttribute("data-slot") === MODEL_SLOT) ?? null;
       const modes = directElementChildren(tools).find((child) => child !== leftSlot
         && child.getAttribute("data-slot") === null
         && !child.matches(PLUGIN_MARKER_SELECTOR)
         && child.querySelector(PLUGIN_MARKER_SELECTOR) === null
         && buttonControlOf(child) === null
         && /(?:^|[-_])(mode|modes)(?:[-_]|$)/i.test(child.className)) ?? null;
-      return { card, row, tools, trailing, modes, leftSlot, rightSlot, modelSlot, inputSlots };
+      return { card, row, tools, trailing, modes, leftSlot, rightSlot, inputSlots };
     }
 
     function fixedPositionIsReliable(node) {
@@ -398,6 +394,9 @@ window.__ModuleLoader__.load({
       // composer.* slots become available without another hard-coded branch.
       for (const slot of parts.inputSlots) {
         const slotName = slot.getAttribute("data-slot") ?? "";
+        // The host's model selector is a native control owned by WebUI. Keep it
+        // in its original React tree instead of collapsing or restyling it.
+        if (slotName === "conversation.input.model") continue;
         const zone = inputSlotZone(slotName);
         for (const child of directElementChildren(slot)) {
           const resolvedZone = child.classList.contains("team-seat") ? "team" : zone;
