@@ -76,6 +76,12 @@ test('Web adapter 无外传 API，并锁定焦点与卸载生命周期修复', (
   assert.doesNotMatch(client, /\? "岛内" : "原位"/);
 });
 
+test('模型选择器始终交给宿主原生控件处理', () => {
+  assert.doesNotMatch(client, /const MODEL_SLOT/);
+  assert.match(client, /slotName === "conversation\.input\.model"\) continue/);
+  assert.doesNotMatch(client, /zoneLabel: ZONE_LABELS\[zone\][\s\S]{0,120}model/);
+});
+
 test('Electron 与 Tauri sidecar 同步注册插件和 GitHub 更新源', () => {
   for (const rel of ['main.js', 'sidecar/src/desktop-core.ts']) {
     const source = read(rel);

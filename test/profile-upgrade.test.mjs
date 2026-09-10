@@ -210,6 +210,37 @@ test('unused owned links to real top-level packages and trusted app packages are
   assert.doesNotThrow(() => assertProfileStartup(app, profile));
 });
 
+// The kernel points profile fallbacks at the shared layer <home>/profiles/node_modules,
+// whose entries are themselves junctions. Those hops are trusted and must not block
+// the second and later launches of an installed profile.
+test('kernel shared dependency layer links are accepted on restart', t => {
+  const { app, profile, root } = fixture(t, UPGRADE_TARGET.kernel);
+  const shared = path.join(root, 'home/profiles/node_modules');
+  const name = 'shared-dependency';
+  put(app, `node_modules/${name}/package.json`, { name, version: '1.0.0' });
+  linkDirectory(path.join(app, 'node_modules', name), path.join(shared, name));
+  const owned = path.join(profile, '.dsh-module-fallback/node_modules', name);
+  linkDirectory(path.join(shared, name), owned);
+  linkDirectory(owned, path.join(profile, 'node_modules', name));
+  const before = bytes(root);
+  assert.equal(planProfileUpgrade(app, profile).status, 'compatible');
+  assert.doesNotThrow(() => assertProfileStartup(app, profile));
+  assert.deepEqual(bytes(root), before);
+});
+
+// Accepting the shared-layer hop must not become a way to escape the trusted roots.
+test('shared layer links resolving outside the trusted roots still fail closed', t => {
+  const { app, profile, root } = fixture(t, UPGRADE_TARGET.kernel);
+  const shared = path.join(root, 'home/profiles/node_modules');
+  const name = 'escaped-dependency';
+  put(root, `outside/${name}/package.json`, { name, version: '1.0.0' });
+  linkDirectory(path.join(root, 'outside', name), path.join(shared, name));
+  const owned = path.join(profile, '.dsh-module-fallback/node_modules', name);
+  linkDirectory(path.join(shared, name), owned);
+  linkDirectory(owned, path.join(profile, 'node_modules', name));
+  assert.throws(() => assertProfileStartup(app, profile), /PROFILE_UPGRADE_REQUIRED/);
+});
+
 for (const attack of ['external', 'sibling-prefix', 'wrong-name', 'manifest-alias', 'dangling',
   'cycle', 'linked-parent', 'direct-projection', 'wrong-owned-name', 'unowned-internal']) {
   test(`generated fallback exception rejects ${attack} links`, t => {
@@ -286,5 +317,5 @@ test('Rust profile replacement tests pass through the real Cargo dependency grap
   });
   if (run.error?.code === 'ENOENT') return t.skip('cargo unavailable');
   assert.equal(run.status, 0, run.stderr || run.stdout);
-  assert.match(run.stdout, /6 passed/);
+  assert.match(run.stdout, /test result: ok\.\s+\d+ passed; 0 failed/);
 });

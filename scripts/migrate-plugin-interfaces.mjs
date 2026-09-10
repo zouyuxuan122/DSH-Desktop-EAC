@@ -5,6 +5,7 @@ import { createHash } from 'node:crypto';
 import { migrateProviderSettingsClient } from './lib/migrate-provider-settings.mjs';
 import { migrateWebuiChatRenderers } from './webui-chat-compat.mjs';
 import { migrateWebuiPromptOptimize } from './webui-prompt-optimize-compat.mjs';
+import { migrateWebuiNativeModelSelection } from './webui-native-model-selection-compat.mjs';
 import { migrateWebuiContinue } from './webui-continue-compat.mjs';
 import { migrateWebuiInputChatToolShapes } from './webui-input-chat-tool-compat.mjs';
 import { fileURLToPath } from 'node:url';
@@ -170,6 +171,133 @@ function migrateTypes(text, providers, changes, file) {
     });
 }
 
+// The reviewed WebUI bundle keeps its markdown parser and math nodes, but the
+// public extraction replaces the browser KaTeX module with a throwing stub.
+// KaTeX is still a declared runtime dependency, so restore the same lazy
+// renderer fallback used by the upstream markstream worker path.
+export function migrateWebuiKatexFallback(text) {
+  // The public WebUI bundle has its KaTeX runtime stripped. The staging patch
+  // inlines the audited KaTeX distribution into these two lazy initializers;
+  // keep the renderer independent from native ESM and the host module table.
+  const newLoader = 'return er = await Promise.resolve().then(() => (init_katex_stub(), init__webui_katex_mhchem_stub(), katex_stub_exports)), er;';
+  const previousLoader = 'return er = await import("katex"), await import("katex/contrib/mhchem"), er;';
+  const previousRequireLoader = 'return er = await Promise.resolve().then(() => { const runtime = require("katex"); require("katex/contrib/mhchem"); return runtime?.default ?? runtime; }), er;';
+  if (text.includes(newLoader) && !text.includes('katex disabled in webui')) {
+    return migrateWebuiMathDelimiters(text);
+  }
+  if (text.includes(previousLoader) && !text.includes('katex disabled in webui')) {
+    return migrateWebuiMathDelimiters(text.replace(previousLoader, newLoader));
+  }
+  if (text.includes(previousRequireLoader) && !text.includes('katex disabled in webui')) {
+    return migrateWebuiMathDelimiters(text.replace(previousRequireLoader, newLoader));
+  }
+  const marker = '//#region src/client/markdown/katex-stub.ts';
+  const start = text.indexOf(marker);
+  const end = text.indexOf('//#endregion', start);
+  if (start < 0 || end < start || text.indexOf(marker, start + marker.length) >= 0) {
+    throw new Error('Unknown reviewed WebUI KaTeX stub region');
+  }
+  const regionEnd = end + '//#endregion'.length;
+  const original = text.slice(start, regionEnd);
+  const newline = original.includes('\r\n') ? '\r\n' : '\n';
+  const replacement = [
+    marker,
+    'var katex_stub_exports = /* @__PURE__ */ __exportAll({});',
+    'var init_katex_stub = __esmMin((() => {}));',
+    '//#endregion',
+  ].join('\n');
+  let output = text.slice(0, start) + replacement.replaceAll('\n', newline) + text.slice(regionEnd);
+  const oldLoader = 'return er = await Promise.resolve().then(() => (init_katex_stub(), katex_stub_exports)), await Promise.resolve().then(() => (init__webui_katex_mhchem_stub(), _webui_katex_mhchem_stub_exports)), er;';
+  if (output.split(oldLoader).length !== 2) {
+    throw new Error('Unknown reviewed WebUI KaTeX loader');
+  }
+  output = output.replace(oldLoader, newLoader);
+  return migrateWebuiMathDelimiters(output);
+}
+
+export function migrateWebuiMathDelimiters(text) {
+  const idempotenceMarker = 'const mathFence = (state, startLine, endLine, silent) => {';
+  if (text.includes(idempotenceMarker)) return text;
+  const anchor = 'const explicitMathBlockBeforeSetext = (state, startLine, endLine, silent) => {';
+  const anchorIndex = text.indexOf(anchor);
+  if (anchorIndex < 0 || text.indexOf(anchor, anchorIndex + anchor.length) >= 0) {
+    throw new Error('Unknown reviewed WebUI math block boundary');
+  }
+  const injected = `const mathFence = (state, startLine, endLine, silent) => {
+				const s = state;
+				const startPos = s.bMarks[startLine] + s.tShift[startLine];
+				const lineText = s.src.slice(startPos, s.eMarks[startLine]).trim();
+				const opener = lineText.match(/^(?:\\x60{3,}|~{3,})\\s*(?:math|latex|tex)(?:\\s+.*)?$/i);
+				if (!opener) return false;
+				const marker = opener[1][0];
+				const markerLength = opener[1].length;
+				let nextLine = startLine + 1;
+				let content = '';
+				let found = false;
+				for (; nextLine < endLine; nextLine++) {
+					const lineStart = s.bMarks[nextLine] + s.tShift[nextLine];
+					const current = s.src.slice(lineStart, s.eMarks[nextLine]);
+					if (new RegExp('^\\\\s*' + marker + '{' + markerLength + ',}\\\\s*$').test(current)) {
+						found = true;
+						break;
+					}
+					content += (content ? '\\n' : '') + current;
+				}
+				if (!found) return false;
+				if (silent) return true;
+				const token = s.push('math_block', 'math', 0);
+				token.content = normalizeStandaloneBackslashT(content);
+				token.markup = 'fence';
+				token.raw = s.src.slice(startPos, s.eMarks[nextLine] || s.eMarks[startLine]);
+				token.map = [startLine, nextLine + 1];
+				token.block = true;
+				token.loading = false;
+				s.line = nextLine + 1;
+				return true;
+			};
+			const mathEnvironmentBlock = (state, startLine, endLine, silent) => {
+				const s = state;
+				const startPos = s.bMarks[startLine] + s.tShift[startLine];
+				const firstLine = s.src.slice(startPos, s.eMarks[startLine]);
+				const opener = firstLine.match(/^\\\\begin\\{([^{}\\n]+)\\}/);
+				if (!opener) return false;
+				const environment = opener[1];
+				const closeRe = new RegExp('^\\\\s*\\\\end\\\\{' + environment.replace(/[.*+?^()|[\\]\\\\]/g, '\\\\$&') + '\\\\}\\\\s*$');
+				let nextLine = startLine;
+				let content = '';
+				let found = false;
+				for (; nextLine < endLine; nextLine++) {
+					const lineStart = s.bMarks[nextLine] + s.tShift[nextLine];
+					const current = s.src.slice(lineStart, s.eMarks[nextLine]);
+					if (nextLine > startLine && closeRe.test(current)) {
+						found = true;
+						break;
+					}
+					content += (content ? '\\n' : '') + current;
+				}
+				if (!found) return false;
+				if (silent) return true;
+				const token = s.push('math_block', 'math', 0);
+				token.content = normalizeStandaloneBackslashT(content);
+				token.markup = 'environment';
+				token.raw = s.src.slice(startPos, s.eMarks[nextLine]);
+				token.map = [startLine, nextLine + 1];
+				token.block = true;
+				token.loading = false;
+				s.line = nextLine + 1;
+				return true;
+			};
+			`;
+  const next = text.slice(0, anchorIndex) + injected.replaceAll('\n', text.includes('\r\n') ? '\r\n' : '\n') + text.slice(anchorIndex);
+  const registration = 'md.inline.ruler.before("escape", "math", mathInline);';
+  const registrationIndex = next.indexOf(registration);
+  if (registrationIndex < 0 || next.indexOf(registration, registrationIndex + registration.length) >= 0) {
+    throw new Error('Unknown reviewed WebUI math plugin registration');
+  }
+  return next.replace(registration,
+    `${registration}\n\t\t\tmd.block.ruler.before("fence", "math_fence", mathFence);\n\t\t\tmd.block.ruler.before("paragraph", "math_environment", mathEnvironmentBlock);`);
+}
+
 /**
  * Plan, or apply with { write: true }, interface-only changes to a reviewed
  * extraction. Unknown identities/content throw before writes. Known unresolved
@@ -273,8 +401,10 @@ export function transformPluginInterfaces(packageDirectory, { stage, write = fal
       text = migrateProviderSettingsClient(text);
       text = migrateWebuiChatRenderers(text);
       text = migrateWebuiPromptOptimize(text);
+      text = migrateWebuiNativeModelSelection(text);
       text = migrateWebuiContinue(text);
       text = migrateWebuiInputChatToolShapes(text);
+      text = migrateWebuiKatexFallback(text);
       changes.push({ file, kind: 'slot-props', from: 'session chat/input snapshots',
         to: 'useChat/useInput' });
       changes.push({ file, kind: 'provider-settings-api', from: 'connection.api',

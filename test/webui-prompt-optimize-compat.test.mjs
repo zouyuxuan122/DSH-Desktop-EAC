@@ -8,6 +8,7 @@ import { pathToFileURL } from 'node:url';
 import { Context } from '@deepseek-ai/cordis';
 import HttpServer from '@deepseek-ai/dsh-host-webserver';
 import { migrateWebuiPromptOptimize } from '../scripts/webui-prompt-optimize-compat.mjs';
+import { migrateWebuiNativeModelSelection } from '../scripts/webui-native-model-selection-compat.mjs';
 
 const require = createRequire(import.meta.url);
 const React = require('react');
@@ -48,13 +49,20 @@ test('optimizer migration is bounded and idempotent', { skip: !available }, () =
   const fixed = migrateWebuiPromptOptimize(source);
   assert.equal(migrateWebuiPromptOptimize(fixed), fixed);
   assert.throws(() => migrateWebuiPromptOptimize('unexpected'), /Unrecognized/);
-  assert.equal(fixed.replace('NS$1 = "webui.skill";', 'NS$1 = "skill";')
-    .replace('"modelDirectories",\n\t\t\t\t"remote.session",\n\t\t\t\t"sessions"',
-      '"modelDirectories",\n\t\t\t\t"sessions"')
-    .replace('key: "skill",\n\t\t\t\tpriority: -100,\n\t\t\t\tlocale: NS$1',
-      'key: "skill",\n\t\t\t\tlocale: NS$1').replace(
-    'useInput, inputActions, sessionId }) {\n\t\t\tconst input = useInput((state) => state);',
-    'input, inputActions, sessionId }) {'), source);
+  assert.match(fixed, /function syncServerModules\(onModulesSynced\)/);
+  assert.match(fixed, /const mountPromptOptimize = \(\) => \{/);
+  assert.match(fixed, /syncServerModules\(\(modules\) => \{/);
+  assert.doesNotMatch(fixed, /if \(on\("promptOptimize"\)\) applyPromptOptimize\(ctx\);/);
+  assert.match(fixed, /if \(on\("promptOptimize"\)\) mountPromptOptimize\(\);/);
+  assert.match(fixed, /NS\$1 = "webui\.skill";/);
+  assert.match(fixed, /"remote\.session",\n\t\t\t\t"sessions"/);
+});
+
+test('native provider/model selection disables the WebUI replacement', { skip: !available }, () => {
+  const fixed = migrateWebuiNativeModelSelection(source);
+  assert.equal(migrateWebuiNativeModelSelection(fixed), fixed);
+  assert.match(fixed, /AIO keeps provider\/model selection in the host native control/);
+  assert.doesNotMatch(fixed, /if \(on\("modelSeats"\)\) applyModelSeats\(ctx\);/);
 });
 
 test('actual optimizer slot registers and renders with current useInput props', { skip: !available }, () => {

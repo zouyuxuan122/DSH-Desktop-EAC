@@ -88,6 +88,14 @@ for (const name of ['@ha-na-bi/dsh-client-ui-custom', '@dsh-external/dsh-webui']
       }
     }
     if (name === '@dsh-external/dsh-webui') {
+      assert.match(client, /init_katex_stub\(\), init__webui_katex_mhchem_stub\(\)/);
+      assert.doesNotMatch(client, /require\("katex"\)/);
+      assert.doesNotMatch(client, /import\("katex"\)/);
+      assert.match(client, /math_fence/);
+      assert.match(client, /math_environment/);
+      assert.match(client, /children: parseInlineTokens\(contentToken\.children \|\| \[\]/);
+      assert.match(client, /case "math_inline"/);
+      assert.doesNotMatch(client, /katex disabled in webui/);
       assert.doesNotMatch(client, /(?:\.conversationEvents|"conversationEvents")/);
       assert.match(client, /\.uiConversation\.events\.register/);
       const adapter = host.slice(host.lastIndexOf('\nfunction installSettingsSection'));

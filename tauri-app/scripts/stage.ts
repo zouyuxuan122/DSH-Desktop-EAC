@@ -319,12 +319,46 @@ function main() {
     process.exit(1);
   }
   copyTree(PROFILE_SEED, path.join(RESOURCES, 'profile-seed'));
+  execFileSync(process.execPath, [
+    path.join(REPO_ROOT, 'scripts', 'prepare-aio-staged-seed.mjs'),
+    path.join(RESOURCES, 'profile-seed', 'profiles', 'web-desktop'),
+  ], { stdio: 'inherit' });
+  execFileSync(process.execPath, [
+    path.join(REPO_ROOT, 'scripts', 'patch-webui-prompt-optimize.mjs'),
+    path.join(RESOURCES, 'profile-seed', 'profiles', 'web-desktop',
+      'node_modules', '@dsh-external', 'dsh-webui', 'lib', 'client.js'),
+  ], { stdio: 'inherit' });
+  execFileSync(process.execPath, [
+    path.join(REPO_ROOT, 'scripts', 'patch-webui-native-model-selection.mjs'),
+    path.join(RESOURCES, 'profile-seed', 'profiles', 'web-desktop',
+      'node_modules', '@dsh-external', 'dsh-webui', 'lib', 'client.js'),
+  ], { stdio: 'inherit' });
+  execFileSync(process.execPath, [
+    path.join(REPO_ROOT, 'scripts', 'patch-webui-layout.mjs'),
+    path.join(RESOURCES, 'profile-seed', 'profiles', 'web-desktop',
+      'node_modules', '@dsh-external', 'dsh-webui', 'lib', 'client.js'),
+  ], { stdio: 'inherit' });
+  execFileSync(process.execPath, [
+    path.join(REPO_ROOT, 'scripts', 'patch-webui-continue.mjs'),
+    path.join(RESOURCES, 'profile-seed', 'profiles', 'web-desktop',
+      'node_modules', '@dsh-external', 'dsh-webui', 'lib', 'client.js'),
+  ], { stdio: 'inherit' });
+  execFileSync(process.execPath, [
+    path.join(REPO_ROOT, 'scripts', 'patch-status-rotator.mjs'),
+    path.join(RESOURCES, 'profile-seed', 'profiles', 'web-desktop',
+      'node_modules', 'dsh-status-rotator', 'lib', 'client.js'),
+  ], { stdio: 'inherit' });
   // Patch only the staged copy; unknown plugin builds must stop packaging.
   execFileSync(process.execPath, [
     path.join(REPO_ROOT, 'scripts', 'patch-done-pill.cjs'),
     '--write',
     path.join(RESOURCES, 'profile-seed', 'profiles', 'web-desktop',
       'node_modules', '@dsh-external', 'dsh-webui'),
+  ], { stdio: 'inherit' });
+  execFileSync(process.execPath, [
+    path.join(REPO_ROOT, 'scripts', 'patch-webui-katex.mjs'),
+    path.join(RESOURCES, 'profile-seed', 'profiles', 'web-desktop',
+      'node_modules', '@dsh-external', 'dsh-webui', 'lib', 'client.js'),
   ], { stdio: 'inherit' });
   console.log('[stage] 当前 web-desktop 插件与技能快照完成');
 

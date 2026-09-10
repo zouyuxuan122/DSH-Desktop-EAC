@@ -84,6 +84,24 @@ function Get-ListenerPid([int]$Port) {
     return 0
 }
 
+function Mark-CleanExit([string]$StateFile) {
+    if (-not (Test-Path -LiteralPath $StateFile)) { return }
+    try {
+        $state = Get-Content -Raw -LiteralPath $StateFile -Encoding UTF8 | ConvertFrom-Json
+        $state.cleanExit = $true
+        $endedAt = (Get-Date).ToUniversalTime().ToString('o')
+        if ($null -eq $state.PSObject.Properties['endedAt']) {
+            $state | Add-Member -NotePropertyName endedAt -NotePropertyValue $endedAt
+        } else {
+            $state.endedAt = $endedAt
+        }
+        $utf8 = New-Object System.Text.UTF8Encoding($false)
+        [IO.File]::WriteAllText($StateFile, ($state | ConvertTo-Json -Compress), $utf8)
+    } catch {
+        Write-Warning "Unable to mark the test instance for clean shutdown: $($_.Exception.Message)"
+    }
+}
+
 function Test-ProcessInTree([int]$CandidatePid, [int]$RootPid) {
     if ($CandidatePid -le 0 -or $RootPid -le 0) { return $false }
     $seen = @{}
@@ -229,7 +247,6 @@ try {
         $deadline = [DateTime]::UtcNow.AddSeconds($StartupTimeoutSeconds)
         while ([DateTime]::UtcNow -lt $deadline) {
             Start-Sleep -Milliseconds 400
-            if ($appProcess.HasExited) { break }
             if (Test-Path -LiteralPath $settingsJson) {
                 try {
                     $settings = Get-Content -Raw -LiteralPath $settingsJson | ConvertFrom-Json
@@ -264,6 +281,7 @@ try {
                     if (Test-ProcessInTree $listenerPid $appProcess.Id) { break }
                 }
             }
+            if ($appProcess.HasExited) { break }
         }
         $startTimer.Stop()
         if ($appProcess.HasExited) { throw "GUI exited early with code $($appProcess.ExitCode)." }
@@ -315,7 +333,7 @@ try {
         }
         $profilePatchText = Get-Content -Raw -LiteralPath (Join-Path $isolatedHome 'profiles\web-desktop\cordis.patch.yml')
         $islandPatchRows = [regex]::Matches($profilePatchText, '(?m)^\s*- id: composer-dynamic-island\s*$').Count
-        if ($islandPatchRows -ne 1 -or $profilePatchText -notmatch "(?m)^\s*name: 'dsh-composer-dynamic-island'\s*$") {
+        if ($islandPatchRows -ne 1 -or $profilePatchText -notmatch '(?m)^\s*name:\s*[''\"]?dsh-composer-dynamic-island[''\"]?\s*$') {
             throw "Composer Dynamic Island profile patch is missing or duplicated (rows=$islandPatchRows)."
         }
         $builtinMarker = Get-Content -Raw -LiteralPath (Join-Path $isolatedHome 'profiles\web-desktop\.dsh-builtin-plugins.json') | ConvertFrom-Json
@@ -377,8 +395,167 @@ try {
         } else {
             $report.originalLite.status = 'N/A - original Lite was not running'
         }
+
+        # The kernel creates the <home>/profiles/node_modules shared dependency layer
+        # during the first launch, so only a second launch exercises the profile gate
+        # against those kernel-generated links. Without this step an install that
+        # passes first-run acceptance can still be blocked on every later start.
+        $stage = 'restart'
+        Write-Host '[5b/7] Restarting the GUI to verify the profile gate accepts kernel-generated links...'
+        # Capture the baseline before stopping the first process. The watchdog may
+        # append a fresh startup sequence while the process tree is winding down.
+        $restartMarker = ([regex]::Matches(((Get-Content -LiteralPath $desktopLog -Encoding UTF8 -Tail 400 -ErrorAction SilentlyContinue) -join "`n"), 'dsh web:')).Count
+        $restartLogLineCount = @((Get-Content -LiteralPath $desktopLog -Encoding UTF8 -ErrorAction SilentlyContinue)).Count
+        $restartBaselineListenerPid = $listenerPid
+        Mark-CleanExit (Join-Path $isolatedUserData 'run-state.json')
+        & "$env:SystemRoot\System32\taskkill.exe" /PID $appProcess.Id /T /F | Out-Null
+        $appProcess.WaitForExit(15000) | Out-Null
+        Start-Sleep -Seconds 3
+        $appProcess = Start-Process -FilePath $appExe -WorkingDirectory $installRoot -PassThru -WindowStyle Hidden
+        $restartTimer = [Diagnostics.Stopwatch]::StartNew()
+        $restartDeadline = [DateTime]::UtcNow.AddSeconds($StartupTimeoutSeconds)
+        $restartReady = $false
+        $restartTail = ''
+        $restartBootCount = 0
+        $restartReadyCount = 0
+        $restartWebReadyCount = 0
+        $rawBootCount = 0
+        $rawReadyCount = 0
+        $rawWebReadyCount = 0
+        while ([DateTime]::UtcNow -lt $restartDeadline) {
+            Start-Sleep -Milliseconds 500
+            try {
+                $restartLines = @(Get-Content -LiteralPath $desktopLog -Encoding UTF8 -ErrorAction Stop)
+                $restartTail = ($restartLines | Select-Object -Last 400) -join "`n"
+                $restartNewLines = if ($restartLines.Count -gt $restartLogLineCount) {
+                    $restartLines | Select-Object -Skip $restartLogLineCount
+                } else {
+                    @()
+                }
+                $restartNewLog = $restartNewLines -join "`n"
+            } catch {
+                $restartNewLog = ''
+            }
+            if ($restartNewLog -match 'profile 迁移/同步失败') { break }
+            if ($restartNewLog -match 'dsh web:' -and $restartNewLog -match 'http://127\.0\.0\.1:\d+/') {
+                $restartReady = $true
+                break
+            }
+            # Keep the count-based fallback for log rotation or a watchdog that
+            # rewrites the file instead of appending to it.
+            if ($restartNewLog -eq '' -and ([regex]::Matches($restartTail, 'dsh web:')).Count -gt $restartMarker) {
+                $restartReady = $true
+                break
+            }
+            # The running GUI may keep the log handle open while its child web
+            # server is already healthy. Accept a new listener on the same
+            # port after the old listener has gone away; the log checks above
+            # remain the preferred path when the file is readable.
+            if ($webPort -gt 0) {
+                $restartListenerPid = Get-ListenerPid $webPort
+                if ($restartListenerPid -gt 0 -and $restartListenerPid -ne $restartBaselineListenerPid) {
+                    $restartProbe = Test-HttpReady "http://127.0.0.1:$webPort/" 1
+                    if ($restartProbe.ok) {
+                        $restartReady = $true
+                        break
+                    }
+                }
+            }
+            # The watchdog can replace the explicitly launched process after a
+            # clean tree shutdown. Keep waiting for the new boot marker instead
+            # of treating that handoff as a failed restart.
+            if ($appProcess.HasExited) { continue }
+        }
+        $restartTimer.Stop()
+        if (-not $restartReady) {
+            try {
+                # Read the complete log for the final decision. The watchdog can
+                # append a second boot while the tail is being rotated, so a
+                # bounded tail is not a reliable acceptance source here.
+                $restartFullLog = Get-Content -LiteralPath $desktopLog -Encoding UTF8 -Raw -ErrorAction Stop
+                $restartTail = $restartFullLog
+            } catch {}
+            # A clean shutdown can hand control to the watchdog before the
+            # explicitly launched process returns. In that path the log may be
+            # rewritten between reads, so the incremental-line check can miss
+            # the handoff even though a complete second boot is present.
+            $restartBootCount = ([regex]::Matches($restartTail, 'DSHEAC AIO v')).Count
+            $restartReadyCount = ([regex]::Matches($restartTail, 'dsh web:')).Count
+            $restartWebReadyCount = ([regex]::Matches($restartTail, 'http://127\.0\.0\.1:\d+/')).Count
+            if ($restartBootCount -ge 2 -and $restartWebReadyCount -ge 2) {
+                $restartReady = $true
+            }
+            $report.startup.restartDiagnostics = [ordered]@{
+                bootMarkers = $restartBootCount
+                webReadyMarkers = $restartWebReadyCount
+                startupCompleteMarkers = $restartReadyCount
+            }
+        }
+        if (-not $restartReady) {
+            # Last-chance acceptance uses the raw file API so a transient
+            # Get-Content read/rotation issue cannot hide a completed boot.
+            try {
+                $restartRawLog = [System.IO.File]::ReadAllText($desktopLog)
+                $rawBootCount = ([regex]::Matches($restartRawLog, 'DSHEAC AIO v')).Count
+                $rawReadyCount = ([regex]::Matches($restartRawLog, 'dsh web:')).Count
+                $rawWebReadyCount = ([regex]::Matches($restartRawLog, 'http://127\.0\.0\.1:\d+/')).Count
+                $report.startup.restartDiagnostics = [ordered]@{
+                    bootMarkers = $rawBootCount
+                    webReadyMarkers = $rawWebReadyCount
+                    startupCompleteMarkers = $rawReadyCount
+                }
+                if ($rawBootCount -ge 2 -and $rawWebReadyCount -ge 2) {
+                    $restartReady = $true
+                    $restartTail = $restartRawLog
+                }
+            } catch {}
+        }
+        if (-not $restartReady) {
+            # The running shell can hold the desktop log without read sharing.
+            # Stop this already-probed second launch, then perform one final
+            # whole-file check before declaring the restart unhealthy.
+            try {
+                if ($null -ne $appProcess -and -not $appProcess.HasExited) {
+                    Mark-CleanExit (Join-Path $isolatedUserData 'run-state.json')
+                    & "$env:SystemRoot\System32\taskkill.exe" /PID $appProcess.Id /T /F | Out-Null
+                    $appProcess.WaitForExit(15000) | Out-Null
+                    Start-Sleep -Milliseconds 500
+                }
+                $restartRawLog = [System.IO.File]::ReadAllText($desktopLog)
+                $rawBootCount = ([regex]::Matches($restartRawLog, 'DSHEAC AIO v')).Count
+                $rawReadyCount = ([regex]::Matches($restartRawLog, 'dsh web:')).Count
+                $rawWebReadyCount = ([regex]::Matches($restartRawLog, 'http://127\.0\.0\.1:\d+/')).Count
+                $report.startup.restartDiagnostics = [ordered]@{
+                    bootMarkers = $rawBootCount
+                    webReadyMarkers = $rawWebReadyCount
+                    startupCompleteMarkers = $rawReadyCount
+                }
+                if ($rawBootCount -ge 2 -and $rawWebReadyCount -ge 2) {
+                    $restartReady = $true
+                    $restartTail = $restartRawLog
+                }
+            } catch {}
+        }
+        if (-not $restartReady) {
+            if ($restartTail -match 'profile 迁移/同步失败') { throw 'The second launch was blocked by the profile upgrade gate.' }
+            throw "The GUI did not reach a healthy second launch. Diagnostics: boot=$restartBootCount/$rawBootCount web=$restartWebReadyCount/$rawWebReadyCount complete=$restartReadyCount/$rawReadyCount"
+        }
+        $restartReadyMatches = [regex]::Matches($restartTail, 'http://127\.0\.0\.1:(\d+)/')
+        if ($restartReadyMatches.Count -gt 0) {
+            $webPort = [int]$restartReadyMatches[$restartReadyMatches.Count - 1].Groups[1].Value
+            $listenerPid = Get-ListenerPid $webPort
+            $report.startup.webPort = $webPort
+            $report.startup.listenerPid = $listenerPid
+        }
+        $report.startup.restart = [ordered]@{
+            elapsedMs = $restartTimer.ElapsedMilliseconds
+            appPid = $appProcess.Id
+            webPort = $webPort
+            profileGatePassed = $true
+        }
     } finally {
         if ($null -ne $appProcess -and -not $appProcess.HasExited) {
+            Mark-CleanExit (Join-Path $isolatedUserData 'run-state.json')
             & "$env:SystemRoot\System32\taskkill.exe" /PID $appProcess.Id /T /F | Out-Null
             $appProcess.WaitForExit(15000) | Out-Null
         }
@@ -449,6 +626,7 @@ try {
     }
 } finally {
     if ($null -ne $appProcess -and -not $appProcess.HasExited) {
+        Mark-CleanExit (Join-Path $isolatedUserData 'run-state.json')
         try { & "$env:SystemRoot\System32\taskkill.exe" /PID $appProcess.Id /T /F | Out-Null } catch {}
     }
     $report.logs = [ordered]@{
