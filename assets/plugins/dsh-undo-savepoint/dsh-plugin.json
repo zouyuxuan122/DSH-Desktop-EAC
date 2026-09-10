@@ -1,0 +1,19 @@
+{
+  "$schema": "https://raw.githubusercontent.com/Yan-Zero/dsh-std/614dfa1ac168db79fcf4577cf0ebb34e2e3b944b/packages/manifest/schema/dsh-plugin-0.15.schema.json",
+  "manifestVersion": "0.15",
+  "id": "io.github.lire1131.dsh-undo-savepoint",
+  "name": "DSH Undo Savepoint",
+  "version": "0.3.3-1",
+  "facets": {
+    "host": {
+      "entry": "lib/index.js",
+      "apiVersion": "v1alpha1"
+    }
+  },
+  "requires": { "contracts": [] },
+  "permissions": [],
+  "contributes": { "commands": [] },
+  "subscriptions": [],
+  "license": "MIT",
+  "source": { "repository": "https://github.com/lire1131/dsh-undo-savepoint" }
+}

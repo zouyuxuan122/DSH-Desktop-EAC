@@ -17,7 +17,7 @@ import type { UpdaterCtx } from './lib/updater';
 
 /// desktop-core 装配结果的最小结构面（完整类型由 desktop-core 模块承载）。
 export interface DesktopCoreLike {
-  upgradePreflight: () => { ok: true };
+  upgradePreflight: () => Promise<{ ok: true }> | { ok: true };
   migrateAndSync: () => Promise<unknown> | unknown;
   syncAll: () => Promise<unknown> | unknown;
   koffiPreflight: () => Promise<unknown> | unknown;
@@ -46,6 +46,7 @@ export interface DesktopCoreLike {
   balancePricesSet: (model: unknown, prices: unknown) => { ok: boolean };
   balancePricesReset: (model: unknown) => { ok: boolean };
   desktopProfile: () => string;
+  confirmHealthyOverlay: () => boolean;
 }
 
 export interface DesktopCoreInput {
@@ -180,7 +181,7 @@ const METHODS: Record<string, RpcHandler> = {
   'updater.previousAgentInfo': () => require('./lib/updater').previousAgentInfo(settingsCtx),
   'updater.rollbackToPrevious': () => require('./lib/updater').rollbackToPrevious(settingsCtx),
   'updater.rollback': () => require('./lib/updater').rollback(settingsCtx),
-  'updater.confirmHealthy': () => require('./lib/updater').confirmPreviousAgentHealthy(settingsCtx),
+  'updater.confirmHealthy': () => core.confirmHealthyOverlay(),
 };
 
 // 心跳保活：stdin EOF 即退出（壳退出时关闭管道 → sidecar 自然收场）。

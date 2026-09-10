@@ -31,7 +31,7 @@ test('repository placeholder seed keeps patch registrations aligned with real pl
     assert.ok(known, `cordis.patch.yml registers ${name} but it is neither a profile dependency nor a builtin plugin`);
   }
   // 已删除的插件不得回流。
-  for (const retired of ['dsh-skin-switch', 'dsh-webui-market-plugin', 'dsh-market', 'dsh-offpeak']) {
+  for (const retired of ['dsh-webui-market-plugin', 'dsh-market', 'dsh-offpeak']) {
     assert.ok(!names.some(name => name.includes(retired)), `retired plugin ${retired} must not be registered`);
   }
 });

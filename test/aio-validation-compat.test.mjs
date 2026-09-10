@@ -29,6 +29,14 @@ test('AIO chrome preserves an existing v prefix', () => {
   assert.ok(!chrome.includes("badge.textContent = 'v' + info.appVersion"));
 });
 
+test('GUI smoke accepts the current semver display and requires bridge version parity', () => {
+  const smoke = read('gui-smoke.js');
+  assert.match(smoke, /\^v\\d\+\\\.\\d\+\\\.\\d\+/);
+  assert.match(smoke, /recovery\.appVersion !== info\.appVersion/);
+  assert.ok(!smoke.includes("info.appVersion !== 'v1'"));
+  assert.ok(!smoke.includes("recovery.appVersion !== 'v1'"));
+});
+
 test('AIO remains isolated from every legacy product by default', () => {
   const conf = JSON.parse(read('tauri-app/tauri.conf.json'));
   const paths = read('tauri-app/src/paths.rs');
@@ -37,7 +45,7 @@ test('AIO remains isolated from every legacy product by default', () => {
   const electron = read('main.js');
   const shortcuts = read('tauri-app/src/shortcuts.rs');
   assert.equal(conf.identifier, 'com.deepseek.dsh.desktop.aio');
-  assert.match(paths, /installed_data_dir\(&app_data_dir, &version\)/);
+  assert.match(paths, /adopt_legacy_release_data\(&app_data_dir, &version\)/);
   assert.match(paths, /app_data_dir\.join\("releases"\)\.join\(version\)/);
   assert.match(migrate, /DSH_AIO_IMPORT_LEGACY/);
   assert.match(migrate, /!= Ok\("1"\)/);

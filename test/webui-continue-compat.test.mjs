@@ -173,7 +173,7 @@ test('actual StatsLineShadow renders current legacy nodes and preserves projecti
 test('installed alpha.2 declarations pin lifecycle, chat legacy and input owners', () => {
   const read = file => fs.readFileSync(new URL(`../node_modules/@deepseek-ai/${file}`, import.meta.url), 'utf8');
   for (const name of ['dsh-api-session-controller', 'dsh-client-ui-chat', 'dsh-client-ui-conversation']) {
-    assert.equal(JSON.parse(read(`${name}/package.json`)).version, '0.1.3-alpha.2');
+    assert.equal(JSON.parse(read(`${name}/package.json`)).version, '0.1.5-rc.2');
   }
   const session = read('dsh-api-session-controller/lib/types/client/contract/snapshot.d.ts');
   assert.match(session, /readonly running: boolean/);

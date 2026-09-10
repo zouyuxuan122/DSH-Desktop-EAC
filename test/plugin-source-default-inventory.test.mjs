@@ -117,11 +117,12 @@ test('public source plugin defaults distinguish dependencies from optional featu
   const byName = new Map(inventory.map((row) => [row.name, row]));
   for (const name of [
     'dsh-offpeak', '@deepseek-ai/dsh-plugin-marketplace', 'dshmarket',
-    '@deepseek-ai/dsh-skin-switch', '@sanqi-normal/dsh-webui-market-plugin',
+    '@sanqi-normal/dsh-webui-market-plugin',
   ]) {
     assert.ok(!byName.has(name), `${name} must not be reintroduced to source defaults`);
   }
-  assert.equal(assets.filter((entry) => entry.kind === 'skins').length, 0);
+  assert.equal(assets.filter((entry) => entry.kind === 'skins').length, 10);
+  assert.ok(byName.has('@deepseek-ai/dsh-skin-switch'), 'skin-switch companion must be inventoried');
   assert.ok(!rows.some((row) => row.id?.startsWith('ui-skin-')));
   for (const name of ['@deepseek-ai/dsh-plugin-manager', 'dsh-plugin-shield']) {
     assert.equal(byName.get(name).state, 'enabled');

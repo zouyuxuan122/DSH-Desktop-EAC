@@ -10,7 +10,7 @@ import { createHash } from 'node:crypto';
 const script = fileURLToPath(new URL('../scripts/smoke-kernel-agent.mjs', import.meta.url));
 
 for (const preset of ['anchored-standard', 'router-standard', 'router-spec', 'router-spec-nested']) {
-  test(`offline kernel 0.1.3-alpha.2 + bundled ${preset}: real tool turn and persistence`,
+  test(`offline kernel 0.1.5-rc.2 + bundled ${preset}: real tool turn and persistence`,
     { timeout: 60000 }, async t => {
       // Start without inherited keys/proxies/NODE_OPTIONS, before any kernel import.
       const env = Object.fromEntries(Object.entries(process.env).filter(([key]) =>
@@ -46,7 +46,9 @@ for (const preset of ['anchored-standard', 'router-standard', 'router-spec', 'ro
 }
 
 test('opt-in fixture exports actual reasoning/tool JSONL and refuses reuse', { timeout: 60000 }, t => {
-  const scratch = fs.mkdtempSync(path.join(os.tmpdir(), 'dsh-fixture-export-test-'));
+  const smokeRoot = path.join(path.dirname(script), '..', '.smoke-tmp');
+  fs.mkdirSync(smokeRoot, { recursive: true });
+  const scratch = fs.mkdtempSync(path.join(smokeRoot, 'dsh-fixture-export-test-'));
   t.after(() => fs.rmSync(scratch, { recursive: true, force: true }));
   const output = path.join(scratch, 'fixture');
   const env = Object.fromEntries(Object.entries(process.env).filter(([key]) =>

@@ -13,7 +13,7 @@ const require = createRequire(import.meta.url);
 const repo = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const official = name => /^@deepseek-ai\/dsh(?:-|$)/.test(name);
 const exact = version => typeof version === 'string' && /^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$/.test(version);
-const version = '0.1.3-alpha.2';
+const version = '0.1.5-rc.2';
 const compat = { name: 'dsh-aio-ui-compat', version: '1.0.0', archive: 'dsh-aio-ui-compat-1.0.0.tgz' };
 const compatRoot = path.join(repo, 'assets/plugins', compat.name);
 export const localPackages = Object.freeze({
@@ -225,9 +225,9 @@ export async function buildSeed({ output, packages, npmCli, replay }) {
   const manifest = prepareManifest(JSON.parse(configs.get(publicFiles[2])), json(path.join(repo, 'package-lock.json')));
   // cordis.patch.yml 的 insert 注册必须对应真实存在的插件：要么是 npm manifest
   // 依赖，要么是内置 companion 插件（assets/plugins/<dir>，首启时拷入 profile）。
-  // r7 seed 曾在仓库 seed 修正前生成，patch 里残留已删除插件的 insert 注册
-  // （dsh-skin-switch / @sanqi-normal/dsh-webui-market-plugin），安装包首启时
-  // dsh web 以 ERR_MODULE_NOT_FOUND 崩溃。
+  // r7 seed 曾在仓库 seed 修正前生成，patch 里残留已删除市场插件的 insert
+  // 注册，安装包首启时 dsh web 以 ERR_MODULE_NOT_FOUND 崩溃。skin-switch
+  // 现在由 sidecar companion-sync 负责，不能写入脱敏 seed。
   const builtinPlugins = new Set(fs.readdirSync(path.join(repo, 'assets/plugins'), { withFileTypes: true })
     .filter(entry => entry.isDirectory()).map(entry => entry.name));
   const patchRegistrations = yaml.load(configs.get('profiles/web-desktop/cordis.patch.yml')) || [];

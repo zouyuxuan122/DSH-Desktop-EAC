@@ -102,7 +102,7 @@ function registerProvider(api, remote) {
 
 test('installed owner signatures used by the provider adapter are alpha.2 contracts', () => {
   for (const owner of ['dsh-client-connection', 'dsh-api-settings-controller', 'dsh-client-ui-settings-models']) {
-    assert.equal(JSON.parse(read(`node_modules/@deepseek-ai/${owner}/package.json`)).version, '0.1.3-alpha.2');
+    assert.equal(JSON.parse(read(`node_modules/@deepseek-ai/${owner}/package.json`)).version, '0.1.5-rc.2');
   }
   const canonical = read('node_modules/@deepseek-ai/dsh-client-ui-settings-models/lib/client.js');
   for (const expression of [

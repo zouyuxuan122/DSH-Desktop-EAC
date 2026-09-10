@@ -99,9 +99,9 @@ test('clean public profile projection preserves only home sessions and provider 
     const projectedInspection = migration.inspectMigrationSeed(tx.candidate, true);
     const manifest = JSON.parse(fs.readFileSync(path.join(tx.candidate, 'package.json'), 'utf8'));
     const old = JSON.parse(originals['package.json']);
-    assert.equal(manifest.dependencies['@deepseek-ai/dsh-client-ui-renderer'], '0.1.3-alpha.2');
+    assert.equal(manifest.dependencies['@deepseek-ai/dsh-client-ui-renderer'], '0.1.5-rc.2');
     assert.ok(!Object.hasOwn(manifest.dependencies, '@deepseek-ai/dsh-client-web-react'));
-    for (const name of ['@deepseek-ai/dsh-skin-switch', '@sanqi-normal/dsh-webui-market-plugin',
+    for (const name of ['@sanqi-normal/dsh-webui-market-plugin',
       '@vlln/dsh-navbar', 'dsh-smooth-stream', 'dsh-usage-skill']) {
       assert.ok(!Object.hasOwn(manifest.dependencies, name));
       assert.ok(!fs.existsSync(path.join(tx.candidate, 'node_modules', name)));

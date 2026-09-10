@@ -1,0 +1,31 @@
+{
+  "$schema": "https://raw.githubusercontent.com/Yan-Zero/dsh-std/614dfa1ac168db79fcf4577cf0ebb34e2e3b944b/packages/manifest/schema/dsh-plugin-0.15.schema.json",
+  "manifestVersion": "0.15",
+  "id": "io.github.zouyuxuan122.ui-skin-maid-atelier",
+  "name": "@dsh-external/dsh-client-ui-skin-maid-atelier",
+  "version": "0.0.1",
+  "facets": {
+    "host": {
+      "entry": "lib/index.js",
+      "apiVersion": "v1alpha1"
+    }
+  },
+  "requires": {
+    "contracts": []
+  },
+  "permissions": [],
+  "contributes": {
+    "commands": []
+  },
+  "subscriptions": [],
+  "license": "CC-BY-NC-SA-4.0",
+  "source": {
+    "repository": "https://github.com/zouyuxuan122/DSH-Desktop-EAC"
+  },
+  "overrides": [],
+  "x-eac": {
+    "role": "skin",
+    "wiring": "ui-skin-maid-atelier",
+    "autoUpdate": false
+  }
+}

@@ -10,26 +10,29 @@ import { join } from 'node:path';
 const root = join(import.meta.dirname, '..');
 const read = (rel) => readFileSync(join(root, rel), 'utf8');
 
-const KEEP_SKINS = [];
+const KEEP_SKINS = [
+  'blue-fantasy', 'dragon-heir', 'maid-atelier', 'miku', 'minecraft',
+  'qq98', 'ths', 'trading', 'whale-song', 'xp',
+].sort();
 
 const KEEP_PLUGIN_DIRS = [
   'dsh-aio-ui-compat',
   'dsh-auto-compact', 'dsh-balance', 'dsh-better-sidebar', 'dsh-composer-dynamic-island',
   'dsh-plugin-manager',
-  'dsh-plugin-shield', 'dsh-undo-savepoint',
+  'dsh-plugin-shield', 'dsh-skin-switch', 'dsh-undo-savepoint',
 ].sort();
 
 // Active Tauri sidecar registry; frozen Electron files are not the source of truth.
 const KEEP_PLUGIN_IDS = [
   'auto-compact', 'balance', 'better-sidebar', 'composer-dynamic-island',
-  'dsh-undo', 'plugin-manager', 'plugin-shield',
+  'dsh-undo', 'plugin-manager', 'plugin-shield', 'skin-switch',
 ].sort();
 
 // 壳层与脚本中禁止再出现的引用（移除功能的残留）。
 const FORBIDDEN_TOKENS = [
   'session-watcher', 'client-updater', 'clientUpdater',
   'SessionWatcher', 'notifyOnTurnEnd', 'openclaw', 'zat-market', 'zat-dsh-engine',
-  'maid-atelier', 'eac-desktop-tips', 'easy-setup', 'tool-vision', 'soul-md',
+  'eac-desktop-tips', 'easy-setup', 'tool-vision', 'soul-md',
   'tdai-memory', 'mobile-fix', 'message-rewind', 'dsh-pet', 'dock-settings',
   'font-custom', 'change-review', 'float-window', 'dsh-navbar', 'session-manager',
   'conversation-tweaks', 'prompt-custom', 'third-party-thinking', 'side-session',
@@ -62,7 +65,7 @@ const FORBIDDEN_TESTS = [
   'dsh-market-builtin.test.mjs',
 ];
 
-test('皮肤：保留切换基础设施，不再预装可选皮肤', () => {
+test('皮肤：主线皮肤资产完整，首启由 sidecar 控制注册策略', () => {
   const dirs = readdirSync(join(root, 'assets', 'skins'), { withFileTypes: true })
     .filter((e) => e.isDirectory()).map((e) => e.name).sort();
   assert.deepEqual(dirs, KEEP_SKINS);
@@ -70,6 +73,7 @@ test('皮肤：保留切换基础设施，不再预装可选皮肤', () => {
     const dir = join(root, 'assets', 'skins', name);
     assert.ok(existsSync(join(dir, 'package.json')), name + ' 缺 package.json');
     assert.ok(existsSync(join(dir, 'skin.json')), name + ' 缺 skin.json');
+    assert.ok(existsSync(join(dir, 'dsh-plugin.json')), name + ' 缺 dsh-plugin.json');
   }
 });
 
@@ -82,7 +86,7 @@ test('插件：assets/plugins 包含保留插件及内核 UI 兼容包', () => {
   }
 });
 
-test('插件：active sidecar COMPANION_PLUGINS 恰为保留的 7 个 id', () => {
+test('插件：active sidecar COMPANION_PLUGINS 包含皮肤切换入口', () => {
   const main = read('sidecar/src/desktop-core.ts');
   const m = main.match(/const COMPANION_PLUGINS: CompanionEntry\[\] = \[([\s\S]*?)\];/);
   assert.ok(m, 'sidecar 中找不到 COMPANION_PLUGINS 定义');
@@ -148,7 +152,8 @@ test('打包：package.json 使用 AIO v1 发布标识、无客户端自更新�
   const pkg = JSON.parse(read('package.json'));
   assert.equal(pkg.name, 'dsh-desktop-aio');
   assert.equal(pkg.productName, 'DSHEAC AIO');
-  assert.equal(pkg.version, '1.2.0');
+  assert.equal(pkg.version, '9.6.3');
+  assert.equal(pkg.devDependencies?.['fs-ext'], '2.1.1', 'native runtime build dependency must be explicit');
   assert.equal(JSON.parse(read('tauri-app/package.json')).version, pkg.version);
   assert.equal(JSON.parse(read('tauri-app/tauri.conf.json')).version, pkg.version);
   assert.equal(JSON.parse(read('package-lock.json')).version, pkg.version);
@@ -157,11 +162,13 @@ test('打包：package.json 使用 AIO v1 发布标识、无客户端自更新�
   assert.deepEqual(pkg.overrides, {
     '@xmldom/xmldom': '0.8.15',
     'fast-uri': '3.1.6',
+    'js-yaml': '4.3.2',
     qs: '6.16.0',
   });
   const lock = JSON.parse(read('package-lock.json'));
   assert.equal(lock.packages['node_modules/@xmldom/xmldom'].version, '0.8.15');
   assert.equal(lock.packages['node_modules/fast-uri'].version, '3.1.6');
+  assert.equal(lock.packages['node_modules/js-yaml'].version, '4.3.2');
   assert.equal(lock.packages['node_modules/qs'].version, '6.16.0');
   assert.ok(!JSON.stringify(pkg.scripts).includes('client-update'));
   assert.ok(!JSON.stringify(pkg.scripts).includes('check-client-latest'));

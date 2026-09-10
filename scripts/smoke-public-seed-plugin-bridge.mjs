@@ -174,8 +174,10 @@ test('installed desktop-core plugin bridge against isolated public seed and curr
       assert.ok(found.description.length > 0, `${plugin.id}: package description`);
     }
     assert.ok(!initial.some((entry) => ['offpeak', 'plugin-marketplace'].includes(entry.id)));
-    assert.ok(!initial.some((entry) => entry.id.startsWith('ui-skin-')));
-    assert.ok(!initial.some((entry) => ['skin-switch', 'dsh-market-plugin'].includes(entry.id)));
+    assert.ok(initial.some((entry) => entry.id === 'skin-switch'));
+    assert.ok(initial.some((entry) => entry.id === 'ui-skin-blue-fantasy' && entry.enabled === false));
+    assert.ok(!initial.some((entry) => entry.id === 'ui-skin-maid-atelier'));
+    assert.ok(!initial.some((entry) => entry.id === 'dsh-market-plugin'));
     assert.equal(initial.find((entry) => entry.id === 'bridge-fixture').group, 'other');
     assert.equal(initial.find((entry) => entry.id === 'bridge-fixture').enabled, false);
     for (const id of ['dsh-base', 'dsh-web-app', 'dsh-aio-ui-compat']) {

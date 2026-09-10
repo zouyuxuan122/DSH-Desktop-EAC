@@ -35,11 +35,11 @@ function browserBundle(relative) {
   return { sandbox, exports, id: registration.id };
 }
 
-test('audit is pinned to the installed 0.1.3-alpha.2 owners', () => {
+test('audit is pinned to the installed 0.1.5-rc.2 owners', () => {
   for (const name of ['dsh-session', 'dsh-client-modules', 'dsh-client-connection',
     'dsh-client-ui-primitives', 'dsh-api-session-controller']) {
     assert.equal(JSON.parse(read(`node_modules/@deepseek-ai/${name}/package.json`)).version,
-      '0.1.3-alpha.2', name);
+      '0.1.5-rc.2', name);
   }
 });
 

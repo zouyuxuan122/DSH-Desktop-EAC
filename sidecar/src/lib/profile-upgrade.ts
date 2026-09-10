@@ -3,7 +3,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { createHash } from 'node:crypto';
 
-export const UPGRADE_TARGET = Object.freeze({ app: '1.2.0', kernel: '0.1.3-alpha.2' });
+export const UPGRADE_TARGET = Object.freeze({ app: '9.6.3', kernel: '0.1.5-rc.2' });
 const official = (name: string): boolean => /^@deepseek-ai\/dsh(?:-|$)/.test(name);
 const fail = (): never => { throw new Error('PROFILE_UPGRADE_REQUIRED: offline dependency migration is not yet available; profile unchanged'); };
 type Manifest = { name?: string; version?: string; dependencies?: Record<string, string> };
@@ -88,15 +88,31 @@ function generatedFallback(root: string, appRoot: string, relative: string): {
     if (path.relative(canonicalEntry(destination), canonicalEntry(ownedFile)) !== '') fail();
   }
   const destination = path.resolve(path.dirname(ownedFile), fs.readlinkSync(ownedFile));
-  // Reject chained links, linked ancestors, cycles and dangling destinations.
-  const target = realPath(plainPath(destination));
+  // DSH's generated profile fallback can point through the shared layer
+  // <home>/profiles/node_modules/<name>. That entry is itself a junction into
+  // the installed app closure. Allow exactly this named, one-hop layout, then
+  // apply the same trusted-root validation to its final target. Any other
+  // linked parent remains rejected by plainPath().
+  const shared = path.join(path.dirname(root), 'node_modules', name);
+  const throughSharedLayer = path.relative(path.resolve(shared), path.resolve(destination)) === '';
+  let target: string;
+  let linkIdentity = '';
+  if (throughSharedLayer) {
+    if (!exists(shared) || !fs.lstatSync(shared).isSymbolicLink()) fail();
+    const sharedDestination = path.resolve(path.dirname(shared), fs.readlinkSync(shared));
+    target = realPath(plainPath(sharedDestination));
+    linkIdentity = ':shared-layer';
+  } else {
+    // Reject chained links, linked ancestors, cycles and dangling destinations.
+    target = realPath(plainPath(destination));
+  }
   if (!fs.statSync(target).isDirectory()) fail();
   for (const [kind, anchor] of [['profile', root], ['app', appRoot]] as const) {
     const location = path.relative(realPath(anchor), target).replaceAll('\\', '/');
     if (packageLocationPattern.exec(location)?.[1] !== name) continue;
     const manifest = readManifest(path.join(target, 'package.json'));
     if (manifest.name !== name || typeof manifest.version !== 'string') fail();
-    return { identity: `${projection ? 'projection' : 'owned'}:${name}:${kind}:${location}`, manifest };
+    return { identity: `${projection ? 'projection' : 'owned'}:${name}:${kind}:${location}${linkIdentity}`, manifest };
   }
   return fail();
 }

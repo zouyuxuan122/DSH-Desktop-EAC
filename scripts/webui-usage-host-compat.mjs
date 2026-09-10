@@ -41,7 +41,7 @@ export async function installWebuiUsageHost(webuiDirectory) {
   const require = createRequire(join(root, 'package.json'));
   for (const name of ['@deepseek-ai/dsh-session', '@deepseek-ai/dsh-session-persistence',
     '@deepseek-ai/dsh-llm']) {
-    if ((await packageOf(require, name)).version !== '0.1.3-alpha.2') {
+    if ((await packageOf(require, name)).version !== '0.1.5-rc.2') {
       throw new Error(`Unsupported kernel dependency: ${name}`);
     }
   }

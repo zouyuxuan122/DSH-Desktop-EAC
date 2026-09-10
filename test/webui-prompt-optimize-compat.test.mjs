@@ -24,7 +24,7 @@ test('reviewed package and installed input owner contracts are pinned', { skip: 
   assert.equal(pkg.name, '@dsh-external/dsh-webui');
   assert.equal(pkg.version, '0.5.1');
   const owner = new URL('../node_modules/@deepseek-ai/dsh-client-ui-conversation/', import.meta.url);
-  assert.equal(JSON.parse(fs.readFileSync(new URL('package.json', owner))).version, '0.1.3-alpha.2');
+  assert.equal(JSON.parse(fs.readFileSync(new URL('package.json', owner))).version, '0.1.5-rc.2');
   const contract = fs.readFileSync(new URL('lib/types/client/contract/slots.d.ts', owner), 'utf8');
   assert.match(contract, /useInput: SnapshotSelectorHook<InputState>/);
   assert.match(contract, /inputActions: InputActions/);

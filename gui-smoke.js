@@ -87,12 +87,14 @@ function cdp(url) {
     client = cdp(target.webSocketDebuggerUrl);
     await client.ready;
     const info = await client.eval('window.dshDesktop.getInfo()');
-    if (!info || info.appVersion !== 'v1' || info.desktopShell !== 'tauri') throw new Error(`unexpected getInfo: ${JSON.stringify(info)}`);
+    if (!info || !/^v\d+\.\d+\.\d+(?:[-+][0-9A-Za-z.-]+)?$/.test(String(info.appVersion)) || info.desktopShell !== 'tauri') {
+      throw new Error(`unexpected getInfo: ${JSON.stringify(info)}`);
+    }
     if (!(await client.eval('!!document.getElementById("__dsh_desktop_chrome__")'))) throw new Error('AIO chrome bar is missing');
     const plugins = await client.eval('window.dshDesktop.pluginManager.list()');
     if (!Array.isArray(plugins) || plugins.length < 2) throw new Error('plugin manager bridge is not ready');
     const recovery = await client.eval('window.dshDesktop.recovery.getState()');
-    if (!recovery || recovery.appVersion !== 'v1') throw new Error('recovery bridge is not ready');
+    if (!recovery || recovery.appVersion !== info.appVersion) throw new Error('recovery bridge is not ready');
     await client.call('Page.enable');
     const shot = await client.call('Page.captureScreenshot', { format: 'png', captureBeyondViewport: false });
     fs.writeFileSync(screenshot, Buffer.from(shot.data, 'base64'));

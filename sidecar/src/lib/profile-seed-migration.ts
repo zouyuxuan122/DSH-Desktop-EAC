@@ -30,22 +30,17 @@ import { createRequire } from 'node:module';
 
 const yaml = require('js-yaml');
 const exportsResolver = require('resolve.exports');
-export const MIGRATION_TARGET = Object.freeze({ app: '1.2.0', kernel: '0.1.3-alpha.2' });
+export const MIGRATION_TARGET = Object.freeze({ app: '9.6.3', kernel: '0.1.5-rc.2' });
 const COMPAT = 'dsh-aio-ui-compat';
 const RENDERER = '@deepseek-ai/dsh-client-ui-renderer';
 const LEGACY_RENDERER = '@deepseek-ai/dsh-client-web-react';
 // Only the explicitly approved lean-distribution removals, never a missing-package wildcard.
 export const APPROVED_RETIREMENT_PACKAGES = Object.freeze([
   'dsh-offpeak', '@deepseek-ai/dsh-plugin-marketplace',
-  ...['blue-fantasy', 'dragon-heir', 'miku', 'minecraft', 'qq98', 'ths', 'trading', 'whale-song', 'xp']
-    .map(name => `@linxin666/dsh-client-ui-skin-${name}`),
   '@vlln/dsh-navbar', 'dsh-smooth-stream', 'dsh-usage-skill',
-  '@deepseek-ai/dsh-skin-switch', '@sanqi-normal/dsh-webui-market-plugin',
-]);
-const APPROVED_ENABLED_RETIREMENTS = new Set([
-  '@deepseek-ai/dsh-skin-switch',
   '@sanqi-normal/dsh-webui-market-plugin',
 ]);
+const APPROVED_ENABLED_RETIREMENTS = new Set(['@sanqi-normal/dsh-webui-market-plugin']);
 type PatchFile = 'cordis.yml' | 'cordis.patch.yml';
 export type ApprovedRetirementPolicy = {
   seedDigest: string;
@@ -60,7 +55,7 @@ type RetirementRecord = {
   patches: { file: PatchFile; originalSha256: string; projectedSha256: string }[];
 };
 // HEAD's shipped profile uses rc.7; the reviewed updated source uses alpha.2.
-const officialSourceVersions = Object.freeze(['0.1.0-rc.7', '0.1.3-alpha.2']);
+const officialSourceVersions = Object.freeze(['0.1.0-rc.7', '0.1.3-alpha.2', '0.1.5-rc.2']);
 export const REVIEWED_SOURCE_DEPENDENCIES: Readonly<Record<string, readonly string[]>> = Object.freeze({
   '@deepseek-ai/dsh-client-ui-primitives': officialSourceVersions,
   '@deepseek-ai/dsh-client-ui-slots': officialSourceVersions,

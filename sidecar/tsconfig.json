@@ -2,8 +2,8 @@
   "$schema": "https://json.schemastore.org/tsconfig",
   "compilerOptions": {
     "target": "ES2022",
-    "module": "commonjs",
-    "moduleResolution": "node",
+    "module": "Node16",
+    "moduleResolution": "Node16",
     "lib": ["ES2022"],
     "outDir": "dist",
     "rootDir": "src",
@@ -14,7 +14,8 @@
     "skipLibCheck": true,
     "sourceMap": false,
     "declaration": false,
-    "types": ["node"]
+    "types": ["node"],
+    "typeRoots": ["../tauri-app/node_modules/@types"]
   },
   "include": ["src/**/*.ts"]
 }

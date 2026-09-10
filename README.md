@@ -4,11 +4,13 @@
 
 > **版型：AIO（All-in-One）**
 >
-> **用户可见版本：v1**
+> **用户可见版本：EAC 9.6.3**
 >
-> 机器内部 SemVer：`1.1.0`
+> 机器内部 SemVer：`9.6.3`
 >
-> 上游源码基线：`v4.5-lite`，commit `de55ef6d5319eacc24ce60309acc261b9fb78b6c`
+> DSH 内核：`@deepseek-ai/dsh` `0.1.5-rc.2`
+
+本分支是 AIO-v1 的可审计发行线，吸收主仓库已验证的启动保护、插件治理和皮肤系统；它不是把主仓库全部历史插件重新打包。
 
 AIO 不表示包含上游项目所有历史功能；实际功能以本仓库打包的运行时、插件和 profile 清单为准。
 
@@ -30,6 +32,9 @@ AIO 不表示包含上游项目所有历史功能；实际功能以本仓库打�
 - Tauri 2 / WRY / WebView2 原生窗口；
 - 内置 Node.js、npm CLI 和 DSH 生产依赖闭包；
 - 内置当前插件与技能 profile seed；
+- 内置主仓库皮肤切换基础设施和 9 套首启可选皮肤（`maid-atelier` 资产保留但暂不自动注册）；
+- 内置 Community `dsh-plugin.json` v0.15 清单，插件与皮肤入口按 `dsh-ecosystem-spec` 校验；
+- 插件更新支持 npm/GitHub 来源、版本门槛、保护快照和失败回退，自动更新默认关闭；
 - 离线 WebView2 安装器；
 - 独立产品标识 `com.deepseek.dsh.desktop.aio`；
 - 独立应用数据和 DSH_HOME，不修改原 v4Lite、旧 EAC、5.x 或 CLI 数据；
@@ -38,13 +43,21 @@ AIO 不表示包含上游项目所有历史功能；实际功能以本仓库打�
 
 ## 安装
 
-发布产物：
+发布产物（EAC 9.6.3）：
 
 - `dist/DSHEAC-AIO-v1-Setup-x64.exe`
 - `dist/portable/DSHEAC-AIO-v1-Portable-x64.zip`
 - `dist/SHA256SUMS.txt`
 
 安装包目前未签名。Windows SmartScreen 可能提示未知发布者；运行前请核对 SHA-256。
+
+### 从 EAC 5.3.6 更新
+
+安装器沿用同一产品标识和安装根目录。首次启动 9.6.3 时，Tauri 会在同一
+磁盘内原子接管 `%APPDATA%/com.deepseek.dsh.desktop.aio/releases/5.3.6`
+到 `releases/9.6.3`，再按新的内核与 profile seed 重建桌面插件层；会话、附件、
+provider 凭据和用户设置保留，旧插件行不会直接带入。若旧目录被占用，程序会
+暂时使用旧数据根继续启动，不会静默创建空白用户环境。
 
 ## 从源码构建
 
@@ -69,7 +82,13 @@ powershell -NoProfile -File .\scripts\verify-aio-installer.ps1
 
 ## 本轮工程改进
 
-- 产品名统一为 `DSHEAC AIO`，用户版本统一为 `v1`，当前内部 SemVer 为 `1.1.0`；
+- 产品名统一为 `DSHEAC AIO`，发行版本统一为 `9.6.3`，内核统一为 `0.1.5-rc.2`；
+- 清理重复的市场/皮肤注册路径：皮肤只由 `dsh-skin-switch` companion-sync 管理，皮肤行默认禁用并保持互斥；
+- 保留 AIO 的 Tauri/sidecar 隔离边界，不接入主仓库 Electron 客户端自更新；应用自更新仍走受控发行安装包流程；
+- 修复损坏 agent overlay 启动前探测、隔离和健康确认，避免坏覆盖层永久阻断内核；
+- 安全模式使用 profile-local marker，重启期间不会把完整插件集偷偷重新写回；
+- profile 升级接受内核生成的共享依赖链接，同时拒绝越界、错误名称、悬空和循环链接；
+- 所有内置插件与皮肤带协议 manifest，更新源与实际可更新插件保持一致；
 - 修复 Node `fs.cpSync` 在当前中文长路径工作区中以 `0xC0000409` 崩溃；
 - staging 仅对发布树裁剪 `.map`、`.pdb` 和 ARM64 预编译件；
 - 停用可读取任意绝对路径、且无调用方的壳层预览端口；
@@ -89,6 +108,7 @@ AIO profile seed 包含大量小文件，安装时仍会受到磁盘和杀毒软
 - [SECURITY.md](SECURITY.md)
 - [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)
 - [AUDIT.md](AUDIT.md)
+- [AIO 插件审计与修复记录](docs/aio-v1-plugin-audit-20260910.md)
 
 ## 许可证
 

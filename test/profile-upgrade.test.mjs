@@ -66,7 +66,7 @@ test('old-profile plan is version-bound, read-only and startup fails closed', t 
   const before = bytes(root);
   const plan = planProfileUpgrade(app, profile);
   assert.equal(plan.status, 'requires-installer');
-  assert.deepEqual(plan.target, { app: '1.2.0', kernel: '0.1.3-alpha.2' });
+  assert.deepEqual(plan.target, { app: '9.6.3', kernel: '0.1.5-rc.2' });
   assert.deepEqual(plan.mismatches, ['@deepseek-ai/dsh', '@deepseek-ai/dsh-base']);
   assert.throws(() => assertProfileStartup(app, profile), /PROFILE_UPGRADE_REQUIRED/);
   assert.deepEqual(bytes(root), before);

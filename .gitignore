@@ -5,10 +5,12 @@ vendor/
 *.log
 data/
 .playwright-mcp/
+.smoke-tmp/
 .DS_Store
 # Tauri 轨：cargo 构建目录与 staging 生成树（stage.ts 可完整重建）不入库
 tauri-app/target/
 tauri-app/resources/
+artifacts/
 # 本地代理工具状态
 .zcode/
 # 临时调试 / 备份产物不入库

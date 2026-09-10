@@ -42,6 +42,10 @@ import { homedir } from 'node:os';
 
 /** User home directory (no hardcoded author paths — see issue #1). */
 const HOME = process.env.USERPROFILE ?? process.env.HOME ?? homedir();
+// AIO starts DSH with an isolated DSH_HOME. Falling back to HOME/.dsh here
+// made snapshots and safe-mode state modify a different profile tree from the
+// one the desktop shell actually boots.
+const DSH_HOME = process.env.DSH_HOME?.trim() || join(HOME, '.dsh');
 
 /**
  * 解析当前 DSH profile（v0.3.3，issue #3 多 profile 支持）。
@@ -125,8 +129,8 @@ export const name = 'dsh-undo-savepoint';
 export const inject = ['tools', 'systemPrompt', 'webServer'];
 
 /** Legacy flat snapshot root (kept for migration/back-compat). */
-const LEGACY_ROOT = process.env.DSH_UNDO_ROOT ?? join(HOME, '.dsh', 'undo-snapshots');
-const SETTINGS_FILE = process.env.DSH_UNDO_SETTINGS ?? join(HOME, '.dsh', 'undo', 'settings.json');
+const LEGACY_ROOT = process.env.DSH_UNDO_ROOT ?? join(DSH_HOME, 'undo-snapshots');
+const SETTINGS_FILE = process.env.DSH_UNDO_SETTINGS ?? join(DSH_HOME, 'undo', 'settings.json');
 
 const DEFAULT_SETTINGS = {
   autoEnabled: true,
@@ -293,8 +297,8 @@ async function snapSensitiveBuf(cfg, snap, destName) {
 
 function rootDir(cfg, root) {
   return root === 'profile'
-    ? (cfg.profileDir ?? join(HOME, '.dsh', 'profiles', 'web'))
-    : (cfg.homeDir ?? join(HOME, '.dsh'));
+    ? (cfg.profileDir ?? join(DSH_HOME, 'profiles', 'web'))
+    : (cfg.homeDir ?? DSH_HOME);
 }
 
 function filePath(cfg, spec) {
@@ -474,10 +478,24 @@ async function safeModeSet(cfg, on) {
     const snap = await createSnapshot(cfg, 'manual', 'safe-mode-before');
     const backup = join(cfg.autoDir, `safe-mode-backup-${snap.id}.yml`);
     if (await pathExists(patch)) await fs.copyFile(patch, backup);
+    else await fs.writeFile(backup, '[]\n', 'utf8');
     const minimal = `# dsh-undo-savepoint SAFE MODE (entered ${new Date().toISOString()})\n# All user plugins except dsh-undo-savepoint are temporarily disabled.\n- insert:\n    - id: dsh-undo-savepoint\n      name: dsh-undo-savepoint\n`;
-    await fs.writeFile(patch, minimal, 'utf8');
     await fs.mkdir(cfg.autoDir, { recursive: true });
-    await fs.writeFile(join(cfg.autoDir, 'safe-mode.json'), JSON.stringify({ active: true, enteredAt: new Date().toISOString(), backup, snapshotId: snap.id }, null, 2), 'utf8');
+    const enteredAt = new Date().toISOString();
+    const state = { active: true, enteredAt, backup, snapshotId: snap.id };
+    // The profile-local marker is deliberately separate from the snapshot
+    // store. The desktop companion synchronizer can read it before this
+    // plugin is loaded and therefore cannot repopulate the disabled rows.
+    const marker = join(cfg.profileDir, '.dsh-safe-mode.json');
+    await fs.writeFile(marker, JSON.stringify({ active: true, enteredAt, snapshotId: snap.id }, null, 2) + '\n', 'utf8');
+    try {
+      await fs.writeFile(join(cfg.autoDir, 'safe-mode.json'), JSON.stringify(state, null, 2), 'utf8');
+      await fs.writeFile(patch, minimal, 'utf8');
+    } catch (error) {
+      await fs.rm(marker, { force: true }).catch(() => {});
+      await fs.rm(join(cfg.autoDir, 'safe-mode.json'), { force: true }).catch(() => {});
+      throw error;
+    }
     return { ok: true, active: true, snapshotId: snap.id, message: `Safe mode ON (pre-snapshot ${snap.id}). Restart DSH to boot with only dsh-undo-savepoint.` };
   }
   // off
@@ -487,6 +505,7 @@ async function safeModeSet(cfg, on) {
   }
   await fs.copyFile(st.backup, patch);
   await fs.rm(join(cfg.autoDir, 'safe-mode.json'), { force: true });
+  await fs.rm(join(cfg.profileDir, '.dsh-safe-mode.json'), { force: true });
   return { ok: true, active: false, message: 'Safe mode OFF. Restart DSH to load all plugins again.' };
 }
 

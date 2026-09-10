@@ -186,6 +186,13 @@ pub fn start_and_show(state: &Arc<AppState>, overlays: &[String]) -> Result<Stri
     crate::service::wait_until_up(port, Duration::from_secs(120))?;
     *state.web_url.lock().unwrap() = Some(outcome.url.clone());
     *state.service.lock().unwrap() = Some(outcome.handle.clone());
+    // A user-writable agent overlay may have been rejected and replaced with
+    // the bundled kernel by the sidecar health gate. Only the sidecar knows
+    // whether this successful boot actually ran the verified overlay, so it
+    // conditionally clears agent-previous itself.
+    if let Ok(sidecar) = state.sidecar() {
+        let _ = sidecar.call("updater.confirmHealthy", json!({}));
+    }
     state
         .log
         .log("boot", &format!("Web UI 就绪: {}", outcome.url.split('?').next().unwrap_or("")));

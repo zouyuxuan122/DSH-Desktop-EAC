@@ -8,7 +8,7 @@ import { Script } from 'node:vm';
 import { createHash } from 'node:crypto';
 import * as settingsApi from '@deepseek-ai/dsh-settings';
 import {
-  createMigrationStaging, transformPluginInterfaces, reviewedPackages, officialVersion,
+  createMigrationStaging, transformPluginInterfaces, reviewedPackages, officialVersion, reviewedSourceVersion,
 } from '../scripts/migrate-plugin-interfaces.mjs';
 
 // Only explicitly reviewed public build inputs, never a live profile/install.
@@ -348,7 +348,7 @@ test('pinned upstream confirms seeded store, service owners, and non-seeded bloc
   assert.match(read('packages/api/workspace-controller/src/client/index.ts'), /workspaces: import/);
   for (const owner of ['packages/client/store', 'packages/api/session-controller',
     'packages/api/workspace-controller', 'packages/client/ui-renderer']) {
-    assert.equal(JSON.parse(read(`${owner}/package.json`)).version, officialVersion);
+    assert.equal(JSON.parse(read(`${owner}/package.json`)).version, reviewedSourceVersion);
   }
   const primitives = read('packages/client/ui-primitives/src/index.ts')
     + read('packages/client/ui-primitives/src/icons/index.tsx');

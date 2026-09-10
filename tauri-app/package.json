@@ -1,7 +1,7 @@
 {
   "name": "dsh-desktop-aio-tauri",
   "private": true,
-  "version": "1.2.0",
+  "version": "9.6.3",
   "type": "module",
   "scripts": {
     "build:inject": "node build-inject.mjs",

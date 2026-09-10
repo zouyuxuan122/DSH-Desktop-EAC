@@ -28,6 +28,6 @@
       "inject": ["@deepseek-ai/dsh-client-ui-renderer", "@deepseek-ai/dsh-client-locale"]
     }
   },
-  "files": ["lib", "tools", "cordis.patch.yml"],
+  "files": ["lib", "tools", "cordis.patch.yml", "dsh-plugin.json"],
   "license": "MIT"
 }

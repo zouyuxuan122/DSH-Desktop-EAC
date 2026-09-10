@@ -115,6 +115,18 @@ function desktopProfileDir() {
   return path.join(home, 'profiles', desktopProfile());
 }
 
+// dsh-undo-savepoint writes this marker before replacing the profile patch
+// with its minimal safe-mode row. The legacy Electron path must honor the
+// same contract as the Tauri sidecar or a restart would restore every plugin.
+function safeModeActive() {
+  try {
+    const marker = readJsonFile(path.join(desktopProfileDir(), '.dsh-safe-mode.json'));
+    return marker?.active === true;
+  } catch {
+    return false;
+  }
+}
+
 // 未知 profile 不会自动初始化（dsh 直接报错退出），桌面端自己按官方模板
 // 创建：package.json（bundles）+ pnpm-workspace.yaml + 空 patch 层。
 function ensureDesktopProfileInit() {
@@ -2136,6 +2148,8 @@ function syncCompanionPlugins() {
     // 桌面专属 profile 必须先存在（未知 profile 不会被 dsh 自动初始化）。
     ensureDesktopProfileInit();
     const profileDirP = desktopProfileDir();
+    const inSafeMode = safeModeActive();
+    if (inSafeMode) log('boot', '安全模式激活中：跳过配套插件 patch 行同步（退出安全模式后恢复）');
     // 内置社区 agent preset（anchored-standard：首请求锚定 Minimal 工具对，
     // 首次工具调用/回复后开放完整 Standard 目录）：安装到用户 preset 根。
     // preset 不进插件树，坏 preset 不会拖垮启动；已存在则跳过（用户手装
@@ -2255,7 +2269,9 @@ function syncCompanionPlugins() {
       changed = true;
       log('boot', '已移除与 bundle 登记重复的 patch 行: ' + deduped.removed.join(', '));
     }
-    for (const p of pending) {
+    // 安全模式只保留 undo 行；仍复制包文件以支持恢复，但不得把其它 loader
+    // row 写回 patch，否则下一次启动会静默退出安全模式。
+    for (const p of inSafeMode ? [] : pending) {
       if (hasEntryId(patch, p.id)) continue;
       // 已在 bundle 列表里的插件由其包内 patch 挂载，overlay 不能再写行
       // （会 duplicate loader entry id，拖垮整个插件树）。issue #16：

@@ -11,12 +11,13 @@
   },
   "session": {
     "name": "@deepseek-ai/dsh-session",
-    "version": "0.1.3-alpha.2",
+    "version": "0.1.5-rc.2",
     "bundledSources": {
       "node_modules/@deepseek-ai/dsh-brand/lib/index.js": "14feb59256b891982b2017d73ed03ee65e2a7365f48e4902a856acb0e52d5eb0",
-      "node_modules/@deepseek-ai/dsh-session/lib/types/surface.js": "8bacae0fffc8329fbfdd929ee739ca1c34043307869fdbb496ac24513a583580",
-      "node_modules/@deepseek-ai/dsh-session/lib/types/types.js": "1f3c611632d140fc20dde7303883ad60154f946303fe078a246979be9d25eea8"
+      "node_modules/@deepseek-ai/dsh-session/lib/types/known-event-types.js": "7bcf6e061a34b6107896b09ec048f5e62420ce1505191c1d63910765e014d909",
+      "node_modules/@deepseek-ai/dsh-session/lib/types/surface.js": "aad7aaabe6cd9b39ae4cc3b50a2873c9b5d73b69d929051f31b18ecc13647c72",
+      "node_modules/@deepseek-ai/dsh-session/lib/types/types.js": "27de3ecc17fe395856b6182362ecfbe7f7b83a90238bbd09ccfa55c007193725"
     }
   },
-  "clientSha256": "feda0d6408448f64f5f4abda3189e0b7bd9616298ea780d53fdb585880a388cc"
+  "clientSha256": "05ca405912c7af6bdfe62b456f6cad00ecfb1111d264a7b91fc21584b24a1f12"
 }

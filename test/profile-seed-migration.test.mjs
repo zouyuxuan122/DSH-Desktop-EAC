@@ -143,7 +143,6 @@ function retirementFixture(t) {
 test('retirement is opt-in, preserves original patches/archive/backup and every unrelated user byte', t => {
   const { source, options, kept, policy } = retirementFixture(t);
   const original = bytes(source);
-  assert.equal(APPROVED_RETIREMENT_PACKAGES.length, 16);
   assert.equal(Object.keys(read(source).dependencies).length, 16);
   assert.throws(() => prepareSeedMigration({ ...options, retirementPolicy: undefined }), /UNRESOLVED_REFERENCE/);
   const tx = prepareSeedMigration(options);
@@ -227,7 +226,7 @@ for (const kind of ['seed-binding', 'patch-binding', 'unknown-package', 'wrong-i
   });
 }
 
-test('every exact approved removal supports disabled rows against a lean seed, without changing source16', t => {
+test('every exact approved removal supports disabled rows against a lean seed, without changing source', t => {
   const { source, options, policy } = retirementFixture(t);
   const rows = APPROVED_RETIREMENT_PACKAGES.map((name, index) => ({ package: name, id: `retired-${index}` }));
   const text = rows.map(row => `- insert:\n    - id: ${row.id}\n      name: '${row.package}'\n      disabled: true\n`).join('');
@@ -236,7 +235,7 @@ test('every exact approved removal supports disabled rows against a lean seed, w
   const tx = prepareSeedMigration(options);
   assert.equal(Object.keys(read(source).dependencies).length, 16);
   assert.deepEqual(require('js-yaml').load(fs.readFileSync(path.join(tx.candidate, 'cordis.patch.yml'), 'utf8')), []);
-  assert.equal(read(tx.transaction, 'journal-000001.json').retirement.policy.patches[0].rows.length, 16);
+  assert.equal(read(tx.transaction, 'journal-000001.json').retirement.policy.patches[0].rows.length, APPROVED_RETIREMENT_PACKAGES.length);
 });
 
 test('failed retirement preparation retains exact archive and leaves every source byte unchanged', t => {
@@ -301,9 +300,9 @@ test('all-retired patches project to an explicit empty sequence and preserve CRL
 
 test('retirement archives both patch files and rejects archive tampering before activation', t => {
   const { source, options, policy } = retirementFixture(t);
-  put(source, 'cordis.yml', '- id: skin-xp\n  name: "@linxin666/dsh-client-ui-skin-xp"\n  disabled: true\n');
+  put(source, 'cordis.yml', '- id: navbar\n  name: "@vlln/dsh-navbar"\n  disabled: true\n');
   policy.patches.push({ file: 'cordis.yml', originalSha256: digest(fs.readFileSync(path.join(source, 'cordis.yml'))),
-    rows: [{ id: 'skin-xp', package: '@linxin666/dsh-client-ui-skin-xp' }] });
+    rows: [{ id: 'navbar', package: '@vlln/dsh-navbar' }] });
   const original = bytes(source);
   const tx = prepareSeedMigration(options);
   assert.deepEqual(fs.readFileSync(path.join(tx.transaction, 'retirement-originals/cordis.yml')),

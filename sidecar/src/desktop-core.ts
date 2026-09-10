@@ -86,10 +86,106 @@ export function createDesktopCore(ctx: DesktopCoreCtx) {
   const loadSettings = (): Record<string, any> => updater.loadSettings(settingsCtx);
   const saveSettings = (s: Record<string, any>): void => updater.saveSettings(settingsCtx, s);
 
+  let overlayRejected = false;
+
+  function overlayHealthPath(): string {
+    return path.join(userDataDir, 'agent', '.aio-agent-health.json');
+  }
+
+  function hasHealthyOverlayMarker(version: string | null): boolean {
+    if (!version) return false;
+    const marker = readJsonFile(overlayHealthPath());
+    return marker?.version === version && typeof marker.validatedAt === 'string';
+  }
+
+  function effectiveOverlayBin(): string | null {
+    const bin = updater.overlayBinPath(settingsCtx);
+    const version = updater.overlayVersion(settingsCtx);
+    const bundled = updater.bundledVersion();
+    if (overlayRejected || !bin || !fs.existsSync(bin) || !version) return null;
+    if (bundled && updater.compareVersions(version, bundled) < 0) return null;
+    return hasHealthyOverlayMarker(version) ? bin : null;
+  }
+
   function dshBin(): string {
-    const ov = updater.overlayBinPath(settingsCtx);
-    if (ov && fs.existsSync(ov)) return ov;
+    const overlay = effectiveOverlayBin();
+    if (overlay) return overlay;
     return path.join(appRoot, 'node_modules', '@deepseek-ai', 'dsh', 'lib', 'bin.js');
+  }
+
+  function nextBrokenOverlayDir(): string {
+    const base = path.join(userDataDir, 'agent-broken-' + Date.now());
+    let candidate = base;
+    let suffix = 0;
+    while (fs.existsSync(candidate)) candidate = base + '-' + (++suffix);
+    return candidate;
+  }
+
+  // Run the overlay's real CLI entry before allowing a user-writable update to
+  // shadow the bundled kernel. An npm success and an existing bin.js do not
+  // prove that peer dependencies survived the update transaction.
+  async function ensureHealthyOverlay(timeoutMs = 20_000): Promise<{ source: 'overlay' | 'bundled'; reason?: string }> {
+    const bin = updater.overlayBinPath(settingsCtx);
+    const version = updater.overlayVersion(settingsCtx);
+    const bundled = updater.bundledVersion();
+    if (!bin || !fs.existsSync(bin) || !version) return { source: 'bundled', reason: 'missing' };
+    if (bundled && updater.compareVersions(version, bundled) < 0) return { source: 'bundled', reason: 'older-than-bundled' };
+    if (hasHealthyOverlayMarker(version)) return { source: 'overlay' };
+    const node = nodeExe();
+    if (!fs.existsSync(node)) return { source: 'bundled', reason: 'node-missing' };
+
+    const smokeHome = path.join(userDataDir, '.agent-health-check-' + process.pid);
+    try {
+      fs.mkdirSync(smokeHome, { recursive: true });
+      await new Promise<void>((resolve, reject) => {
+        const child = spawn(node, [bin, '--version'], {
+          cwd: path.join(userDataDir, 'agent'),
+          env: { ...process.env, DSH_HOME: smokeHome },
+          windowsHide: true,
+          stdio: ['ignore', 'pipe', 'pipe'],
+        });
+        let output = '';
+        const timer = setTimeout(() => {
+          try { child.kill(); } catch { /* best effort */ }
+          reject(new Error('overlay CLI health check timed out'));
+        }, timeoutMs);
+        const collect = (chunk: Buffer): void => { output += chunk.toString('utf8'); };
+        child.stdout.on('data', collect);
+        child.stderr.on('data', collect);
+        child.once('error', (error) => {
+          clearTimeout(timer);
+          reject(error);
+        });
+        child.once('close', (code) => {
+          clearTimeout(timer);
+          if (code === 0) return resolve();
+          const lines = output.split(/\r?\n/).filter(Boolean);
+          const diagnostic = lines.find((line) => /Cannot find|MODULE_NOT_FOUND|ERR_MODULE_NOT_FOUND/.test(line));
+          reject(new Error([diagnostic, ...lines.slice(-4)].filter(Boolean).join(' | ') || `overlay CLI exited ${code}`));
+        });
+      });
+      fs.writeFileSync(overlayHealthPath(), JSON.stringify({ version, validatedAt: new Date().toISOString() }, null, 2) + '\n');
+      log('update', `Agent overlay ${version} 启动探测通过`);
+      return { source: 'overlay' };
+    } catch (error) {
+      overlayRejected = true;
+      const reason = String((error instanceof Error && error.message) || error);
+      try {
+        const broken = nextBrokenOverlayDir();
+        fs.renameSync(path.join(userDataDir, 'agent'), broken);
+        log('update', `Agent overlay ${version} 启动探测失败，已隔离并改用内置版本: ${reason}`);
+      } catch (moveError) {
+        log('update', `Agent overlay ${version} 启动探测失败，本次改用内置版本；隔离失败: ${String((moveError instanceof Error && moveError.message) || moveError)}`);
+      }
+      return { source: 'bundled', reason };
+    } finally {
+      try { fs.rmSync(smokeHome, { recursive: true, force: true }); } catch { /* best effort */ }
+    }
+  }
+
+  function confirmHealthyOverlay(): boolean {
+    if (!effectiveOverlayBin()) return false;
+    return updater.confirmPreviousAgentHealthy(settingsCtx);
   }
 
   function desktopProfile(): string {
@@ -116,8 +212,15 @@ export function createDesktopCore(ctx: DesktopCoreCtx) {
     { id: 'auto-compact', name: 'dsh-auto-compact', dir: 'dsh-auto-compact' },
     { id: 'plugin-shield', name: 'dsh-plugin-shield', dir: 'dsh-plugin-shield' },
     { id: 'plugin-manager', name: '@deepseek-ai/dsh-plugin-manager' },
+    { id: 'skin-switch', name: '@deepseek-ai/dsh-skin-switch', dir: 'dsh-skin-switch' },
     { id: 'dsh-undo', name: 'dsh-undo-savepoint', dir: 'dsh-undo-savepoint' },
   ];
+
+  // Main 的皮肤系统：皮肤包是独立插件，默认禁用，由 skin-switch 负责互斥切换。
+  // maid-atelier 依赖外部主题运行时，主线当前也不在首启注册，保留资产供后续
+  // 兼容性验证后重新启用。
+  const SKINS_DIR = path.join(appRoot, 'assets', 'skins');
+  const DISABLED_SKINS = new Set(['maid-atelier']);
 
   // ------------------------------------------------------ 保护中心（guard）--
 
@@ -280,6 +383,19 @@ export function createDesktopCore(ctx: DesktopCoreCtx) {
     saveSettings(s);
   }
 
+  // Safe mode is enabled by dsh-undo-savepoint before the service restarts.
+  // This marker lives in the profile, not in the plugin's configurable
+  // snapshot store, so the synchronizer can honor it without loading a plugin
+  // or guessing the user's custom snapshot path.
+  function safeModeActive(): boolean {
+    try {
+      const marker = readJsonFile(path.join(desktopProfileDir(), '.dsh-safe-mode.json'));
+      return marker?.active === true;
+    } catch {
+      return false;
+    }
+  }
+
   /// 内置插件当前生效的源目录：覆盖层（已更新版本）优先，资产版本回退。
   function builtinPluginSourceDir(dirName: string): string {
     const assets = path.join(appRoot, 'assets', 'plugins', dirName);
@@ -339,6 +455,8 @@ export function createDesktopCore(ctx: DesktopCoreCtx) {
     // 桌面专属 profile 必须先存在（未知 profile 不会被 dsh 自动初始化）。
     ensureDesktopProfileInit();
     const profileDirP = desktopProfileDir();
+    const inSafeMode = safeModeActive();
+    if (inSafeMode) log('boot', '安全模式激活中：跳过配套插件 patch 行同步（退出安全模式后恢复）');
     // 内置社区 agent preset：安装到用户 preset 根（已存在则跳过，用户优先）。
     const presetsSynced = syncBundledPresets(
       path.join(appRoot, 'assets', 'agent-presets'),
@@ -392,6 +510,33 @@ export function createDesktopCore(ctx: DesktopCoreCtx) {
       // p.disabled: true 的配套插件默认以禁用行注册；已有行不重写，用户选择优先。
       pending.push({ id: p.id, name: p.name, disabled: p.disabled === true, config: p.config });
     }
+    // 皮肤包不进入 companion 更新源；它们随应用资产同步，且以 disabled 行
+    // 注册，确保启动时最多只有用户明确选择的一套 skin 生效。
+    const skinPending: CompanionEntry[] = [];
+    if (fs.existsSync(SKINS_DIR)) {
+      for (const entry of fs.readdirSync(SKINS_DIR, { withFileTypes: true })) {
+        if (!entry.isDirectory() || entry.name.startsWith('.')) continue;
+        if (DISABLED_SKINS.has(entry.name)) {
+          log('boot', `皮肤暂未启用，跳过首启注册: ${entry.name}`);
+          continue;
+        }
+        const src = path.join(SKINS_DIR, entry.name);
+        const pkg = readJsonFile(path.join(src, 'package.json'));
+        const skin = readJsonFile(path.join(src, 'skin.json'));
+        const rowId = skin?.wiring?.id;
+        if (!pkg?.name || typeof pkg.name !== 'string' || !/^ui-skin-[a-z0-9-]+$/.test(String(rowId))) {
+          log('boot', `皮肤资产清单无效，跳过: ${entry.name}`);
+          continue;
+        }
+        if (removedIds.has(rowId)) {
+          log('boot', `已按用户选择跳过被移除的皮肤: ${rowId}`);
+          continue;
+        }
+        copyPluginPackage(profileDirP, src, pkg.name);
+        skinPending.push({ id: rowId, name: pkg.name, disabled: true });
+      }
+    }
+    pending.push(...skinPending);
     if (migratedBuiltins.length) {
       try {
         const names = migratedBuiltins.map((m) => m.name).join('、');
@@ -432,14 +577,17 @@ export function createDesktopCore(ctx: DesktopCoreCtx) {
     // bundle 实际声明的 entry id 集合去重，git/fork 安装同样命中）。
     const declaredBundleIds = collectBundleEntryIds(bundled, path.join(profileDirP, 'node_modules'));
     const rowIds: Record<string, string> = {};
-    for (const p of COMPANION_PLUGINS) rowIds[p.id] = p.name;
+    for (const p of [...COMPANION_PLUGINS, ...skinPending]) rowIds[p.id] = p.name;
     const deduped = removeBundledRowDuplicates(patch, rowIds, bundled, declaredBundleIds);
     if (deduped.removed.length) {
       patch = deduped.patch;
       changed = true;
       log('boot', '已移除与 bundle 登记重复的 patch 行: ' + deduped.removed.map(String).join(', '));
     }
-    for (const p of pending) {
+    // Package copies remain available for recovery, but their loader rows must
+    // not be written while safe mode is active. Otherwise the next restart
+    // silently turns a one-plugin profile back into the full plugin set.
+    for (const p of inSafeMode ? [] : pending) {
       if (hasEntryId(patch, p.id)) continue;
       if (bundled.includes(p.name) || declaredBundleIds.has(p.id)) continue;
       let block = `- insert:\n    - id: ${p.id}\n      name: '${p.name}'\n`;
@@ -945,21 +1093,22 @@ export function createDesktopCore(ctx: DesktopCoreCtx) {
 
   // ------------------------------------------------- 启动链编排（boot 调用）--
 
-  function migrateAndSync(): { ok: true } {
-    upgradePreflight();
+  async function migrateAndSync(): Promise<{ ok: true }> {
+    await upgradePreflight();
     syncCompanionPlugins();
     healProfileModules();
     return { ok: true };
   }
 
-  function syncAll(): { ok: true } {
-    upgradePreflight();
+  async function syncAll(): Promise<{ ok: true }> {
+    await upgradePreflight();
     syncCompanionPlugins();
     healProfileModules();
     return { ok: true };
   }
 
-  function upgradePreflight(): { ok: true } {
+  async function upgradePreflight(): Promise<{ ok: true }> {
+    await ensureHealthyOverlay();
     const activeKernel = readJsonFile(path.join(path.dirname(path.dirname(dshBin())), 'package.json'));
     if (activeKernel?.version !== UPGRADE_TARGET.kernel) {
       throw new Error('PROFILE_UPGRADE_REQUIRED: active kernel needs offline migration');
@@ -982,7 +1131,7 @@ export function createDesktopCore(ctx: DesktopCoreCtx) {
     // updates
     updatesCheck, updatesList, updatesUpdateOne, updatesSetAutoUpdate,
     // misc
-    koffiPreflight, desktopProfile, desktopProfileDir, dshBin, loadSettings, saveSettings,
+    koffiPreflight, desktopProfile, desktopProfileDir, dshBin, loadSettings, saveSettings, ensureHealthyOverlay, confirmHealthyOverlay,
     detectExternalDsh,
     // 常量（测试用）
     COMPANION_PLUGINS, CORE_PLUGIN_IDS, PLUGIN_UPDATE_SOURCES, EXTRA_PACKAGE_FILES, COPY_STAMP,

@@ -873,7 +873,7 @@ dependencies = [
 
 [[package]]
 name = "dsh-desktop-aio"
-version = "1.2.0"
+version = "9.6.3"
 dependencies = [
  "serde",
  "serde_json",

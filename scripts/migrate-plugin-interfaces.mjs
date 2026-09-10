@@ -12,7 +12,11 @@ import { fileURLToPath } from 'node:url';
 
 // Bounded to the seven reviewed archives and upstream c389f96. This is NOT a
 // general JS codemod, package installer, rebuild, or runtime compatibility test.
-export const officialVersion = '0.1.3-alpha.2';
+export const officialVersion = '0.1.5-rc.2';
+// The audited upstream source checkout used to rebuild the compatibility
+// adapter is still pinned at the last reviewed alpha source. It is evidence
+// for the transformation, not the runtime kernel target.
+export const reviewedSourceVersion = '0.1.3-alpha.2';
 const prefix = '@deepseek-ai/';
 const runtime = `${prefix}dsh-client-runtime`;
 const store = `${prefix}dsh-client-store`;

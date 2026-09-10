@@ -10,7 +10,7 @@
     "./package.json": "./package.json"
   },
   "license": "MIT",
-  "files": ["lib", "cordis.patch.yml", "LICENSE", "PROVENANCE.json", "README.md"],
+  "files": ["lib", "cordis.patch.yml", "dsh-plugin.json", "LICENSE", "PROVENANCE.json", "README.md"],
   "dsh": {
     "client": {
       "inject": [],

@@ -13,6 +13,7 @@ import { createHash, randomUUID } from 'node:crypto';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const require = createRequire(import.meta.url);
+const smokeRoot = path.resolve(process.env.DSH_SMOKE_TMP_ROOT || path.join(root, '.smoke-tmp'));
 const preset = process.argv[2];
 assert.ok(['anchored-standard', 'router-standard', 'router-spec', 'router-spec-nested'].includes(preset),
   'Usage: node scripts/smoke-kernel-agent.mjs <anchored-standard|router-standard|router-spec|router-spec-nested>');
@@ -37,11 +38,18 @@ if (process.argv[3] !== '--worker') {
     try { await fs.mkdir(output); } catch (error) { if (error.code !== 'EEXIST') throw error; }
     assert.deepEqual(await fs.readdir(output), [], 'Fixture output must be empty');
   }
-  const temporary = await fs.mkdtemp(path.join(os.tmpdir(), 'dsh-agent-smoke-'));
+  await fs.mkdir(smokeRoot, { recursive: true });
+  const temporary = await fs.mkdtemp(path.join(smokeRoot, 'dsh-agent-smoke-'));
   let child;
   let timer;
   try {
-    const env = Object.fromEntries(Object.entries(process.env).filter(([key]) => keep.test(key)));
+    const env = {
+      ...Object.fromEntries(Object.entries(process.env).filter(([key]) => keep.test(key))),
+      HOME: temporary,
+      USERPROFILE: temporary,
+      APPDATA: path.join(temporary, 'AppData/Roaming'),
+      LOCALAPPDATA: path.join(temporary, 'AppData/Local'),
+    };
     child = childProcess.spawn(process.execPath,
       [fileURLToPath(import.meta.url), preset, '--worker', temporary, ...(output ? [output] : [])],
       { env, windowsHide: true, stdio: ['ignore', 'pipe', 'pipe'] });
@@ -59,7 +67,7 @@ if (process.argv[3] !== '--worker') {
     // A loaded Windows .node file cannot be deleted until its process exits.
     // Only the supervisor removes the home, after observing worker close.
     const resolved = path.resolve(temporary);
-    assert.equal(path.dirname(resolved), path.resolve(os.tmpdir()));
+    assert.equal(path.dirname(resolved), smokeRoot);
     assert.ok(path.basename(resolved).startsWith('dsh-agent-smoke-'));
     await fs.rm(resolved, { recursive: true, force: true, maxRetries: 2, retryDelay: 50 });
     console.log(JSON.stringify({ ...result, cleanup: { ...result.cleanup, temporaryRemoved: true } }));
@@ -74,14 +82,14 @@ if (process.argv[3] !== '--worker') {
       await new Promise(resolve => child.once('close', resolve));
     }
     const resolved = path.resolve(temporary);
-    assert.equal(path.dirname(resolved), path.resolve(os.tmpdir()));
+    assert.equal(path.dirname(resolved), smokeRoot);
     assert.ok(path.basename(resolved).startsWith('dsh-agent-smoke-'));
     await fs.rm(resolved, { recursive: true, force: true, maxRetries: 2, retryDelay: 50 });
   }
   process.exit(process.exitCode || 0);
 }
 const temporary = path.resolve(process.argv[4]);
-assert.equal(path.dirname(temporary), path.resolve(os.tmpdir()));
+assert.equal(path.dirname(temporary), smokeRoot);
 assert.ok(path.basename(temporary).startsWith('dsh-agent-smoke-'));
 const home = path.join(temporary, 'home');
 const fixtureOutput = process.argv[5];
@@ -92,10 +100,16 @@ const originalCwd = process.cwd();
 // Do not inherit credentials, proxy configuration, NODE_OPTIONS, or a live home.
 for (const key of Object.keys(process.env)) if (!keep.test(key)) delete process.env[key];
 Object.assign(process.env, {
-  DSH_HOME: home, DSH_CWD: workspace, HOME: home, USERPROFILE: home,
+  DSH_HOME: home, DSH_AGENTS_HOME: path.join(home, '.agents'), DSH_CWD: workspace, HOME: home, USERPROFILE: home,
   APPDATA: path.join(home, 'AppData/Roaming'), LOCALAPPDATA: path.join(home, 'AppData/Local'),
   DSH_TELEMETRY_DISABLED: '1', DSH_OFFLINE_SMOKE_KEY: 'local-placeholder-not-a-real-key',
 });
+// Node on Windows can resolve os.homedir() from the process token rather than
+// the mutable environment. Keep this isolated worker deterministic for the
+// sandbox and prevent rc.2 workspace canonicalization from probing the real
+// developer profile.
+try { os.homedir = () => home; } catch { /* host may expose a read-only binding */ }
+await fs.mkdir(path.join(home, '.agents'), { recursive: true });
 process.chdir(workspace);
 
 let port;
@@ -257,7 +271,7 @@ try {
   for (const [name, config] of host) await mount(name, config);
   const versions = Object.fromEntries(['dsh', 'dsh-agent-loop', 'dsh-agent-presets', 'dsh-llm-deepseek']
     .map(name => [name, require(`@deepseek-ai/${name}/package.json`).version]));
-  for (const version of Object.values(versions)) assert.equal(version, '0.1.3-alpha.2');
+  for (const version of Object.values(versions)) assert.equal(version, '0.1.5-rc.2');
   const sessionId = SessionId(`offline-${preset}-${nonce}`);
   const composition = path.join(presetRoot, presetId, 'agent.cordis.yml');
   const presetHash = createHash('sha256').update(await fs.readFile(composition)).digest('hex');
@@ -284,6 +298,7 @@ try {
   assert.equal(requests.length, 2, JSON.stringify({
     requests: requests.length,
     terminalEvents: events.filter(event => ['turn/end', 'step/end', 'agent/error'].includes(event.type)),
+    env: { cwd: process.cwd(), home, dshHome: process.env.DSH_HOME, userProfile: process.env.USERPROFILE, osHome: os.homedir() },
   }));
   const types = events.map(event => event.type);
   for (const type of ['user/message', 'tool/call', 'tool/result', 'assistant/message', 'turn/end']) {

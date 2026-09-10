@@ -1,0 +1,31 @@
+{
+  "$schema": "https://raw.githubusercontent.com/Yan-Zero/dsh-std/614dfa1ac168db79fcf4577cf0ebb34e2e3b944b/packages/manifest/schema/dsh-plugin-0.15.schema.json",
+  "manifestVersion": "0.15",
+  "id": "io.github.zouyuxuan122.ui-skin-qq98",
+  "name": "@linxin666/dsh-client-ui-skin-qq98",
+  "version": "0.1.11",
+  "facets": {
+    "host": {
+      "entry": "lib/index.js",
+      "apiVersion": "v1alpha1"
+    }
+  },
+  "requires": {
+    "contracts": []
+  },
+  "permissions": [],
+  "contributes": {
+    "commands": []
+  },
+  "subscriptions": [],
+  "license": "BSD-3-Clause",
+  "source": {
+    "repository": "https://github.com/zouyuxuan122/DSH-Desktop-EAC"
+  },
+  "overrides": [],
+  "x-eac": {
+    "role": "skin",
+    "wiring": "ui-skin-qq98",
+    "autoUpdate": false
+  }
+}

@@ -21,7 +21,7 @@ test('install diagnostics preserve public dependency failures without disclosing
   assert.doesNotMatch(result, /Somebody|private-value|sk-/);
 });
 
-const version = '0.1.3-alpha.2';
+const version = '0.1.5-rc.2';
 test('lean target retains six required archives without erasing historical migration coverage', () => {
   const source = JSON.parse(fs.readFileSync(new URL(
     '../distribution/profile-seed/profiles/web-desktop/package.json', import.meta.url)));

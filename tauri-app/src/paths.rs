@@ -59,10 +59,11 @@ impl Paths {
                 .join("npm-cli.js")
         };
         // 便携包在 exe 同级带 `.dsh-portable`，数据进入 `.dsh-aio-data`；
-        // 安装版再按版本隔离一层，更新包不会复用旧 AIO 的根数据。
+        // 安装版按版本隔离一层。首次从 EAC 5.3.6 更新时，先把旧 release
+        // 根目录无损接管到当前版本目录，避免“安装成功但设置/会话消失”。
         // 环境变量始终优先，供自动化与高级用户覆盖。
         let portable_data = portable_data_dir(packaged, resource_dir.as_deref());
-        let installed_data = installed_data_dir(&app_data_dir, &version);
+        let installed_data = adopt_legacy_release_data(&app_data_dir, &version);
         let user_data = match std::env::var("DSH_DESKTOP_USERDATA") {
             Ok(v) if !v.trim().is_empty() => PathBuf::from(v),
             _ => portable_data.clone().unwrap_or(installed_data),
@@ -296,6 +297,30 @@ pub fn dirs_home() -> Option<PathBuf> {
 
 fn installed_data_dir(app_data_dir: &std::path::Path, version: &str) -> PathBuf {
     app_data_dir.join("releases").join(version)
+}
+
+const LEGACY_EAC_RELEASE: &str = "5.3.6";
+
+/// Adopt the immediately previous EAC 5.3.6 data root before the first 9.6.3
+/// launch. The move is same-volume and therefore atomic on normal installs;
+/// if another process holds the directory, retaining the old path still keeps
+/// the user's data available for this run rather than silently starting empty.
+fn adopt_legacy_release_data(app_data_dir: &std::path::Path, version: &str) -> PathBuf {
+    let current = installed_data_dir(app_data_dir, version);
+    if current.exists() || version != "9.6.3" {
+        return current;
+    }
+    let legacy = installed_data_dir(app_data_dir, LEGACY_EAC_RELEASE);
+    if !legacy.is_dir() {
+        return current;
+    }
+    if let Some(parent) = current.parent() {
+        let _ = std::fs::create_dir_all(parent);
+    }
+    match std::fs::rename(&legacy, &current) {
+        Ok(()) => current,
+        Err(_) => legacy,
+    }
 }
 
 fn seed_home_is_empty(home: &std::path::Path) -> Result<bool, String> {
@@ -590,7 +615,7 @@ mod tests {
             dsh_home: root.join("home"),
             app_root,
             packaged: true,
-            version: "1.2.0".into(),
+            version: "9.6.3".into(),
         }
     }
 
@@ -810,10 +835,34 @@ mod tests {
     fn installed_data_isolated_per_release_without_touching_legacy_root() {
         let root = test_root("installed-release-data");
         let old = installed_data_dir(&root, "1.1.0");
-        let current = installed_data_dir(&root, "1.2.0");
+        let current = installed_data_dir(&root, "9.6.3");
         assert_eq!(old, root.join("releases/1.1.0"));
-        assert_eq!(current, root.join("releases/1.2.0"));
+        assert_eq!(current, root.join("releases/9.6.3"));
         assert_ne!(old, current);
         assert_ne!(current, root);
+    }
+
+    #[test]
+    fn first_963_launch_adopts_536_release_data_atomically() {
+        let root = test_root("adopt-536");
+        let legacy = installed_data_dir(&root, "5.3.6");
+        std::fs::create_dir_all(legacy.join("dsh-home/profiles/web-desktop")).unwrap();
+        std::fs::write(legacy.join("settings.json"), b"legacy-settings").unwrap();
+        let adopted = adopt_legacy_release_data(&root, "9.6.3");
+        assert_eq!(adopted, installed_data_dir(&root, "9.6.3"));
+        assert!(adopted.join("settings.json").is_file());
+        assert!(!legacy.exists());
+        let _ = std::fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn legacy_adoption_does_not_change_other_versions() {
+        let root = test_root("adopt-noop");
+        let legacy = installed_data_dir(&root, "5.3.6");
+        std::fs::create_dir_all(&legacy).unwrap();
+        let path = adopt_legacy_release_data(&root, "10.0.0");
+        assert_eq!(path, installed_data_dir(&root, "10.0.0"));
+        assert!(legacy.is_dir());
+        let _ = std::fs::remove_dir_all(root);
     }
 }

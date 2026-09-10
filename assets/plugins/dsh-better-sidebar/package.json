@@ -67,6 +67,7 @@
     "scripts/install.sh",
     "scripts/install.ps1",
     "cordis.patch.yml",
+    "dsh-plugin.json",
     "README.md",
     "README_EN.md",
     "LICENSE"

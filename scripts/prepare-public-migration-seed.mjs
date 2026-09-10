@@ -233,7 +233,7 @@ export function buildPublicMigrationSeed({ base, output, work, expectedBaseDiges
   disjointPaths(repo, base, output, work);
   if (!['aio-1.2.0-public-seed-20260908-r4', 'aio-1.2.0-public-seed-20260908-r5',
     'aio-1.2.0-public-seed-20260908-r6', 'aio-1.2.0-public-seed-20260908-r7',
-    'aio-1.2.0-public-seed-20260908-r8'].includes(path.basename(base))) {
+    'aio-1.2.0-public-seed-20260908-r8', 'aio-9.6.3-public-seed'].includes(path.basename(base))) {
     throw new Error('only the named reviewed public r4, r5, r6, r7 or r8 seed is accepted');
   }
   if (fs.existsSync(output) || fs.existsSync(work)) throw new Error('output and work must be NEW directories');

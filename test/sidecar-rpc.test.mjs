@@ -131,11 +131,14 @@ test('sidecar: profile 初始化 + 配套插件同步落盘', async () => {
     assert.match(patch, /id: balance/);
     assert.match(patch, /id: plugin-manager/);
     assert.match(patch, /id: composer-dynamic-island[\s\S]*?name: 'dsh-composer-dynamic-island'/);
-    assert.doesNotMatch(patch, /id: skin-switch|id: dsh-market-plugin|id: ui-skin-|id: offpeak|id: plugin-marketplace/);
+    assert.match(patch, /id: skin-switch[\s\S]*?name: '@deepseek-ai\/dsh-skin-switch'/);
+    assert.match(patch, /id: ui-skin-blue-fantasy[\s\S]*?disabled: true/);
+    assert.doesNotMatch(patch, /id: dsh-market-plugin|id: offpeak|id: plugin-marketplace/);
     // 内置清单标记已写。
     const marker = JSON.parse(fs.readFileSync(path.join(profileDir, '.dsh-builtin-plugins.json'), 'utf8'));
     assert.ok(marker.names.includes('@deepseek-ai/dsh-balance'));
     assert.ok(marker.names.includes('dsh-composer-dynamic-island'));
+    assert.ok(marker.names.includes('@deepseek-ai/dsh-skin-switch'));
     // 配套插件包已拷贝（余额插件）。
     assert.ok(fs.existsSync(path.join(profileDir, 'node_modules', '@deepseek-ai', 'dsh-balance', 'package.json')));
     const islandRoot = path.join(profileDir, 'node_modules', 'dsh-composer-dynamic-island');
