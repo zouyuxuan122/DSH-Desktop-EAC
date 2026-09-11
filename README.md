@@ -22,6 +22,11 @@
 
 </div>
 
+> ### 📦 v5.4 起：唯一的桌面发行版，安装时选「完整版 / 精简版」
+>
+> 同一个安装包、同一套 5.x 内核：**完整版**带全部内置插件；**精简版**只默认停用外围插件（桌宠 / 手机桥 / 多智能体等），设置里可随时一键启用，无需重装。
+> 原 **Lite（Electron 精简版）退役**、**AIO 整合版收编为精简版形态**、**EAC-IDE 进入维护模式**——数据统一 `~/.dsh`。迁移说明见 [docs/SINGLE-EDITION-MIGRATION.md](dsh-desktop/docs/SINGLE-EDITION-MIGRATION.md)。
+
 ---
 
 > ### 🚀 官方配套启动器：DSH EAC Launcher
@@ -88,16 +93,18 @@
 
 ### AIO 版（Windows x64 · All-in-One）
 
-> **DSHEAC AIO** 是独立于 5.x 主线的 **All-in-One 精致个人终端**：一个安装包备齐 dsh 内核、插件市场与完整桌面体验，开箱即用；与正式版相互隔离（独立 app data 与 `dsh-home`，默认不读取 5.x / v4Lite / 旧 EAC 或 CLI 数据），可并存安装。当前版本 **AIO v1.1.0**（源码分支 `aio-v1`，随 [v5.3.6 Release](https://github.com/zouyuxuan122/DSH-Desktop-EAC/releases/tag/v5.3.6) 一同发布）。
+> **DSHEAC AIO** 是独立于 5.x 主线的 **All-in-One 精致个人终端**：一个安装包备齐 dsh 内核、插件市场与完整桌面体验，开箱即用；与正式版相互隔离（独立 app data 与 `dsh-home`，默认不读取 5.x / v4Lite / 旧 EAC 或 CLI 数据），可并存安装。当前版本 **AIO v1.2.0**（源码分支 `aio-v1`，随 [aio-v1.2.0 Release](https://github.com/zouyuxuan122/DSH-Desktop-EAC/releases/tag/aio-v1.2.0) 一同发布）。
 
 | 文件 | 说明 | 大小 |
 | --- | --- | --- |
-| [AIO 安装版（v1.1.0）](https://github.com/zouyuxuan122/DSH-Desktop-EAC/releases/download/v5.3.6/DSHEAC-AIO-v1-Windows-x64.exe) | NSIS 安装版，安装到系统并创建快捷方式；EXE 为 `DSHEAC AIO.exe`，与正式版更新器互相隔离 | ~332 MB |
-| [AIO 便携版（v1.1.0）](https://github.com/zouyuxuan122/DSH-Desktop-EAC/releases/download/v5.3.6/DSHEAC-AIO-v1-Portable-x64.zip) | 免安装解压即用，数据写入 EXE 同级 `.dsh-aio-data`，可直接迁移 | ~123 MB |
-| [校验清单 SHA256SUMS-AIO-v1.1.0.txt](https://github.com/zouyuxuan122/DSH-Desktop-EAC/releases/download/v5.3.6/SHA256SUMS-AIO-v1.1.0.txt) | AIO 资产 SHA-256 校验 | — |
+| [AIO 安装版（v1.2.0）](https://github.com/zouyuxuan122/DSH-Desktop-EAC/releases/download/aio-v1.2.0/DSHEAC-AIO-v1.2.0-Setup-x64.exe) | NSIS 安装版，安装到系统并创建快捷方式；EXE 为 `DSHEAC AIO.exe`，与正式版更新器互相隔离 | ~313 MB |
+| [AIO 便携版（v1.2.0）](https://github.com/zouyuxuan122/DSH-Desktop-EAC/releases/download/aio-v1.2.0/DSHEAC-AIO-v1.2.0-Portable-x64.zip) | 免安装解压即用，数据写入 EXE 同级 `.dsh-aio-data`，可直接迁移 | ~147 MB |
+| [校验清单 SHA256SUMS-AIO-v1.2.0.txt](https://github.com/zouyuxuan122/DSH-Desktop-EAC/releases/download/aio-v1.2.0/SHA256SUMS-AIO-v1.2.0.txt) | AIO 资产 SHA-256 校验 | — |
 
 - 安装包尚未 Authenticode 签名，SmartScreen 可能提示未知发布者；运行前请先核对 SHA-256。
 - 客户端自更新不在 AIO 中提供，插件自动更新默认关闭；安装路径建议不超过 120 个字符。
+- **v1.2.0 要点**：内核对齐官方桌面端 `0.1.3-alpha.2`，插件接口随内核迁移修复，应用图标更换为 WhaleGirl，并移除已确认停用的插件与皮肤。
+- **AIO 升级说明**：从旧版 AIO 覆盖安装时，仅继承旧版的会话与供应商配置，不继承旧版插件（内置插件随安装包更新）。
 
 > 💡 **升级说明（老用户必读）**：
 > - 直接下载上方最新安装包覆盖安装即可；
@@ -224,16 +231,16 @@
 
 ## 开发者文档
 
-完整的当前分支开发参考见 [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md)，包括 Tauri 三层架构、L2 模块边界、开发/测试/打包命令、运行时数据目录、桥接契约和排障清单。
-
 ### 从源码构建（Tauri 壳，v5.0 默认）
 
 ```powershell
 cd dsh-desktop
-npm install
+npm install -g pnpm@11.7.0       # 内核构建依赖（版本由上游 packageManager 钉定）
+node scripts/fetch-kernel.js     # 首次必须：自上游源码构建内核 tarball（vendor/ 不入库；网络受限环境需自行配置代理）
+npm install                      # 内核 tarball 就位后依赖才能安装
 npm run fetch-runtime            # 内置 node.exe + npm CLI
-node tauri-shell/stage-resources.mjs   # 装配打包资源（sidecar + dsh-desktop 运行树）
-cd tauri-shell
+node ../tauri-shell/stage-resources.mjs   # 装配打包资源（sidecar + dsh-desktop 运行树）
+cd ../tauri-shell
 npx -y @tauri-apps/cli@2 build   # release 构建 + NSIS 安装包
 node make-portable.mjs           # 便携 zip（可选）→ target/release/portable/
 
@@ -248,6 +255,8 @@ node make-portable.mjs           # 便携 zip（可选）→ target/release/port
 
 ```powershell
 cd dsh-desktop
+npm install -g pnpm@11.7.0
+node scripts/fetch-kernel.js     # 网络受限环境需自行配置代理
 npm install
 npm run fetch-runtime
 # 打包（Tauri 三段链，产出入 tauri-shell/target/release/）
@@ -263,7 +272,7 @@ node make-portable.mjs                      # → portable/*-portable.zip + SHA2
 
 ```powershell
 cd dsh-desktop
-npm test                 # node --test test/*.test.mjs（pretest 含 tsc 全量类型检查）
+npm test                 # node --test test/*.test.ts（pretest 含 tsc 全量类型检查）
 node ../gui-smoke.js     # Tauri 壳 GUI 冒烟（18 项，需先 cargo build）
 node ../update-smoke.js  # 自更新链路冒烟（mock 发布源 + 目录树交换）
 ```

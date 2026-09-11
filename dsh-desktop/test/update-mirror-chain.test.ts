@@ -30,6 +30,15 @@ function makeFakeNpmCli(dir, behavior) {
   fs.writeFileSync(cli, `
     const args = process.argv.slice(2);
     if (args[0] === 'config') { process.stdout.write('https://registry.npmjs.org\\n'); process.exit(0); }
+    if (args[0] === 'view') {
+      const reg = args.find((a) => a.startsWith('--registry='));
+      const key = reg ? reg.slice('--registry='.length).replace(/\\/+$/, '') : '(default)';
+      const behavior = ${JSON.stringify(behavior)};
+      const out = behavior[key] || behavior['(default)'];
+      if (out === 'ok') { process.stdout.write('0.1.0-rc.9\\n'); process.exit(0); }
+      process.stderr.write('EINTEGRITY fetch failed\\n'); process.exit(1);
+    }
+    if (args[0] === 'ls') { process.stdout.write('dependency closure ok\\n'); process.exit(0); }
     const reg = args.find((a) => a.startsWith('--registry='));
     const key = reg ? reg.slice('--registry='.length).replace(/\\/+$/, '') : '(default)';
     const behavior = ${JSON.stringify(behavior)};
@@ -40,7 +49,9 @@ function makeFakeNpmCli(dir, behavior) {
       const path = require('node:path');
       const bin = path.join(prefixArg || '.', 'node_modules', '@deepseek-ai', 'dsh', 'lib', 'bin.js');
       fs.mkdirSync(path.dirname(bin), { recursive: true });
-      fs.writeFileSync(bin, 'module.exports = {};\\n');
+      const requested = args.find((a) => a.startsWith('@deepseek-ai/dsh@')).slice('@deepseek-ai/dsh@'.length);
+      fs.writeFileSync(path.join(path.dirname(path.dirname(bin)), 'package.json'), JSON.stringify({ name: '@deepseek-ai/dsh', version: requested }));
+      fs.writeFileSync(bin, 'console.log(' + JSON.stringify(requested) + ');\\n');
       process.stdout.write('0.1.0-rc.9\\n');
       process.exit(0);
     }
@@ -88,6 +99,26 @@ test('applyUpdate: first registry fails -> automatically switches to mirror and 
   assert.ok(events.some((e) => e.stage === 'done'), '成功阶段应上报');
   assert.ok(logs.some((l) => l.includes('自动切换镜像源')), '日志应记录切换');
   assert.ok(fs.existsSync(path.join(userDataDir, 'agent', 'node_modules', '@deepseek-ai', 'dsh', 'lib', 'bin.js')));
+  assert.equal(fs.existsSync(path.join(userDataDir, 'agent-previous')), false, '首次安装不能生成假的上一版本');
+  const settings = JSON.parse(fs.readFileSync(path.join(userDataDir, 'settings.json'), 'utf8'));
+  assert.equal(settings.previousAgent, null);
+  rmRetry(userDataDir);
+});
+
+test('applyUpdate: 备份记录旧 overlay 的真实版本而不是目标版本', async () => {
+  const userDataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'upd-previous-version-'));
+  const cli = makeFakeNpmCli(userDataDir, { 'https://registry.npmjs.org': 'ok' });
+  const oldPkg = path.join(userDataDir, 'agent', 'node_modules', '@deepseek-ai', 'dsh');
+  fs.mkdirSync(path.join(oldPkg, 'lib'), { recursive: true });
+  fs.writeFileSync(path.join(oldPkg, 'package.json'), JSON.stringify({ name: '@deepseek-ai/dsh', version: '0.1.0-rc.8' }));
+  fs.writeFileSync(path.join(oldPkg, 'lib', 'bin.js'), "console.log('0.1.0-rc.8');");
+  const { ctx } = makeCtx(cli, userDataDir);
+
+  await updater.applyUpdate(ctx, '0.1.0-rc.9', {});
+  const settings = JSON.parse(fs.readFileSync(path.join(userDataDir, 'settings.json'), 'utf8'));
+  assert.equal(settings.previousAgent.version, '0.1.0-rc.8');
+  const previousPkg = JSON.parse(fs.readFileSync(path.join(userDataDir, 'agent-previous', 'node_modules', '@deepseek-ai', 'dsh', 'package.json'), 'utf8'));
+  assert.equal(previousPkg.version, '0.1.0-rc.8');
   rmRetry(userDataDir);
 });
 
@@ -133,12 +164,14 @@ test('applyUpdate: npm install 必须携带 --ignore-scripts（阻断 node-pty n
     const args = process.argv.slice(2);
     // 记录真实 argv 到脚本自身目录，供断言 --ignore-scripts（路径经
     // path.join 注入，避免任何转义歧义）。
-    fs.writeFileSync(path.join(path.dirname(process.argv[1]), 'npm-args.json'), JSON.stringify(args));
+    if (args[0] === 'install') fs.writeFileSync(path.join(path.dirname(process.argv[1]), 'npm-args.json'), JSON.stringify(args));
     if (args.includes('config')) { console.log('https://registry.npmjs.org'); process.exit(0); }
+    if (args[0] === 'ls') { console.log('dependency closure ok'); process.exit(0); }
     const prefix = args[args.indexOf('--prefix') + 1];
     const bin = path.join(prefix, 'node_modules', '@deepseek-ai', 'dsh', 'lib', 'bin.js');
     fs.mkdirSync(path.dirname(bin), { recursive: true });
-    fs.writeFileSync(bin, 'module.exports = {};');
+    fs.writeFileSync(path.join(path.dirname(path.dirname(bin)), 'package.json'), JSON.stringify({ name: '@deepseek-ai/dsh', version: '0.1.0-rc.9' }));
+    fs.writeFileSync(bin, "console.log('0.1.0-rc.9');");
     console.log('0.1.0-rc.9');
     process.exit(0);
   `);
@@ -148,5 +181,34 @@ test('applyUpdate: npm install 必须携带 --ignore-scripts（阻断 node-pty n
   assert.ok(argsLog.includes('--ignore-scripts'),
     '必须跳过生命周期脚本（node-pty install/prebuild 会触发 node-gyp，网络受限环境卡死）');
   assert.ok(argsLog.some((a) => a.startsWith('--registry=')), '镜像源参数应保留');
+  rmRetry(dir);
+});
+
+test('applyUpdate: npm 成功但 CLI 缺运行时依赖时拒绝切换', async () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'upd-bad-runtime-'));
+  const cli = path.join(dir, 'fake-npm.js');
+  fs.writeFileSync(cli, `
+    const fs = require('node:fs');
+    const path = require('node:path');
+    const args = process.argv.slice(2);
+    if (args[0] === 'config') { console.log('https://registry.npmjs.org'); process.exit(0); }
+    if (args[0] === 'ls') { console.log('dependency closure ok'); process.exit(0); }
+    const prefix = args[args.indexOf('--prefix') + 1];
+    const pkg = path.join(prefix, 'node_modules', '@deepseek-ai', 'dsh');
+    fs.mkdirSync(path.join(pkg, 'lib'), { recursive: true });
+    fs.writeFileSync(path.join(pkg, 'package.json'), JSON.stringify({ name: '@deepseek-ai/dsh', version: '0.1.0-rc.9' }));
+    fs.writeFileSync(path.join(pkg, 'lib', 'bin.js'), "require('@deepseek-ai/definitely-missing');\\n");
+    process.exit(0);
+  `);
+  const oldBin = path.join(dir, 'agent', 'node_modules', '@deepseek-ai', 'dsh', 'lib', 'bin.js');
+  fs.mkdirSync(path.dirname(oldBin), { recursive: true });
+  fs.writeFileSync(path.join(path.dirname(path.dirname(oldBin)), 'package.json'), JSON.stringify({ name: '@deepseek-ai/dsh', version: '0.1.0-rc.8' }));
+  fs.writeFileSync(oldBin, "console.log('old');");
+  const { ctx } = makeCtx(cli, dir);
+
+  await assert.rejects(updater.applyUpdate(ctx, '0.1.0-rc.9', {}), /CLI 加载失败/);
+  const current = JSON.parse(fs.readFileSync(path.join(dir, 'agent', 'node_modules', '@deepseek-ai', 'dsh', 'package.json'), 'utf8'));
+  assert.equal(current.version, '0.1.0-rc.8', '验证失败不得替换旧 overlay');
+  assert.equal(fs.existsSync(path.join(dir, 'agent-staging')), false);
   rmRetry(dir);
 });

@@ -25,6 +25,7 @@ const {
   removedPluginIds,
   saveRemovedPluginIds,
   builtinPluginSourceDir,
+  privateMaintainedPluginNames,
   readJsonFile,
   copyPluginPackage,
 } = require('./companion-sync') as {
@@ -32,6 +33,7 @@ const {
   removedPluginIds(): Set<string>;
   saveRemovedPluginIds(ids: Set<string>): void;
   builtinPluginSourceDir(dirName: string): string;
+  privateMaintainedPluginNames(): Set<string>;
   readJsonFile(file: string): Record<string, unknown> | null;
   copyPluginPackage(profileDir: string, src: string, name: string): void;
 };
@@ -120,12 +122,16 @@ export function pluginManagerCollect(): unknown[] {
     const m = JSON.parse(fs.readFileSync(path.join(desktopProfileDir(), 'package.json'), 'utf8'));
     bundles = (m && m.dsh && m.dsh.profile && Array.isArray(m.dsh.profile.bundles)) ? m.dsh.profile.bundles : [];
   } catch { /* 缺省空 */ }
+  // 私有维护（台账 eac-original）标记：台账存包名，行按配套插件 id 记。
+  const privateNames = privateMaintainedPluginNames();
+  const privateIds = new Set(COMPANION_PLUGINS.filter((p) => privateNames.has(p.name)).map((p) => p.id));
   return collectPluginRows(entries, {
     companion: COMPANION_PLUGINS.map((p) => ({ id: p.id, name: p.name })),
     coreIds: onboardingLogic.CORE_PLUGIN_IDS,
     removedIds: removedPluginIds(),
     describe: (name: string) => pluginManagerPackageDescription(name),
     bundles,
+    privateIds,
   });
 }
 

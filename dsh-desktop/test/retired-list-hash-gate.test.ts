@@ -67,7 +67,6 @@ test('file-drop retirement keeps the replacement file-drop-eac row', () => {
   assert.match(migrated, /id:\s*file-drop-eac/);
   assert.match(migrated, /name:\s*'dsh-file-drop-eac'/);
 });
-
 test('first-run cleanup treats a missing patch file as empty state', () => {
   assert.match(
     src,

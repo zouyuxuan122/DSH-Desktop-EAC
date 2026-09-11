@@ -980,7 +980,6 @@ function projectPaths(root) {
     schema: path.join(root, '.sync', 'plugins.schema.json'),
     policies: path.join(root, '.sync', 'policies.json'),
     lock: path.join(root, '.sync', 'plugins.lock.json'),
-    companion: path.join(root, 'dsh-desktop', 'lib', 'desktop', 'companion-sync.ts'),
     registry: path.join(root, 'dsh-desktop', 'lib', 'desktop', 'plugin-sync-registry.ts'),
   };
 }
@@ -1145,42 +1144,28 @@ function packageExportTargets(exportsField) {
 
 function sourceMapFromText(text) {
   const marker = /plugin-sync:update-sources\s+([^\n]+)/.exec(text);
-  if (marker) {
-    try {
-      const parsed = JSON.parse(marker[1]);
-      if (isObject(parsed)) return parsed;
-    } catch {
-      return {};
-    }
+  if (!marker) return null;
+  try {
+    const parsed = JSON.parse(marker[1]);
+    return isObject(parsed) ? parsed : null;
+  } catch {
+    return null;
   }
-  const start = text.indexOf('export const PLUGIN_UPDATE_SOURCES');
-  if (start < 0) return null;
-  const end = text.indexOf('};', start);
-  if (end < 0) return null;
-  const block = text.slice(start, end);
-  const result = {};
-  const pattern = /['"]([^'"]+)['"]\s*:\s*\{\s*(npm|github)\s*:\s*['"]([^'"]+)['"]\s*\}/g;
-  for (const match of block.matchAll(pattern)) result[match[1]] = { [match[2]]: match[3] };
-  return result;
 }
 
 function sourceMap(paths) {
-  // Task 2 still reads the legacy source block.  Accept the generated marker
-  // as a fallback so the validator remains usable after Task 4 removes the
-  // second hand-maintained source table.
-  for (const file of [paths.companion, paths.registry]) {
-    if (!existsSync(file)) continue;
-    const map = sourceMapFromText(readFileSync(file, 'utf8'));
-    if (map !== null) return map;
-  }
-  return null;
+  // The generated registry is the only runtime source of truth.  Do not fall
+  // back to a legacy companion table: that would allow the checked-in
+  // generated artifact to disappear while validation still reports success.
+  if (!existsSync(paths.registry)) return null;
+  return sourceMapFromText(readFileSync(paths.registry, 'utf8'));
 }
 
 function pushError(errors, message) {
   errors.push(message);
 }
 
-function validateManifestInternal(project) {
+function validateManifestInternal(project, { checkRuntimeRegistry = true } = {}) {
   const { paths, manifest, schema, policies } = project;
   const { root } = paths;
   const errors = validateSchema(manifest, schema, 'manifest');
@@ -1363,9 +1348,9 @@ function validateManifestInternal(project) {
   }
 
   const updates = sourceMap(paths);
-  if (updates === null) {
-    pushError(errors, 'runtime source registry is missing from companion-sync.ts/generated registry');
-  } else {
+  if (checkRuntimeRegistry && updates === null) {
+    pushError(errors, 'runtime source registry is missing from generated registry');
+  } else if (checkRuntimeRegistry) {
     const runtimeEntries = entries.filter((entry) => entry.runtimeUpdate?.allowed === true);
     const expectedCount = policies?.runtimeUpdates?.legacySourceCount;
     if (typeof expectedCount === 'number' && expectedCount !== Object.keys(updates).length) {
@@ -1397,9 +1382,9 @@ function validateManifestInternal(project) {
   return { errors, entries, updates: updates || {} };
 }
 
-export function validateManifest(root = DEFAULT_ROOT) {
+export function validateManifest(root = DEFAULT_ROOT, options = {}) {
   const project = loadProject(root);
-  const result = validateManifestInternal(project);
+  const result = validateManifestInternal(project, options);
   if (result.errors.length > 0) throw new ValidationFailure(result.errors);
   return {
     root: project.paths.root,
@@ -1447,7 +1432,7 @@ export function generateRegistryText(manifest) {
   const payload = registryPayload(manifest);
   return [
     '// GENERATED FILE — do not edit by hand.',
-    '// Source: .sync/plugins.json (run plugin-sync.mjs generate-registry).',
+    '// Source: .sync/plugins.json (run generate-plugin-registry.mjs).',
     `// plugin-sync:update-sources ${JSON.stringify(payload.updateSources)}`,
     '',
     `export const PLUGIN_SYNC_REGISTRY = ${prettyJson(payload).replace(/\n$/, '')} as const;`,
@@ -1458,7 +1443,10 @@ export function generateRegistryText(manifest) {
 }
 
 export function generateRegistry(root = DEFAULT_ROOT, { check = false } = {}) {
-  const result = validateManifest(root);
+  // A write regenerates the derived artifact from the manifest, so a missing
+  // or stale registry must not prevent generation. --check remains strict and
+  // validates the currently checked-in source map before reporting drift.
+  const result = validateManifest(root, { checkRuntimeRegistry: check });
   const file = projectPaths(path.resolve(root)).registry;
   const expected = generateRegistryText(result.manifest);
   const current = existsSync(file) ? readFileSync(file, 'utf8') : null;

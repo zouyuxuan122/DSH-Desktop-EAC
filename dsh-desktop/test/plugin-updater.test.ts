@@ -7,7 +7,8 @@ import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import { mkdtempSync, rmSync, mkdirSync, writeFileSync, readFileSync, existsSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { join, dirname } from 'node:path';
+import { fileURLToPath } from 'node:url';
 
 import * as updater from '../updater.js';
 import * as pu from '../plugin-updater.js';
@@ -23,7 +24,31 @@ function writePkg(dir, version, extra = {}) {
   writeFileSync(join(dir, 'package.json'), JSON.stringify({ name: 'x', version, ...extra }));
 }
 
+function generatedUpdateSources() {
+  const root = join(dirname(fileURLToPath(import.meta.url)), '..');
+  const source = readFileSync(join(root, 'lib', 'desktop', 'plugin-sync-registry.ts'), 'utf8');
+  const marker = source.match(/plugin-sync:update-sources\s+(\{[^\n]+\})/);
+  assert.ok(marker, 'generated registry must expose its runtime source map');
+  return JSON.parse(marker[1]);
+}
+
 describe('版本判定', () => {
+  it('generated registry preserves the existing eleven runtime update sources', () => {
+    assert.deepEqual(generatedUpdateSources(), {
+      'picturereader': { npm: 'picturereader' },
+      'computer-user': { npm: 'computer-user' },
+      'soul-md': { npm: 'dsh-soul-md' },
+      'dsh-pet': { npm: 'dsh-pet' },
+      'better-sidebar': { npm: 'dsh-better-sidebar' },
+      'dsh-navbar': { npm: '@vlln/dsh-navbar' },
+      'mobile-fix': { npm: 'dsh-web-mobile-fix' },
+      'offpeak': { npm: 'dsh-offpeak' },
+      'unified-market': { npm: 'dsh-unified-market' },
+      'dsh-session-manager': { npm: 'dsh-session-manager' },
+      'dsh-undo': { github: 'lire1131/dsh-undo-savepoint' },
+    });
+  });
+
   it('hasUpdateOf: 上游更高才更新', () => {
     assert.equal(pu.hasUpdateOf('1.0.0', '1.0.1'), true);
     assert.equal(pu.hasUpdateOf('1.0.0', '1.0.0'), false);

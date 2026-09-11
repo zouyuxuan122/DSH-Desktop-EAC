@@ -49,7 +49,17 @@ test('previousAgentInfo returns null without settings or directory', () => {
   writeSettings(ctx, { previousAgent: { version: '1.0.0' } });
   assert.equal(previousAgentInfo(ctx), null, 'settings alone must not suffice');
   fs.mkdirSync(path.join(ctx.userDataDir, 'agent-previous'), { recursive: true });
-  assert.ok(previousAgentInfo(ctx), 'settings + directory must be reported');
+  assert.equal(previousAgentInfo(ctx), null, '空目录不能伪装成可回退 Agent');
+  makeFakePackage(path.join(ctx.userDataDir, 'agent-previous'), '1.0.0');
+  assert.ok(previousAgentInfo(ctx), '元数据、package 与 bin 全部匹配时才可回退');
+});
+
+test('previousAgentInfo rejects a backup whose real version differs from metadata', () => {
+  const { ctx } = makeCtx();
+  makeFakePackage(path.join(ctx.userDataDir, 'agent-previous'), '1.0.0');
+  writeSettings(ctx, { previousAgent: { version: '1.1.0', dir: 'agent-previous' } });
+  assert.equal(previousAgentInfo(ctx), null);
+  assert.equal(rollbackToPrevious(ctx), null, '无效备份不得覆盖当前 Agent');
 });
 
 test('confirmPreviousAgentHealthy clears the backup and the setting', async () => {

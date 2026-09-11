@@ -808,7 +808,9 @@ window.__ModuleLoader__.load({
         }
       } catch (e) {}
       try {
-        if (!window.mermaid || typeof window.mermaid.run !== 'function') return
+              var mmPending = []
+      var mmSeq = 0
+      function vcpRenderDiagrams() {
         var codeNodes = root.querySelectorAll('pre > code.language-mermaid')
         for (var i = 0; i < codeNodes.length; i++) {
           var code = codeNodes[i]
@@ -817,9 +819,40 @@ window.__ModuleLoader__.load({
           box.textContent = code.textContent
           code.parentNode.replaceWith(box)
         }
-        var diagrams = Array.prototype.slice.call(root.querySelectorAll('.mermaid:not([data-processed])'))
-        if (diagrams.length) window.mermaid.run({ nodes: diagrams }).catch(function () {})
-      } catch (e) {}
+        mmPending = Array.prototype.slice.call(root.querySelectorAll('.mermaid:not([data-processed])'))
+      }
+      function vcpRenderOne(idx) {
+        if (idx >= mmPending.length) return
+        if (!window.mermaid || typeof window.mermaid.render !== 'function') {
+          window.setTimeout(function () { vcpRenderOne(idx) }, 250)
+          return
+        }
+        var el = mmPending[idx]
+        var src = (el.textContent || '').trim()
+        mmSeq += 1
+        window.mermaid.render('vcp-mmd-' + mmSeq, src).then(function (res) {
+          var svg = res && res.svg
+          if (svg) {
+            el.innerHTML = svg
+            el.setAttribute('data-processed', '1')
+            var s = el.querySelector('svg')
+            if (s) {
+              s.removeAttribute('width')
+              s.style.width = '100%'
+              s.style.height = 'auto'
+              s.setAttribute('preserveAspectRatio', 'xMidYMid meet')
+            }
+          } else {
+            el.textContent = src
+          }
+          vcpRenderOne(idx + 1)
+        }).catch(function () {
+          el.textContent = src
+          vcpRenderOne(idx + 1)
+        })
+      }
+      vcpRenderDiagrams()
+      vcpRenderOne(0)      } catch (e) {}
     }
 
     var VCP_SHADOW_BASE =
@@ -949,36 +982,44 @@ window.__ModuleLoader__.load({
     }
 
     function registerAssistantRenderer(ctx) {
-      if (!ctx || !ctx.slots || typeof ctx.slots.inject !== 'function') return
-      ctx.slots.inject('conversation.chat.node', function () {
-        var entries = typeof ctx.slots.entries === 'function'
-          ? ctx.slots.entries('conversation.chat.node')
-          : []
-        var official = null
-        for (var i = 0; i < entries.length; i++) {
-          var entry = entries[i]
-          if (entry && entry.options && entry.options.key === 'assistant-step' && entry.component !== RawHtmlAssistant) {
-            official = entry
-            break
-          }
-        }
-        if (!official || !isReactComponentType(official.component)) {
-          console.warn('[dsh-raw-html] 未找到官方 assistant-step 渲染器，保持官方界面')
-          return function () {}
-        }
-        officialAssistantComponent = official.component
-        return ctx.slots.register({
-          name: 'conversation.chat.node',
-          key: 'assistant-step',
-          // Keyed slots reject duplicate key+priority cells; the lowest priority wins.
-          priority: -1,
-          // StoredEntry keeps locale beside options; inheriting options.locale leaves
-          // the official Assistant component without its required `t` prop.
-          locale: typeof official.locale === 'string' ? official.locale : 'conversation',
-        }, RawHtmlAssistant)
-      })
+  if (!ctx || !ctx.slots || typeof ctx.slots.inject !== 'function') return
+  var takeoverDone = false
+  function tryTakeover() {
+    if (takeoverDone) return true
+    var entries = typeof ctx.slots.entries === 'function' ? ctx.slots.entries('conversation.chat.node') : []
+    var official = null
+    for (var i = 0; i < entries.length; i++) {
+      var entry = entries[i]
+      if (entry && entry.options && entry.options.key === 'assistant-step' && entry.component !== RawHtmlAssistant) {
+        official = entry
+        break
+      }
     }
-
+    if (!official || !isReactComponentType(official.component)) return false
+    officialAssistantComponent = official.component
+    takeoverDone = true
+    ctx.slots.inject('conversation.chat.node', function () {
+      return ctx.slots.register({
+        name: 'conversation.chat.node',
+        key: 'assistant-step',
+        priority: -1,
+        locale: typeof official.locale === 'string' ? official.locale : 'conversation'
+      }, RawHtmlAssistant)
+    })
+    return true
+  }
+  if (!tryTakeover()) {
+    var retries = 0
+    var retryTimer = setInterval(function () {
+      retries++
+      if (tryTakeover()) { clearInterval(retryTimer); return }
+      if (retries >= 48) {
+        clearInterval(retryTimer)
+        console.warn('[dsh-raw-html] assistant-step renderer not found after retries; keeping official UI')
+      }
+    }, 250)
+  }
+}
     // ---- 卡片下载：hover 浮出「⤓ 下载 HTML」按钮 ----------------------------
     // 需求：渲染出的 VCP 卡片（装帧小说 / 图表 / 卡片）可下载为【自包含 HTML】存档。
     // 实现要点：
@@ -995,6 +1036,7 @@ window.__ModuleLoader__.load({
     var dlCard = null
     var dlHideTimer = null
     var dlInitDone = false
+    var dlCont = null
 
     function blobToDataUri(blob) {
       return new window.Promise(function (resolve, reject) {
@@ -1128,6 +1170,20 @@ window.__ModuleLoader__.load({
       return btn
     }
 
+    function nearestScrollContainer(el) {
+      var n = el
+      while (n && n.nodeType === 1) {
+        var cs = window.getComputedStyle(n)
+        var ov = cs.overflowY
+        if ((ov === 'auto' || ov === 'scroll') && n.scrollHeight > n.clientHeight + 1) return n
+        var root = n.getRootNode ? n.getRootNode() : null
+        var next = n.parentElement
+        if (!next && root && root.host) next = root.host
+        if (!next) break
+        n = next
+      }
+      return document.scrollingElement || document.documentElement
+    }
     function positionDlButton(card) {
       var r = card.getBoundingClientRect()
       dlBtn.style.top = Math.max(6, r.top + 8) + 'px'
@@ -1138,7 +1194,7 @@ window.__ModuleLoader__.load({
       if (dlHideTimer) window.clearTimeout(dlHideTimer)
       dlHideTimer = window.setTimeout(function () {
         if (dlBtn) dlBtn.style.display = 'none'
-        dlCard = null
+        dlCard = null; dlCont = null
       }, 260)
     }
 
@@ -1151,6 +1207,15 @@ window.__ModuleLoader__.load({
       // 每次显示时同步 DSH 原生 UI 的字体（跟随主人字体插件的实时设置）
       var nf = nativeUIFontFamily()
       if (nf) dlBtn.style.fontFamily = nf
+      dlCont = nearestScrollContainer(card)
+      var vr = card.getBoundingClientRect()
+      var vc = (dlCont || document.documentElement).getBoundingClientRect()
+      if (vr.top < vc.top - 4 || vr.top + 40 > vc.bottom) {
+        if (dlBtn) dlBtn.style.display = 'none'
+        dlCard = null
+        dlCont = null
+        return
+      }
       positionDlButton(card)
       dlBtn.style.display = 'inline-block'
       if (dlHideTimer) window.clearTimeout(dlHideTimer)
@@ -1159,14 +1224,64 @@ window.__ModuleLoader__.load({
     function initDownload() {
       if (dlInitDone) return
       dlInitDone = true
-      function cardFromEvent(ev) {
+                              var hoverCard = null
+      var dlRafRun = false
+      function hideDlNow() {
+        if (dlHideTimer) window.clearTimeout(dlHideTimer)
+        if (dlBtn) dlBtn.style.display = 'none'
+        dlCard = null
+        dlCont = null
+      }
+      function dlFrame() {
+        dlRafRun = false
+        var card = hoverCard || dlCard
+        if (!card) return
+        if (!card.isConnected) {
+          hoverCard = null
+          dlCard = null
+          dlCont = null
+          if (dlBtn) dlBtn.style.display = 'none'
+          return
+        }
+        var c = dlCont
+        if (!c || !c.isConnected) c = dlCont = nearestScrollContainer(card)
+        var cr = c.getBoundingClientRect()
+        var r = card.getBoundingClientRect()
+        if (r.bottom < cr.top - 20 || r.top > cr.bottom + 20) {
+          if (dlBtn) dlBtn.style.display = 'none'
+          dlCard = null
+          return
+        }
+        dlCard = card
+        if (!dlBtn || !dlBtn.isConnected) { dlBtn = buildDlButton(); document.body.appendChild(dlBtn) }
+        var top = Math.max(cr.top + 8, r.top + 8)
+        top = Math.min(top, cr.bottom - 30)
+        var anchorRight = Math.min(cr.right - 8, r.right - 8)
+        var anchorLeft = Math.max(cr.left + 8, r.left + 8)
+        if (anchorRight - anchorLeft < 24) return
+        var nf = nativeUIFontFamily()
+        if (nf) dlBtn.style.fontFamily = nf
+        dlBtn.style.top = Math.round(top) + 'px'
+        dlBtn.style.right = Math.round(Math.max(1, window.innerWidth - anchorRight)) + 'px'
+        if (dlBtn.style.display !== 'inline-block') dlBtn.style.display = 'inline-block'
+        dlRafRun = true
+        window.requestAnimationFrame(dlFrame)
+      }
+      function startHover(card) {
+        hoverCard = card
+        dlCard = card
+        if (!dlRafRun) { dlRafRun = true; window.requestAnimationFrame(dlFrame) }
+      }
+function cardFromEvent(ev) {
         var path = typeof ev.composedPath === 'function' ? ev.composedPath() : [ev.target]
+        var wrapper = null
         for (var i = 0; i < path.length; i++) {
           var node = path[i]
           if (!node || !node.matches) continue
-          if (node.matches('[id="vcp-root"],[id^="vcp-msg-"]')) return node
+          if (node.matches('[id="vcp-root"]')) return node
+          if (!wrapper && node.matches('[id^="vcp-msg-"]')) wrapper = node
         }
-        return null
+        return wrapper
       }
       document.addEventListener('mouseover', function (ev) {
         var t = ev.target
@@ -1176,17 +1291,17 @@ window.__ModuleLoader__.load({
           return
         }
         var card = cardFromEvent(ev) || t.closest('[id="vcp-root"],[id^="vcp-msg-"]')
-        if (card) showDlFor(card)
+        if (card) startHover(card)
       })
       document.addEventListener('mouseout', function (ev) {
         var t = ev.target
         if (!t || !t.closest) return
         var rt = ev.relatedTarget
         if (rt && rt.closest) {
-          if (dlBtn && (rt === dlBtn || dlBtn.contains(rt))) return
-          if (rt.closest('[id="vcp-root"],[id^="vcp-msg-"]') === dlCard) return
+          if (dlBtn && (rt === dlBtn || rt.closest ? rt.closest('[id="vcp-root"],[id^="vcp-msg-"]') : false)) return
         }
-        if (cardFromEvent(ev) || t.closest('[id="vcp-root"],[id^="vcp-msg-"]')) scheduleDlHide()
+        hoverCard = null
+        scheduleDlHide()
       })
     }
 

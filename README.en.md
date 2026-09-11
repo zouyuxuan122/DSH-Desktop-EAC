@@ -78,16 +78,18 @@ See the [Releases page](https://github.com/zouyuxuan122/DSH-Desktop-EAC/releases
 
 ### AIO Edition (Windows x64 · All-in-One)
 
-> **DSHEAC AIO** is an **All-in-One polished personal terminal** maintained on a line separate from the 5.x mainline: a single package bundling the dsh kernel, the plugin marketplace, and the full desktop experience, ready out of the box. It is isolated from the main edition (separate app data and `dsh-home`; it never reads 5.x / v4Lite / legacy EAC or CLI data by default) and can be installed side by side. Current version: **AIO v1.1.0** (source branch `aio-v1`, published together with the [v5.3.6 release](https://github.com/zouyuxuan122/DSH-Desktop-EAC/releases/tag/v5.3.6)).
+> **DSHEAC AIO** is an **All-in-One polished personal terminal** maintained on a line separate from the 5.x mainline: a single package bundling the dsh kernel, the plugin marketplace, and the full desktop experience, ready out of the box. It is isolated from the main edition (separate app data and `dsh-home`; it never reads 5.x / v4Lite / legacy EAC or CLI data by default) and can be installed side by side. Current version: **AIO v1.2.0** (source branch `aio-v1`, published together with the [aio-v1.2.0 release](https://github.com/zouyuxuan122/DSH-Desktop-EAC/releases/tag/aio-v1.2.0)).
 
 | File | Description | Size |
 | --- | --- | --- |
-| [AIO setup (v1.1.0)](https://github.com/zouyuxuan122/DSH-Desktop-EAC/releases/download/v5.3.6/DSHEAC-AIO-v1-Windows-x64.exe) | NSIS setup build that installs to the system and creates shortcuts; the executable is `DSHEAC AIO.exe`, fully isolated from the main edition's updater | ~332 MB |
-| [AIO portable (v1.1.0)](https://github.com/zouyuxuan122/DSH-Desktop-EAC/releases/download/v5.3.6/DSHEAC-AIO-v1-Portable-x64.zip) | No installation required: unzip and run; data is written to `.dsh-aio-data` next to the EXE and migrates with it | ~123 MB |
-| [SHA256SUMS-AIO-v1.1.0.txt](https://github.com/zouyuxuan122/DSH-Desktop-EAC/releases/download/v5.3.6/SHA256SUMS-AIO-v1.1.0.txt) | SHA-256 checksums for the AIO assets | — |
+| [AIO setup (v1.2.0)](https://github.com/zouyuxuan122/DSH-Desktop-EAC/releases/download/aio-v1.2.0/DSHEAC-AIO-v1.2.0-Setup-x64.exe) | NSIS setup build that installs to the system and creates shortcuts; the executable is `DSHEAC AIO.exe`, fully isolated from the main edition's updater | ~313 MB |
+| [AIO portable (v1.2.0)](https://github.com/zouyuxuan122/DSH-Desktop-EAC/releases/download/aio-v1.2.0/DSHEAC-AIO-v1.2.0-Portable-x64.zip) | No installation required: unzip and run; data is written to `.dsh-aio-data` next to the EXE and migrates with it | ~147 MB |
+| [SHA256SUMS-AIO-v1.2.0.txt](https://github.com/zouyuxuan122/DSH-Desktop-EAC/releases/download/aio-v1.2.0/SHA256SUMS-AIO-v1.2.0.txt) | SHA-256 checksums for the AIO assets | — |
 
 - The AIO installer is not yet Authenticode-signed; SmartScreen may warn about an unknown publisher. Verify the SHA-256 checksum before running.
 - Client self-update is not offered in the AIO edition and plugin auto-update is off by default; keep the installation path under 120 characters.
+- **Highlights of v1.2.0**: kernel aligned with the official desktop `0.1.3-alpha.2`, plugin interfaces migrated to the new kernel APIs, app icon switched to WhaleGirl, and confirmed-retired plugins/skins removed.
+- **AIO upgrade note**: when upgrading from an older AIO install, only sessions and provider settings are carried over; plugins from the old install are not inherited (built-in plugins ship with the package).
 
 > 💡 **Upgrading**: just download and run the newest installer above over your existing install.
 > Plugins, skins, sessions and settings are preserved: data lives in
@@ -214,17 +216,20 @@ To report a bug or suggest a feature, visit [https://eac.dtyg123.dpdns.org/](htt
 
 ```powershell
 cd dsh-desktop
-npm install
-npm run fetch-runtime    # bundle node.exe + npm CLI
-npm run dist             # build portable + NSIS installer -> dist/
+npm install -g pnpm@11.7.0       # kernel build toolchain (version pinned by the upstream packageManager field)
+node scripts/fetch-kernel.js     # required on first run: build kernel tarballs from upstream source (vendor/ is not committed; a proxy is needed on restricted networks)
+npm install                      # install dependencies only after the kernel tarballs are in place
+npm run fetch-runtime            # bundle node.exe + npm CLI
+node ../tauri-shell/stage-resources.mjs   # assemble the sidecar + dsh-desktop runtime tree
+cd ../tauri-shell
+npx -y @tauri-apps/cli@2 build   # release build + NSIS installer
+node make-portable.mjs           # portable zip (optional) -> target/release/portable/
 ```
-
-> Behind a firewall? Use the Electron mirror `$env:ELECTRON_MIRROR='https://npmmirror.com/mirrors/electron/'` and the builder toolchain mirror `$env:ELECTRON_BUILDER_BINARIES_MIRROR='https://npmmirror.com/mirrors/electron-builder-binaries/'`.
 
 Run tests:
 
 ```powershell
-npm test                 # node --test test/*.test.mjs
+npm test                 # node --test test/*.test.ts
 ```
 
 ### Architecture

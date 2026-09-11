@@ -12,9 +12,12 @@ const main = readFileSync(join(root, 'lib', 'desktop', 'companion-sync.ts'), 'ut
 const pluginOpsSrc = readFileSync(join(root, 'lib', 'desktop', 'plugin-ops.ts'), 'utf8')
 
 test('dsh-compact integration: new plugin is bundled and old browser trigger is retired', () => {
+  const companionStart = main.indexOf('const COMPANION_PLUGINS')
+  const companionEnd = main.indexOf('export function companionPluginsForPlatform', companionStart)
+  assert.ok(companionStart >= 0 && companionEnd > companionStart)
   assert.match(main, /\{ id: 'compact', name: 'dsh-compact', dir: 'dsh-compact' \}/)
   assert.doesNotMatch(
-    main.slice(main.indexOf('const COMPANION_PLUGINS'), main.indexOf('const PLUGIN_UPDATE_SOURCES')),
+    main.slice(companionStart, companionEnd),
     /\{ id: 'auto-compact'/,
   )
   assert.match(main, /\{ id: 'auto-compact', name: 'dsh-auto-compact' \}/)

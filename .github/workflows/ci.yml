@@ -51,6 +51,9 @@ jobs:
           cache: npm
           cache-dependency-path: dsh-desktop/package-lock.json
 
+      - name: 插件来源台账校验（SOURCES.json）
+        run: node scripts/plugin-ledger.mjs
+
       - name: 校验开发者 Skill（PowerShell 7）
         shell: pwsh
         working-directory: ${{ github.workspace }}

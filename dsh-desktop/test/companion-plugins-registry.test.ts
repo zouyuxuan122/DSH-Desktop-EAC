@@ -28,6 +28,7 @@ const root = join(dirname(fileURLToPath(import.meta.url)), '..');
 const syncRoot = join(root, '..', '.sync');
 // ADR 0002：COMPANION_PLUGINS / RETIRED_BUILTIN_PLUGINS 已迁至 L2 模块。
 const main = readFileSync(join(root, 'lib', 'desktop', 'companion-sync.ts'), 'utf8');
+const generatedRegistry = readFileSync(join(root, 'lib', 'desktop', 'plugin-sync-registry.ts'), 'utf8');
 const manifest = JSON.parse(readFileSync(join(syncRoot, 'plugins.json'), 'utf8')) as {
   schemaVersion: number;
   generatedRegistry: string;
@@ -75,13 +76,15 @@ function companionRows() {
 }
 
 function updateSourceRows() {
-  const start = main.indexOf('export const PLUGIN_UPDATE_SOURCES');
-  assert.ok(start >= 0, 'PLUGIN_UPDATE_SOURCES must exist in lib/desktop/companion-sync.ts');
-  const end = main.indexOf('};', start);
-  assert.ok(end > start, 'PLUGIN_UPDATE_SOURCES object must be closed');
-  return [...main.slice(start, end).matchAll(
-    /'([^']+)'\s*:\s*\{\s*(npm|github):\s*'([^']+)'\s*\}/g,
-  )].map((match) => ({ id: match[1], kind: match[2], source: match[3] }));
+  const marker = generatedRegistry.match(/plugin-sync:update-sources\s+(\{[^\n]+\})/);
+  assert.ok(marker, 'generated registry must contain the runtime source marker');
+  const sources = JSON.parse(marker[1]) as Record<string, { npm?: string; github?: string }>;
+  return Object.entries(sources).map(([id, source]) => {
+    const kind = source.npm ? 'npm' : 'github';
+    const value = source.npm || source.github;
+    assert.ok(value, `${id} must have a generated source value`);
+    return { id, kind, source: value };
+  });
 }
 
 function allManifestEntries() {
@@ -227,6 +230,24 @@ test('all legacy plugin update sources map to exactly one manifest entry', () =>
   }
   const allowedIds = entries.filter((entry) => entry.runtimeUpdate.allowed).map((entry) => entry.id).sort();
   assert.deepEqual(allowedIds, sources.map((source) => source.id).sort(), 'manifest must not add extra runtime update sources');
+});
+
+test('companion-sync exports the generated source map without a second hand-maintained table', () => {
+  assert.match(main, /from ['"]\.\/plugin-sync-registry['"]/);
+  assert.match(main, /export const PLUGIN_UPDATE_SOURCES[^=]*=\s*GENERATED_PLUGIN_UPDATE_SOURCES/);
+  assert.doesNotMatch(main, /['"]picturereader['"]\s*:\s*\{\s*npm:/);
+});
+
+test('pluginUpdateSources keeps the companion boundary and filters unavailable platforms', () => {
+  const start = main.indexOf('export function pluginUpdateSources');
+  const end = main.indexOf('/** 内置插件当前生效的源目录', start);
+  assert.ok(start >= 0 && end > start, 'pluginUpdateSources must exist');
+  const source = main.slice(start, end);
+  assert.match(source, /for \(const p of COMPANION_PLUGINS\)/);
+  assert.match(source, /companionPluginsForPlatform\(platform\)/);
+  assert.match(source, /if \(!available\.has\(p\.id\)\) continue/);
+  assert.match(source, /if \(removed\.has\(p\.id\)\) continue/);
+  assert.match(source, /path\.join\(assetsDir, 'package\.json'\)/);
 });
 
 test('regression: settings-groups stays registered, retired plugins never return', () => {

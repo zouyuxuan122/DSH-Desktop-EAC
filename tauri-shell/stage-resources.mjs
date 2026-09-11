@@ -17,6 +17,7 @@ import { canReuseStagedNodeModules, writeStagedPlatformStamp } from './stage-pla
 import { copyKernelCacheForTarget, sanitizeClientBuildPaths } from './stage-linux-sanitize.mjs';
 import { withAbsolutizedKernelManifests } from './stage-kernel-manifest.mjs';
 import { pruneDarwinPayloads, pruneNonDarwinPrebuilds } from './stage-platform-prune.mjs';
+import { genDistributionDescriptor } from './gen-distribution-descriptor.mjs';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const dd = path.join(root, 'dsh-desktop');
@@ -51,8 +52,8 @@ const ROOT_FILES = [
 ];
 const LIB_DESKTOP = [
   'file-roots.js', 'proc.js', 'platform.js', 'runtime-paths.js', 'profile.js', 'guard-box.js',
-  'runtime-patches.js', 'companion-sync.js', 'plugin-ops.js', 'market.js',
-  'shortcuts.js', 'junction-patrol.js', 'client-update.js', 'static-preview.js',
+  'runtime-patches.js', 'companion-sync.js', 'plugin-sync-registry.js', 'plugin-ops.js', 'market.js',
+  'install-profile.js','shortcuts.js', 'junction-patrol.js', 'client-update.js', 'static-preview.js',
   'boot-server.js', 'feature-pack.js',
 ];
 const SCRIPTS = [
@@ -71,6 +72,35 @@ const LIB_VNEXT = [
   'recovery-center/register.js',
 ];
 const NATIVE_MODULES = ['supervisor/index.node', 'snapshot/index.node'];
+const REQUIRED_PLUGIN_ASSETS = {
+  'dsh-raw-html': [
+    'assets/vendor/katex-vd.css',
+    'assets/vendor/katex.min.js',
+    'assets/vendor/auto-render.min.js',
+    'assets/vendor/mermaid.min.js',
+    'assets/vendor/VCPColorEngine.js',
+    'assets/vendor/fonts/KaTeX_AMS-Regular.woff2',
+    'assets/vendor/fonts/KaTeX_Caligraphic-Bold.woff2',
+    'assets/vendor/fonts/KaTeX_Caligraphic-Regular.woff2',
+    'assets/vendor/fonts/KaTeX_Fraktur-Bold.woff2',
+    'assets/vendor/fonts/KaTeX_Fraktur-Regular.woff2',
+    'assets/vendor/fonts/KaTeX_Main-Bold.woff2',
+    'assets/vendor/fonts/KaTeX_Main-BoldItalic.woff2',
+    'assets/vendor/fonts/KaTeX_Main-Italic.woff2',
+    'assets/vendor/fonts/KaTeX_Main-Regular.woff2',
+    'assets/vendor/fonts/KaTeX_Math-BoldItalic.woff2',
+    'assets/vendor/fonts/KaTeX_Math-Italic.woff2',
+    'assets/vendor/fonts/KaTeX_SansSerif-Bold.woff2',
+    'assets/vendor/fonts/KaTeX_SansSerif-Italic.woff2',
+    'assets/vendor/fonts/KaTeX_SansSerif-Regular.woff2',
+    'assets/vendor/fonts/KaTeX_Script-Regular.woff2',
+    'assets/vendor/fonts/KaTeX_Size1-Regular.woff2',
+    'assets/vendor/fonts/KaTeX_Size2-Regular.woff2',
+    'assets/vendor/fonts/KaTeX_Size3-Regular.woff2',
+    'assets/vendor/fonts/KaTeX_Size4-Regular.woff2',
+    'assets/vendor/fonts/KaTeX_Typewriter-Regular.woff2',
+  ],
+};
 
 function requireFile(file, label) {
   if (!existsSync(file) || !statSync(file).isFile()) {
@@ -206,6 +236,15 @@ function validatePluginTree(dir, label) {
   }
 }
 
+function validateRequiredPluginAssets(dir, label) {
+  for (const [plugin, files] of Object.entries(REQUIRED_PLUGIN_ASSETS)) {
+    const pluginDir = path.join(dir, plugin);
+    for (const rel of files) {
+      requireFile(path.join(pluginDir, rel), `${label}插件资源`);
+    }
+  }
+}
+
 console.log(`[stage] 目标平台 ${targetPlatform}；清理旧装配目录` + (skipNpm ? '（--skip-npm：保留上次的生产 node_modules）' : ''));
 // 注意：node_modules 必须在整树清空前判定并豁免，否则 --skip-npm 永远不生效
 // （先 rm 全目录再 existsSync 检查，检查对象必不存在）。
@@ -279,10 +318,26 @@ copyRequired(path.join(dd, 'package.json'), path.join(staged, 'dsh-desktop', 'pa
 copyRequired(path.join(dd, 'package-lock.json'), path.join(staged, 'dsh-desktop', 'package-lock.json'), 'package-lock.json');
 copyRequired(path.join(dd, '.npmrc'), path.join(staged, 'dsh-desktop', '.npmrc'), '.npmrc');
 
+// 安装形态标记（v5.4 双形态）：随包默认「完整版」；NSIS 安装器按用户选择
+// 覆写为 lite（installer-hooks.nsh POSTINSTALL）。便携包保持缺省完整版。
+writeFileSync(path.join(staged, 'dsh-desktop', 'profile.txt'), 'full\n');
+
 console.log('[stage] assets（114MB：38 插件 + 10 皮肤 + 图标）');
 cpSync(path.join(dd, 'assets'), path.join(staged, 'dsh-desktop', 'assets'), { recursive: true });
 validatePluginTree(path.join(dd, 'assets', 'plugins'), '源');
+validateRequiredPluginAssets(path.join(dd, 'assets', 'plugins'), '源');
 validatePluginTree(path.join(staged, 'dsh-desktop', 'assets', 'plugins'), 'staging');
+validateRequiredPluginAssets(path.join(staged, 'dsh-desktop', 'assets', 'plugins'), 'staging');
+
+// dsh-distribution 发行版描述符（阶段 3）：组件清单来自插件来源台账
+// （assets/SOURCES.json）+ 内核钉版；协议仍为 Draft，描述符随每次打包重算。
+{
+  const info = genDistributionDescriptor({
+    ddRoot: dd,
+    stagedOut: path.join(staged, 'dsh-desktop'),
+  });
+  console.log(`[stage] distribution-descriptor.json（内核 ${info.kernelVersion}，组件 ${info.components}）`);
+}
 
 console.log('[stage] vendor node/npm 运行时');
 mkdirSync(path.join(staged, 'dsh-desktop', 'vendor'), { recursive: true });

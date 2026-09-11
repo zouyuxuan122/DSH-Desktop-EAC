@@ -69,31 +69,45 @@ interface PairingState {
   decided: boolean | null; // null=未决, true=批准, false=拒绝
 }
 
-// 挑一个手机可达的 LAN IPv4：优先 RFC1918 私网地址（192.168/10./172.16-31，
-// 普通家用/办公 Wi-Fi 网段），其次任意非回环地址（含 169.254 链路本地——DHCP
-// 失败时的兜底，本机可达、同网段手机通常也可达），最后回环。旧实现直接取第一
-// 个非回环地址，经常选中虚拟网卡/APIPA 的 169.254.x，手机扫出来的地址连不上。
+// 挑一个手机可达的 LAN IPv4：优先真实网卡上的 RFC1918 私网地址
+//（192.168/10./172.16-31），其次 Tailscale 的 CGNAT 地址和其他非回环地址，
+// 最后才回退到第一个非回环地址或回环。Windows 上 VMware/VirtualBox/
+// Hyper-V/WSL/Docker 的虚拟网卡也可能提供 RFC1918 地址，不能再只看网段；
+// 先按网卡名称降权，避免二维码默认落到 VMnet/Default Switch 这类手机不可达地址。
 // interfaces 参数仅为测试注入 fake 网卡表（生产调用不传，走 os.networkInterfaces）。
+const VIRTUAL_INTERFACE_PATTERN =
+  /(?:vmware|vmnet|virtualbox|vbox|hyper[- ]?v|vEthernet|wsl|docker|container|host[- ]?only|nat network)/i;
+
+function isRfc1918Address(address: string): boolean {
+  const parts = address.split('.').map((part) => Number(part));
+  if (parts.length !== 4 || parts.some((part) => !Number.isInteger(part) || part < 0 || part > 255)) return false;
+  const first = parts[0] ?? -1;
+  const second = parts[1] ?? -1;
+  return first === 10 || (first === 192 && second === 168) || (first === 172 && second >= 16 && second <= 31);
+}
+
+function isTailscaleAddress(address: string): boolean {
+  const parts = address.split('.').map((part) => Number(part));
+  return parts.length === 4 && parts[0] === 100 && (parts[1] ?? -1) >= 64 && (parts[1] ?? -1) <= 127;
+}
+
 export function lanAddress(interfaces?: NodeJS.Dict<os.NetworkInterfaceInfo[]>): string {
   const ifaces = interfaces ?? os.networkInterfaces();
   let fallback: string | null = null;
+  let best: { address: string; score: number } | null = null;
   for (const name of Object.keys(ifaces)) {
     for (const entry of ifaces[name] ?? []) {
       if (entry.family !== 'IPv4' || entry.internal) continue;
       const ip = entry.address;
       if (fallback === null) fallback = ip;
-      const p = ip.split('.').map((s) => Number(s));
-      if (p.length !== 4 || p.some((n) => Number.isNaN(n))) continue;
-      const a = p[0] ?? -1;
-      const b = p[1] ?? -1;
-      const rfc1918 =
-        a === 10 ||
-        (a === 192 && b === 168) ||
-        (a === 172 && b >= 16 && b <= 31);
-      if (rfc1918) return ip;
+      const virtual = VIRTUAL_INTERFACE_PATTERN.test(name);
+      let score = isRfc1918Address(ip) ? 300 : isTailscaleAddress(ip) ? 250 : 100;
+      if (/tailscale/i.test(name)) score += 20;
+      if (virtual) score -= 1000;
+      if (best === null || score > best.score) best = { address: ip, score };
     }
   }
-  return fallback ?? '127.0.0.1';
+  return best?.address ?? fallback ?? '127.0.0.1';
 }
 
 function isLoopback(address: string | undefined): boolean {
@@ -303,6 +317,10 @@ export function createPhoneBridge(options: PhoneBridgeOptions) {
     const headers = { ...req.headers };
     const target = new URL(origin);
     headers.host = target.host;
+    // 内核 WebServer 自身默认会按 Accept-Encoding gzip。桥必须先拿到原始
+    // 响应：否则 JSON 会被桥再次 gzip，HTML 也无法注入非安全上下文所需的
+    // crypto.randomUUID polyfill。压缩统一由桥在客户端支持时处理。
+    headers['accept-encoding'] = 'identity';
     if (typeof headers.origin === 'string' && headers.origin !== '') headers.origin = target.origin;
     if (typeof headers.referer === 'string' && headers.referer !== '') {
       try { headers.referer = new URL(new URL(headers.referer).pathname + new URL(headers.referer).search, origin).toString(); } catch { /* 保留原值 */ }
@@ -501,7 +519,7 @@ export function createPhoneBridge(options: PhoneBridgeOptions) {
           const wantsGzip = (req.headers['accept-encoding'] ?? '').includes('gzip');
           const isUnaryJson =
             req.method === 'POST' && pathName.startsWith('/api/') && contentType.includes('application/json');
-          if (isUnaryJson && wantsGzip) {
+          if (isUnaryJson && wantsGzip && up.headers['content-encoding'] === undefined) {
             const headers = { ...up.headers };
             // 上游 chunked 头不能带着转发：重编码后由 Node 依 content-length
             // 自选 framing，保留会与显式 content-length 冲突（非法响应，

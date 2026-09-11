@@ -19,7 +19,8 @@ build/*
 # 鍐呯疆绀惧尯鎻掍欢鐨?vendor / 鑷寘鍚繍琛屾椂渚濊禆 / 绂荤嚎鏁版嵁蹇呴』闅忎粨搴撳垎鍙戯紝
 # 鍚﹀垯鍏嬮殕鍚庢瀯寤哄嚭鐨勫畨瑁呭寘浼氬鐜扳€滄彃浠跺懡鍚嶇┖闂翠笉鍙敤鈥濓紙vendor 缂哄け锛?
 # 涓庘€渢dai-memory 鏃犳硶鍚姩鈥濓紙sqlite-vec / jieba / BM25 璇枡缂哄け锛?
-!assets/plugins/*/vendor/
+!assets/plugins/*/assets/vendor/
+!assets/plugins/*/assets/vendor/**
 !assets/plugins/*/data/
 
 # ---- TypeScript 编译产物（源码为同名 .ts，tsc 就地产出，勿手改） ----
@@ -70,6 +71,7 @@ build/*
 /lib/desktop/shortcuts.js
 /lib/desktop/static-preview.js
 /lib/desktop/companion-sync.js
+/lib/desktop/install-profile.js
 /lib/desktop/feature-pack.js
 /scripts/feature-pack-cli.js
 /stable-port.js

@@ -242,6 +242,50 @@ function runNpm(ctx: UpdaterCtx, args: string[], { timeoutMs = 30 * 60 * 1000, l
   });
 }
 
+async function validateStagedAgent(ctx: UpdaterCtx, staging: string, expectedVersion: string, logStream: fs.WriteStream): Promise<void> {
+  const actualVersion = agentVersionIn(staging);
+  const bin = agentBinPath(staging);
+  if (actualVersion !== expectedVersion) {
+    throw new Error(`实际安装版本 ${actualVersion || '未知'} 与目标版本 ${expectedVersion} 不一致`);
+  }
+  if (!fs.existsSync(bin)) throw new Error('未找到 dsh 入口文件');
+
+  ctx.log('update', '开始验证生产依赖闭包: ' + PKG + '@' + expectedVersion);
+  await runNpm(ctx, ['ls', '--prefix', staging, '--all', '--omit=dev'], {
+    timeoutMs: 2 * 60 * 1000,
+    logStream,
+  });
+
+  const smokeHome = path.join(staging, '.eac-smoke-home');
+  fs.mkdirSync(smokeHome, { recursive: true });
+  ctx.log('update', '开始加载 staged dsh CLI: ' + bin + ' --version');
+  try {
+    await new Promise<void>((resolve, reject) => {
+      const proc = cp.execFile(ctx.nodeExe(), [bin, '--version'], {
+        cwd: staging,
+        env: { ...process.env, DSH_HOME: smokeHome },
+        windowsHide: true,
+        timeout: 20_000,
+        maxBuffer: 2 * 1024 * 1024,
+      }, (err, stdout, stderr) => {
+        activeProcs.delete(proc);
+        const output = String(stdout || '') + String(stderr || '');
+        if (output) logStream.write(output.endsWith('\n') ? output : output + '\n');
+        if (!err) return resolve();
+        const lines = output.split(/\r?\n/).filter(Boolean);
+        const diagnostic = lines.find((line) => /Cannot find|MODULE_NOT_FOUND|ERR_MODULE_NOT_FOUND/.test(line));
+        const summary = [diagnostic, ...lines.slice(-4)].filter(Boolean).join(' | ');
+        reject(new Error('CLI 加载失败' + (summary ? '：' + summary.slice(-1000) : '：' + err.message)));
+      });
+      activeProcs.add(proc);
+      proc.once('error', () => activeProcs.delete(proc));
+    });
+  } finally {
+    try { await fs.promises.rm(smokeHome, { recursive: true, force: true, maxRetries: 3 }); } catch { /* staging 会在失败路径整体清理 */ }
+  }
+  ctx.log('update', 'staged Agent 依赖闭包与 CLI 加载验证通过');
+}
+
 // 当前生效的 registry（.npmrc / NPM_CONFIG_REGISTRY），供镜像源链去重与提示。
 async function currentRegistry(ctx: UpdaterCtx): Promise<string | null> {
   try {
@@ -291,11 +335,26 @@ async function checkLatest(ctx: UpdaterCtx): Promise<string> {
 
 function previousAgentDir(ctx: UpdaterCtx): string { return path.join(ctx.userDataDir, 'agent-previous'); }
 
+function agentPackagePath(dir: string): string { return path.join(dir, 'node_modules', PKG, 'package.json'); }
+function agentBinPath(dir: string): string { return path.join(dir, 'node_modules', PKG, 'lib', 'bin.js'); }
+function agentVersionIn(dir: string): string | null {
+  try {
+    const pkg = readJsonFile(agentPackagePath(dir));
+    return pkg && typeof pkg.version === 'string' ? pkg.version : null;
+  } catch { return null; }
+}
+
+function validAgentDir(dir: string, expectedVersion?: string | null): boolean {
+  const version = agentVersionIn(dir);
+  if (!version || !fs.existsSync(agentBinPath(dir))) return false;
+  return !expectedVersion || version === expectedVersion;
+}
+
 // 上一版本备份是否可用（供启动失败对话框选择「回退到上一版本」）。
 function previousAgentInfo(ctx: UpdaterCtx): Record<string, any> | null {
   const settings = loadSettings(ctx);
   if (!settings.previousAgent || !settings.previousAgent.version) return null;
-  if (!fs.existsSync(previousAgentDir(ctx))) return null;
+  if (!validAgentDir(previousAgentDir(ctx), settings.previousAgent.version)) return null;
   return settings.previousAgent;
 }
 
@@ -303,10 +362,11 @@ function previousAgentInfo(ctx: UpdaterCtx): Record<string, any> | null {
 //   { stage: 'fetch', count, elapsed, registry }   —— 下载依赖中（按 npm 输出
 //     统计已获取的包/元数据项数）
 //   { stage: 'install', registry }                  —— 进入解包安装阶段
-//   { stage: 'done' }                               —— npm 安装成功，即将切换版本
+//   { stage: 'verify' }                             —— 审计依赖闭包并加载 CLI
+//   { stage: 'done' }                               —— 验证完成并已切换版本
 //   { stage: 'mirror', registry }                   —— 源停滞/失败，已切换镜像源
 interface UpdateProgress {
-  stage: 'fetch' | 'install' | 'done' | 'mirror';
+  stage: 'fetch' | 'install' | 'verify' | 'done' | 'mirror';
   count?: number;
   elapsed?: string;
   registry?: string | null;
@@ -345,9 +405,7 @@ async function applyUpdate(ctx: UpdaterCtx, version: string, { onProgress = null
       lastPush = now;
       if (!onProgress) return;
       try {
-        onProgress(sawAdded
-          ? { stage: 'done' }
-          : { stage: sawReify ? 'install' : 'fetch', count: fetchCount, elapsed: fmt(now - started), registry });
+        onProgress({ stage: (sawAdded || sawReify) ? 'install' : 'fetch', count: fetchCount, elapsed: fmt(now - started), registry });
       } catch {}
     };
     const onOutput = (chunk: Buffer) => {
@@ -370,7 +428,6 @@ async function applyUpdate(ctx: UpdaterCtx, version: string, { onProgress = null
       ];
       if (registry) args.push('--registry=' + registry);
       await runNpm(ctx, args, { timeoutMs: 30 * 60 * 1000, logStream, onOutput, stallMs });
-      if (onProgress) { try { onProgress({ stage: 'done' }); } catch {} }
       installErr = null;
       break;
     } catch (err) {
@@ -382,17 +439,21 @@ async function applyUpdate(ctx: UpdaterCtx, version: string, { onProgress = null
       }
     }
   }
-  logStream.end();
   if (installErr) {
+    logStream.end();
     fs.rmSync(staging, { recursive: true, force: true });
     throw new Error(installErr.message + '（已尝试镜像源：' + errors.join('；') + '；日志: ' + logPath + '）');
   }
 
-  const bin = path.join(staging, 'node_modules', PKG, 'lib', 'bin.js');
-  if (!fs.existsSync(bin)) {
+  try {
+    if (onProgress) { try { onProgress({ stage: 'verify' }); } catch {} }
+    await validateStagedAgent(ctx, staging, version, logStream);
+  } catch (err) {
+    logStream.end();
     fs.rmSync(staging, { recursive: true, force: true });
-    throw new Error('安装完成但未找到 dsh 入口文件（日志: ' + logPath + '）');
+    throw new Error('安装结果验证失败：' + String((err as Error).message || err) + '（旧版本未变；日志: ' + logPath + '）');
   }
+  logStream.end();
 
   // Atomic swap: old overlay -> backup, staging -> overlay.
   // M4 修复：两处重命名都纳入 try，失败时回滚并清理 staging 残留。
@@ -401,13 +462,14 @@ async function applyUpdate(ctx: UpdaterCtx, version: string, { onProgress = null
   // 启动失败时用户可一键回退到上一版本。
   const overlay = overlayDir(ctx);
   const backup = path.join(ctx.userDataDir, 'agent-old-' + Date.now());
-  // V4.3 PR（独有价值，review 保留项）：配置全量快照 + profile 精简。
-  // swap 前把关键配置文件拷到 backup/config/ 目录；backup 随后会被
-  // rename 到 agent-previous（固定名），快照也随之保留到健康确认前；
-  // 若 swap 失败，backup 目录最终会被 overlay 回滚 + 删除，快照随之丢弃，
-  // 不污染 userData。
+  const oldVersion = overlayVersion(ctx);
+  const hadValidOldOverlay = validAgentDir(overlay, oldVersion);
+  // 配置快照必须与 Agent 目录备份分离。旧实现预先创建 backup/config，随后
+  // 又尝试把旧 agent 重命名到已存在的 backup，Windows 上会直接 EPERM；
+  // 首次安装还会把只有 config 的目录误记成 agent-previous。
   try {
-    const cfgDir = path.join(backup, 'config');
+    const cfgDir = path.join(ctx.userDataDir, 'agent-config-backup');
+    fs.rmSync(cfgDir, { recursive: true, force: true });
     fs.mkdirSync(cfgDir, { recursive: true });
     // 1) userData/settings.json（桌面端配置：端口、皮肤、已跳过版本等）
     const setSrc = settingsPath(ctx);
@@ -449,18 +511,27 @@ async function applyUpdate(ctx: UpdaterCtx, version: string, { onProgress = null
   // 新备份以固定名保留。
   const prevDir = previousAgentDir(ctx);
   if (fs.existsSync(prevDir)) fs.rmSync(prevDir, { recursive: true, force: true });
-  if (fs.existsSync(backup)) {
+  let previousPreserved = false;
+  if (hadValidOldOverlay && fs.existsSync(backup)) {
     try { fs.renameSync(backup, prevDir); } catch (err) {
       ctx.log('update', '保留上一版本备份失败: ' + (err as Error).message);
       fs.rmSync(backup, { recursive: true, force: true });
     }
+    previousPreserved = fs.existsSync(prevDir);
+  } else if (fs.existsSync(backup)) {
+    // 原 overlay 结构不完整时不能伪装成可回退版本；保留为 broken 仅供诊断。
+    try { fs.renameSync(backup, path.join(ctx.userDataDir, 'agent-broken-' + Date.now())); }
+    catch { fs.rmSync(backup, { recursive: true, force: true }); }
   }
 
   const settings = loadSettings(ctx);
-  settings.previousAgent = { version, dir: 'agent-previous', at: new Date().toISOString() };
+  settings.previousAgent = previousPreserved && oldVersion
+    ? { version: oldVersion, dir: 'agent-previous', at: new Date().toISOString() }
+    : null;
   settings.skipVersion = null;
   saveSettings(ctx, settings);
-  ctx.log('update', '更新完成: ' + PKG + '@' + version + '（上一版本备份保留至确认健康）');
+  if (onProgress) { try { onProgress({ stage: 'done' }); } catch {} }
+  ctx.log('update', '更新完成: ' + PKG + '@' + version + (previousPreserved ? '（上一版本备份保留至确认健康）' : ''));
   return { version, logPath };
 }
 
@@ -490,8 +561,8 @@ function rollbackToPrevious(ctx: UpdaterCtx): string | null {
   const settings = loadSettings(ctx);
   const prevDir = previousAgentDir(ctx);
   const overlay = overlayDir(ctx);
-  const prev = settings.previousAgent;
-  if (!prev || !fs.existsSync(prevDir)) return null;
+  const prev = previousAgentInfo(ctx);
+  if (!prev) return null;
   try {
     if (fs.existsSync(overlay)) {
       fs.renameSync(overlay, path.join(ctx.userDataDir, 'agent-broken-' + Date.now()));

@@ -9,11 +9,13 @@ import fs = require('node:fs');
 import os = require('node:os');
 import crypto = require('node:crypto');
 import { updCtx, APP_ROOT } from './runtime-paths';
+import { isLiteDisabled, readInstallProfile } from './install-profile';
 import { desktopProfile, desktopProfileDir, ensureDesktopProfileInit, BUNDLED_BUILTIN_PLUGINS } from './profile';
 import { ensureGuard } from './guard-box';
 import { applySessionManageFix } from './runtime-patches';
 import { pluginCapabilityDetails } from './platform';
 import { writeFileAtomic } from '../atomic-json.js';
+import { PLUGIN_UPDATE_SOURCES as GENERATED_PLUGIN_UPDATE_SOURCES } from './plugin-sync-registry';
 // 未类型化依赖（Wave 3 收编），先以窄签名消费。
 const updater = require('../../updater') as {
   loadSettings(c: ReturnType<typeof updCtx>): { removedPlugins?: unknown };
@@ -273,31 +275,46 @@ export function companionPluginsForPlatform(platform: NodeJS.Platform = 'win32')
   return COMPANION_PLUGINS.filter((plugin) => capabilities[plugin.id]?.status !== 'unavailable');
 }
 
+// 更新源唯一来自 generated registry；此导出保留给旧调用方。
+export const PLUGIN_UPDATE_SOURCES: Record<string, { npm?: string; github?: string }> = GENERATED_PLUGIN_UPDATE_SOURCES;
 // ---------------------------------------------------------------------------
-// 内置插件上游更新源（V4.3，plugin-updater.js 消费）：
+// 私有维护插件（自动更新黑名单，SOURCES.json 台账驱动）：
 //
-// 只登记「上游仍在 npm / GitHub 发布」的社区插件 —— 内置分发的副本可以
-// 跟随上游修复而更新。EAC 独占插件（package.json 标记 private，如
-// dsh-balance / dsh-terminal）绝不登记。
-// 运行时 npm 404（未上架/改名）优雅降级为「无上游」，绝不阻塞。
+// 台账 origin=eac-original 的 main 线插件由 EAC 私有维护（外部匹配审计的
+// best-match 即 EAC 主仓库本体），没有可钉的外部上游发版——自动更新要么把
+// EAC 适配冲掉，要么更新到无从校验的来源。黑名单在此生成，pluginUpdateSources
+// 是唯一漏斗：即使将来误把私有插件登记进 PLUGIN_UPDATE_SOURCES 也会被强制
+// 过滤（sidecar server.ts 的「检测」与「应用更新」两条路都经过它）。
+//
+// fail-open 取舍：台账不可读时黑名单为空、不过滤（见
+// privateMaintainedPluginNames）——该状态下上述「误登记也无效」的保证暂不
+// 成立。私有插件本就不在 PLUGIN_UPDATE_SOURCES 白名单里，过滤是纵深防御。
 // ---------------------------------------------------------------------------
-export const PLUGIN_UPDATE_SOURCES: Record<string, { npm?: string; github?: string }> = {
-  'picturereader': { npm: 'picturereader' },
-  'computer-user': { npm: 'computer-user' },
-  'soul-md': { npm: 'dsh-soul-md' },
-  'dsh-pet': { npm: 'dsh-pet' },
-  'better-sidebar': { npm: 'dsh-better-sidebar' },
-  'dsh-navbar': { npm: '@vlln/dsh-navbar' },
-  'mobile-fix': { npm: 'dsh-web-mobile-fix' },
-  'offpeak': { npm: 'dsh-offpeak' },
-  // 统一市场（unified-market）：npm 已发布，正式纳入官方内置插件更新。
-  'unified-market': { npm: 'dsh-unified-market' },
-  'dsh-session-manager': { npm: 'dsh-session-manager' },
-  // GitHub 分发（npm 未发布）：dsh-undo-savepoint。
-  'dsh-undo': { github: 'lire1131/dsh-undo-savepoint' },
-  // dsh-raw-html 是 EAC 托管适配版，不登记上游更新源，避免被原版 bundle
-  // 注入实现覆盖。上游升级必须先移植并通过 EAC slot 集成回归。
-};
+
+let privateMaintainedCache: Set<string> | null = null;
+
+/** 台账 origin=eac-original 的 main 线插件包名集合（自动更新黑名单）。
+ *
+ *  fail-open：台账缺失/损坏时返回空集、不过滤——此时本函数不是强制点，
+ *  「误登记 PLUGIN_UPDATE_SOURCES 也会被强制过滤」的保证暂不成立（私有插件
+ *  本就不在白名单里，过滤为纵深防御）。仅缓存成功读取的结果，失败不落缓存，
+ *  文件恢复后下次调用即生效。 */
+export function privateMaintainedPluginNames(): Set<string> {
+  if (privateMaintainedCache) return privateMaintainedCache;
+  const names = new Set<string>();
+  try {
+    const ledger = JSON.parse(fs.readFileSync(path.join(APP_ROOT, 'assets', 'SOURCES.json'), 'utf8')) as {
+      components?: { line?: string; type?: string; origin?: string; name?: string }[];
+    };
+    for (const c of ledger.components || []) {
+      if (c.line === 'main' && c.type === 'plugin' && c.origin === 'eac-original' && c.name) names.add(c.name);
+    }
+    privateMaintainedCache = names;
+  } catch (err) {
+    console.warn('[plugin-update] SOURCES.json 读取失败，自动更新黑名单未生效（fail-open）: ' + String((err as Error).message || err));
+  }
+  return names;
+}
 
 // ---------------------------------------------------------------------------
 // 内置插件「移除」跳过清单（settings.removedPlugins）：被 plugin-ops 与
@@ -357,18 +374,28 @@ export function seedBundledPlugins(profileDir: string): { changed: boolean; bund
   return { changed, bundles: bundled };
 }
 
-/** 把内置插件表 + 更新源注册表合并成 plugin-updater 的 sources 输入。 */
+/** 把内置插件表 + 更新源注册表合并成 plugin-updater 的 sources 输入。
+ *  私有维护插件（台账 eac-original）在此强制过滤——这是更新源的唯一漏斗。 */
 export function pluginUpdateSources(): { id: string; name: string; assetsDir: string; update: { npm?: string; github?: string } }[] {
   const removed = removedPluginIds();
+  const platform = ctx?.platform ?? 'win32';
+  const available = new Set(companionPluginsForPlatform(platform).map((plugin) => plugin.id));
+  const privateNames = privateMaintainedPluginNames();
+  const blocked: string[] = [];
   const out: { id: string; name: string; assetsDir: string; update: { npm?: string; github?: string } }[] = [];
   for (const p of COMPANION_PLUGINS) {
+    if (!available.has(p.id)) continue;
     const update = PLUGIN_UPDATE_SOURCES[p.id];
     if (!update) continue;
     if (removed.has(p.id)) continue;
+    if (privateNames.has(p.name)) { blocked.push(p.id); continue; }
     const dirName = p.dir || (p.name.includes('/') ? p.name.split('/').pop() as string : p.name);
     const assetsDir = path.join(APP_ROOT, 'assets', 'plugins', dirName);
     if (!fs.existsSync(path.join(assetsDir, 'package.json'))) continue;
     out.push({ id: p.id, name: p.name, assetsDir, update });
+  }
+  if (blocked.length) {
+    console.warn('[plugin-update] 私有维护插件不参与自动更新，已从更新源过滤: ' + blocked.join(', '));
   }
   return out;
 }
@@ -550,6 +577,10 @@ export function syncCompanionPlugins(): void {
   const platform = ctx.platform ?? 'win32';
   const inSafeMode = safeModeActive();
   if (inSafeMode) ctx.log('boot', '安全模式激活中：跳过配套插件 patch 行同步（退出安全模式后恢复）');
+  // 安装形态（v5.4 单发行版双形态）：精简版只改「新行」默认启停，
+  // 已有注册行不重写、用户选择优先（见 lib/desktop/install-profile.ts）。
+  const installProfile = readInstallProfile(APP_ROOT);
+  if (installProfile === 'lite') ctx.log('boot', '安装形态 = 精简版：外围配套插件默认停用（设置 → 插件 → 管理 可随时启用）');
   try {
     const home = ctx.getDshHome() || path.join(os.homedir(), '.dsh');
     // 桌面专属 profile 必须先存在（未知 profile 不会被 dsh 自动初始化）。
@@ -682,7 +713,8 @@ export function syncCompanionPlugins(): void {
       copyPluginPackage(profileDirP, src, p.name);
       // p.disabled: true 的配套插件默认以禁用行注册（如 dsh-pet 页面桌宠），
       // 用户可在「设置 → 插件 → 管理」里启用；已有行不重写，用户选择优先。
-      pending.push({ id: p.id, name: p.name, disabled: p.disabled === true, config: p.config });
+      // 精简版：LITE_DEFAULT_DISABLED 命中的配套插件同样默认以禁用行注册。
+      pending.push({ id: p.id, name: p.name, disabled: p.disabled === true || isLiteDisabled(p.id, installProfile), config: p.config });
     }
     if (migratedBuiltins.length) {
       try {

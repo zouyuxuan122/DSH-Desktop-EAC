@@ -1,0 +1,2995 @@
+{
+  "version": 1,
+  "updatedAt": "2026-09-06",
+  "audit": {
+    "source": "DSH_EAC_Plugin_Audit_2026-09-05.xlsx (external full audit, 2026-09-05 Asia/Shanghai)",
+    "mainBaseline": "e01d2e2a27b43e76aa3558d9729d5db3f05346ae",
+    "aioV1Baseline": "9de383c7ba1c2c51bd8eb5ba5f669aec3b95badd",
+    "catalog": "https://github.com/awesome-dsh-plugin/awesome-dsh-plugin",
+    "catalogPin": "44ae0afab736c06982c00a069f883c3f270884f8",
+    "note": "审计口径：缺证据≠未修改。main 基线落后于 5.3.6 内核升级提交，postAuditChanges 条目已标注。"
+  },
+  "components": [
+    {
+      "id": "C001",
+      "line": "main",
+      "name": "computer-user",
+      "type": "plugin",
+      "origin": "upstream",
+      "version": "0.3.6",
+      "path": "dsh-desktop/assets/plugins/computer-user",
+      "registryStatus": "注册表默认启用",
+      "audit": {
+        "verdict": "catalog-hit",
+        "compare": "same-version-modified",
+        "note": "授权检查从单sessionId改为会话标识集合；收集agent.id、header.sessionId、exec.sessionId；配置写入从scope.set改为scope.update。",
+        "basis": "package.repository明确声明",
+        "conflict": null
+      },
+      "upstream": {
+        "repository": "https://github.com/jing-hy/computer-user",
+        "refType": "version",
+        "catalogName": "jing-hy/computer-user",
+        "catalogEntry": "https://github.com/awesome-dsh-plugin/awesome-dsh-plugin/blob/44ae0afab736c06982c00a069f883c3f270884f8/data/plugins/jing-hy__computer-user.yml",
+        "provenance": "package.repository明确声明"
+      },
+      "postAuditChanges": "5.3.6 内核 0.1.3 升级适配（e01d2e2a..HEAD，settings 垫片/契约接线）"
+    },
+    {
+      "id": "C002",
+      "line": "main",
+      "name": "@nanmicoder/dsh-agent-teams",
+      "type": "plugin",
+      "origin": "upstream",
+      "version": "0.1.13-eac.3",
+      "path": "dsh-desktop/assets/plugins/dsh-agent-teams",
+      "registryStatus": "注册表默认启用",
+      "audit": {
+        "verdict": "catalog-hit",
+        "compare": "same-version-modified",
+        "note": "客户端从conversationEvents适配到uiConversation.events，增加注册能力检测；团队入口并入EAC模式菜单，避免重复composer按钮。",
+        "basis": "package.repository明确声明",
+        "conflict": null
+      },
+      "upstream": {
+        "repository": "https://github.com/NanmiCoder/dsh-agent-teams",
+        "refType": "version",
+        "catalogName": "NanmiCoder/dsh-agent-teams",
+        "catalogEntry": "https://github.com/awesome-dsh-plugin/awesome-dsh-plugin/blob/44ae0afab736c06982c00a069f883c3f270884f8/data/plugins/NanmiCoder__dsh-agent-teams.yml",
+        "provenance": "package.repository明确声明"
+      }
+    },
+    {
+      "id": "C003",
+      "line": "main",
+      "name": "@deepseek-ai/dsh-balance",
+      "type": "plugin",
+      "origin": "upstream",
+      "version": "0.1.0",
+      "path": "dsh-desktop/assets/plugins/dsh-balance",
+      "registryStatus": "注册表默认启用",
+      "audit": {
+        "verdict": "same-name-unresolved",
+        "compare": "no-upstream",
+        "note": "无可靠上游，不能判定修改",
+        "basis": "无独立上游证明",
+        "conflict": null
+      },
+      "upstream": {
+        "repository": "https://github.com/myYangyunfan/dsh_desktop",
+        "refType": "version",
+        "pinnedHead": "ee052c6b007a61e36213d57271309020e20ab24f",
+        "provenance": "dsh_desktop monorepo（2026-09-06 排查确认）"
+      },
+      "resolution": {
+        "date": "2026-09-06",
+        "decision": "upstream（dsh_desktop 伴侣套件）",
+        "evidence": "dsh_desktop 伴侣插件套件同源（上游 v0.2.0 2026-08-13 起；早于 EAC v1.0 2026-08-15）。上游版本可能超前（balance 0.1.1 / plugin-manager 0.1.2），EAC 侧带本地适配。"
+      }
+    },
+    {
+      "id": "C004",
+      "line": "main",
+      "name": "dsh-better-sidebar",
+      "type": "plugin",
+      "origin": "upstream",
+      "version": "0.15.3-eac.2",
+      "path": "dsh-desktop/assets/plugins/dsh-better-sidebar",
+      "registryStatus": "注册表默认启用",
+      "audit": {
+        "verdict": "catalog-hit",
+        "compare": "cross-version-diff-pending",
+        "note": "同路径变更涉及：文档/许可、资源/构建产物、包元数据/依赖/来源声明、运行代码。请按基线可比性阅读；缺少历史锚点时不直接归因为EAC修改。",
+        "basis": "package.repository明确声明",
+        "conflict": null
+      },
+      "upstream": {
+        "repository": "https://github.com/omdsh-dev/DSH-better-sidebar",
+        "refType": "version",
+        "catalogName": "omdsh-dev/DSH-better-sidebar",
+        "catalogEntry": "https://github.com/awesome-dsh-plugin/awesome-dsh-plugin/blob/44ae0afab736c06982c00a069f883c3f270884f8/data/plugins/omdsh-dev__DSH-better-sidebar.yml",
+        "provenance": "package.repository明确声明"
+      },
+      "postAuditChanges": "5.3.6 内核 0.1.3 升级适配（e01d2e2a..HEAD，settings 垫片/契约接线）",
+      "dualVersion": {
+        "relation": "两版存在差异",
+        "mainId": "C004",
+        "mainVersion": "0.15.3-eac.2",
+        "aioId": "C072",
+        "aioVersion": "0.12.2",
+        "sameFiles": "2",
+        "changedFiles": "10",
+        "mainOnly": "102",
+        "aioOnly": "0"
+      }
+    },
+    {
+      "id": "C005",
+      "line": "main",
+      "name": "dsh-change-review",
+      "type": "plugin",
+      "origin": "upstream",
+      "version": "0.1.0",
+      "path": "dsh-desktop/assets/plugins/dsh-change-review",
+      "registryStatus": "注册表默认启用",
+      "audit": {
+        "verdict": "same-name-unresolved",
+        "compare": "no-upstream",
+        "note": "无可靠上游，不能判定修改",
+        "basis": "无独立上游证明",
+        "conflict": null
+      },
+      "upstream": {
+        "repository": "https://github.com/myYangyunfan/dsh_desktop",
+        "refType": "version",
+        "pinnedHead": "ee052c6b007a61e36213d57271309020e20ab24f",
+        "provenance": "dsh_desktop monorepo（2026-09-06 排查确认）"
+      },
+      "resolution": {
+        "date": "2026-09-06",
+        "decision": "upstream（dsh_desktop 伴侣套件）",
+        "evidence": "dsh_desktop 伴侣插件套件同源（上游 v0.2.0 2026-08-13 起；早于 EAC v1.0 2026-08-15）。上游版本可能超前（balance 0.1.1 / plugin-manager 0.1.2），EAC 侧带本地适配。",
+        "rejectedCandidates": [
+          {
+            "name": "cirelir/dsh-change-review",
+            "reason": "同名不同物：候选 0.3.0 做 write/edit 工具调用 diff 对比展示；本地 0.1.0 做 fileChanges 投影+模型复查，与 dsh_desktop monorepo 副本描述逐字一致",
+            "citedBy": "PLUGIN-MATCH-REPORT.md（0.93，名称/主题相似所致）"
+          }
+        ]
+      }
+    },
+    {
+      "id": "C006",
+      "line": "main",
+      "name": "@deepseek-ai/dsh-client-file-changes",
+      "type": "plugin",
+      "origin": "upstream",
+      "version": "0.1.0",
+      "path": "dsh-desktop/assets/plugins/dsh-client-file-changes",
+      "registryStatus": "注册表默认启用",
+      "audit": {
+        "verdict": "catalog-miss",
+        "compare": "no-upstream",
+        "note": "无可靠上游，不能判定修改",
+        "basis": "无独立上游证明",
+        "conflict": null
+      },
+      "upstream": {
+        "repository": "https://github.com/myYangyunfan/dsh_desktop",
+        "refType": "version",
+        "pinnedHead": "ee052c6b007a61e36213d57271309020e20ab24f",
+        "provenance": "dsh_desktop monorepo（2026-09-06 排查确认）"
+      },
+      "resolution": {
+        "date": "2026-09-06",
+        "decision": "upstream（dsh_desktop 伴侣套件）",
+        "evidence": "dsh_desktop 伴侣插件套件同源（上游 v0.2.0 2026-08-13 起；早于 EAC v1.0 2026-08-15）。上游版本可能超前（balance 0.1.1 / plugin-manager 0.1.2），EAC 侧带本地适配。"
+      }
+    },
+    {
+      "id": "C007",
+      "line": "main",
+      "name": "dsh-compact",
+      "type": "plugin",
+      "origin": "upstream",
+      "version": "1.0.0",
+      "path": "dsh-desktop/assets/plugins/dsh-compact",
+      "registryStatus": "注册表默认启用",
+      "audit": {
+        "verdict": "catalog-miss",
+        "compare": "no-upstream",
+        "note": "无可靠上游，不能判定修改",
+        "basis": "无独立上游证明",
+        "conflict": null
+      },
+      "postAuditChanges": "5.3.6 内核 0.1.3 升级适配（e01d2e2a..HEAD，settings 垫片/契约接线）",
+      "resolution": {
+        "date": "2026-09-06",
+        "decision": "upstream（zixin947/dsh-compact）——更正 2026-09-06 上午的 eac-original 误判",
+        "evidence": "PLUGIN-MATCH-REPORT.md 指向 zixin947/dsh-compact（0.99）；核验：候选仓库 package.json name=dsh-compact version=1.0.0 与本地逐字一致、仓库结构（cordis.patch.yml+lib/）一致；zixin947 为本仓库贡献者（#145 新增 dsh-compact、#294 合并）。此前\"上游 dsh_desktop 全历史 0 提交\"的排除法只排除了 monorepo 一条线，未覆盖作者自有仓库。"
+      },
+      "upstream": {
+        "repository": "https://github.com/zixin947/dsh-compact",
+        "refType": "version",
+        "provenance": "匹配审计报告 0.99 + 内容核验（版本 1.0.0 逐字一致、cordis.patch.yml+lib/ 结构一致）"
+      }
+    },
+    {
+      "id": "C008",
+      "line": "main",
+      "name": "dsh-composer-dynamic-island",
+      "type": "plugin",
+      "origin": "upstream",
+      "version": "2.1.0",
+      "path": "dsh-desktop/assets/plugins/dsh-composer-dynamic-island",
+      "registryStatus": "注册表默认启用",
+      "audit": {
+        "verdict": "catalog-miss",
+        "compare": "same-version-modified",
+        "note": "与AIO记录的同一v2.1.0上游提交对齐；主要差异是包元数据/分发配置，客户端代码结论以文件清单为准。",
+        "basis": "package.repository明确声明",
+        "conflict": null
+      },
+      "upstream": {
+        "repository": "https://github.com/says693/dsh-composer-dynamic-island",
+        "refType": "version",
+        "catalogName": null,
+        "catalogEntry": null,
+        "provenance": "package.repository明确声明"
+      },
+      "dualVersion": {
+        "relation": "两版存在差异",
+        "mainId": "C008",
+        "mainVersion": "2.1.0",
+        "aioId": "C073",
+        "aioVersion": "2.1.0",
+        "sameFiles": "6",
+        "changedFiles": "5",
+        "mainOnly": "1",
+        "aioOnly": "1"
+      }
+    },
+    {
+      "id": "C009",
+      "line": "main",
+      "name": "@deepseek-ai/dsh-conversation-tweaks",
+      "type": "plugin",
+      "origin": "upstream",
+      "version": "0.1.0",
+      "path": "dsh-desktop/assets/plugins/dsh-conversation-tweaks",
+      "registryStatus": "注册表默认启用",
+      "audit": {
+        "verdict": "catalog-miss",
+        "compare": "no-upstream",
+        "note": "无可靠上游，不能判定修改",
+        "basis": "无独立上游证明",
+        "conflict": null
+      },
+      "upstream": {
+        "repository": "https://github.com/myYangyunfan/dsh_desktop",
+        "refType": "version",
+        "pinnedHead": "ee052c6b007a61e36213d57271309020e20ab24f",
+        "provenance": "dsh_desktop monorepo（2026-09-06 排查确认）"
+      },
+      "resolution": {
+        "date": "2026-09-06",
+        "decision": "upstream（dsh_desktop 伴侣套件）",
+        "evidence": "dsh_desktop 伴侣插件套件同源（上游 v0.2.0 2026-08-13 起；早于 EAC v1.0 2026-08-15）。上游版本可能超前（balance 0.1.1 / plugin-manager 0.1.2），EAC 侧带本地适配。"
+      }
+    },
+    {
+      "id": "C010",
+      "line": "main",
+      "name": "dsh-dafeiyu",
+      "type": "plugin",
+      "origin": "upstream",
+      "version": "0.1.0-alpha.6",
+      "path": "dsh-desktop/assets/plugins/dsh-dafeiyu",
+      "registryStatus": "注册表默认启用",
+      "audit": {
+        "verdict": "catalog-miss",
+        "compare": "same-version-modified",
+        "note": "同路径变更涉及：客户端界面/生命周期、资源/构建产物、运行代码、宿主/工具/路由。请按基线可比性阅读；缺少历史锚点时不直接归因为EAC修改。",
+        "basis": "package.repository明确声明",
+        "conflict": null
+      },
+      "upstream": {
+        "repository": "https://github.com/QCYTSN/dsh-dafeiyu",
+        "refType": "version",
+        "catalogName": null,
+        "catalogEntry": null,
+        "provenance": "package.repository明确声明"
+      }
+    },
+    {
+      "id": "C011",
+      "line": "main",
+      "name": "dsh-dock-settings",
+      "type": "plugin",
+      "origin": "eac-original",
+      "version": "0.1.0",
+      "path": "dsh-desktop/assets/plugins/dsh-dock-settings",
+      "registryStatus": "注册表默认启用",
+      "audit": {
+        "verdict": "catalog-miss",
+        "compare": "no-upstream",
+        "note": "无可靠上游，不能判定修改",
+        "basis": "无独立上游证明",
+        "conflict": null
+      },
+      "resolution": {
+        "date": "2026-09-06",
+        "decision": "eac-original",
+        "evidence": "EAC 独有：上游 dsh_desktop 全历史 0 提交、npm @deepseek-ai/* 404、dsh-web 仓库无、名录候选无；EAC v4.x 提交首次引入（host 集成型配套插件）。"
+      }
+    },
+    {
+      "id": "C012",
+      "line": "main",
+      "name": "dsh-eac-core-bridge",
+      "type": "plugin",
+      "origin": "eac-original",
+      "version": "1.0.0",
+      "path": "dsh-desktop/assets/plugins/dsh-eac-core-bridge",
+      "registryStatus": "注册表默认启用",
+      "audit": {
+        "verdict": "catalog-miss",
+        "compare": "no-upstream",
+        "note": "无可靠上游，不能判定修改",
+        "basis": "无独立上游证明",
+        "conflict": null
+      }
+    },
+    {
+      "id": "C013",
+      "line": "main",
+      "name": "dsh-eac-locale-compat",
+      "type": "plugin",
+      "origin": "eac-original",
+      "version": "1.0.0",
+      "path": "dsh-desktop/assets/plugins/dsh-eac-locale-compat",
+      "registryStatus": "注册表默认启用",
+      "audit": {
+        "verdict": "catalog-miss",
+        "compare": "no-upstream",
+        "note": "无可靠上游，不能判定修改",
+        "basis": "无独立上游证明",
+        "conflict": null
+      }
+    },
+    {
+      "id": "C014",
+      "line": "main",
+      "name": "@deepseek-ai/dsh-easy-setup",
+      "type": "plugin",
+      "origin": "eac-original",
+      "version": "0.1.0",
+      "path": "dsh-desktop/assets/plugins/dsh-easy-setup",
+      "registryStatus": "注册表默认启用",
+      "audit": {
+        "verdict": "catalog-miss",
+        "compare": "no-upstream",
+        "note": "无可靠上游，不能判定修改",
+        "basis": "无独立上游证明",
+        "conflict": null
+      },
+      "resolution": {
+        "date": "2026-09-06",
+        "decision": "eac-original",
+        "evidence": "EAC 独有：上游 dsh_desktop 全历史 0 提交、npm @deepseek-ai/* 404、dsh-web 仓库无、名录候选无；EAC v4.x 提交首次引入（host 集成型配套插件）。"
+      }
+    },
+    {
+      "id": "C015",
+      "line": "main",
+      "name": "dsh-feature-toggles",
+      "type": "plugin",
+      "origin": "eac-original",
+      "version": "0.1.1",
+      "path": "dsh-desktop/assets/plugins/dsh-feature-toggles",
+      "registryStatus": "注册表默认启用",
+      "audit": {
+        "verdict": "catalog-miss",
+        "compare": "no-upstream",
+        "note": "无可靠上游，不能判定修改",
+        "basis": "无独立上游证明",
+        "conflict": null
+      }
+    },
+    {
+      "id": "C016",
+      "line": "main",
+      "name": "@deepseek-ai/dsh-file-changes",
+      "type": "plugin",
+      "origin": "upstream",
+      "version": "0.1.0",
+      "path": "dsh-desktop/assets/plugins/dsh-file-changes",
+      "registryStatus": "注册表默认启用",
+      "audit": {
+        "verdict": "catalog-miss",
+        "compare": "no-upstream",
+        "note": "无可靠上游，不能判定修改",
+        "basis": "无独立上游证明",
+        "conflict": null
+      },
+      "upstream": {
+        "repository": "https://github.com/myYangyunfan/dsh_desktop",
+        "refType": "version",
+        "pinnedHead": "ee052c6b007a61e36213d57271309020e20ab24f",
+        "provenance": "dsh_desktop monorepo（2026-09-06 排查确认）"
+      },
+      "resolution": {
+        "date": "2026-09-06",
+        "decision": "upstream（dsh_desktop 伴侣套件）",
+        "evidence": "dsh_desktop 伴侣插件套件同源（上游 v0.2.0 2026-08-13 起；早于 EAC v1.0 2026-08-15）。上游版本可能超前（balance 0.1.1 / plugin-manager 0.1.2），EAC 侧带本地适配。"
+      }
+    },
+    {
+      "id": "C017",
+      "line": "main",
+      "name": "dsh-file-drop-eac",
+      "type": "plugin",
+      "origin": "eac-original",
+      "version": "0.1.2",
+      "path": "dsh-desktop/assets/plugins/dsh-file-drop-eac",
+      "registryStatus": "注册表默认启用",
+      "audit": {
+        "verdict": "catalog-miss",
+        "compare": "cross-version-diff-pending",
+        "note": "同路径变更涉及：客户端界面/生命周期、宿主/工具/路由、包元数据/依赖/来源声明。请按基线可比性阅读；缺少历史锚点时不直接归因为EAC修改。",
+        "basis": "插件README移植目标与发布仓库",
+        "conflict": null
+      }
+    },
+    {
+      "id": "C018",
+      "line": "main",
+      "name": "@deepseek-ai/dsh-float-window",
+      "type": "plugin",
+      "origin": "upstream",
+      "version": "0.1.0",
+      "path": "dsh-desktop/assets/plugins/dsh-float-window",
+      "registryStatus": "注册表默认启用",
+      "audit": {
+        "verdict": "catalog-miss",
+        "compare": "no-upstream",
+        "note": "无可靠上游，不能判定修改",
+        "basis": "无独立上游证明",
+        "conflict": null
+      },
+      "upstream": {
+        "repository": "https://github.com/myYangyunfan/dsh_desktop",
+        "refType": "version",
+        "pinnedHead": "ee052c6b007a61e36213d57271309020e20ab24f",
+        "provenance": "dsh_desktop monorepo（2026-09-06 排查确认）"
+      },
+      "resolution": {
+        "date": "2026-09-06",
+        "decision": "upstream（dsh_desktop 伴侣套件）",
+        "evidence": "dsh_desktop 伴侣插件套件同源（上游 v0.2.0 2026-08-13 起；早于 EAC v1.0 2026-08-15）。上游版本可能超前（balance 0.1.1 / plugin-manager 0.1.2），EAC 侧带本地适配。 上游已于 2026-08-28 退役（内核移除其依赖包）；EAC 侧仍启用，内核升级时注意同类风险。"
+      }
+    },
+    {
+      "id": "C019",
+      "line": "main",
+      "name": "dsh-font-custom",
+      "type": "plugin",
+      "origin": "eac-original",
+      "version": "0.1.0",
+      "path": "dsh-desktop/assets/plugins/dsh-font-custom",
+      "registryStatus": "注册表默认启用",
+      "audit": {
+        "verdict": "catalog-miss",
+        "compare": "no-upstream",
+        "note": "无可靠上游，不能判定修改",
+        "basis": "无独立上游证明",
+        "conflict": null
+      },
+      "resolution": {
+        "date": "2026-09-06",
+        "decision": "eac-original",
+        "evidence": "EAC 独有：上游 dsh_desktop 全历史 0 提交、npm @deepseek-ai/* 404、dsh-web 仓库无、名录候选无；EAC v4.x 提交首次引入（host 集成型配套插件）。"
+      }
+    },
+    {
+      "id": "C020",
+      "line": "main",
+      "name": "dsh-image-paste",
+      "type": "plugin",
+      "origin": "upstream",
+      "version": "0.1.0",
+      "path": "dsh-desktop/assets/plugins/dsh-image-paste",
+      "registryStatus": "注册表默认禁用",
+      "audit": {
+        "verdict": "catalog-miss",
+        "compare": "no-upstream",
+        "note": "无可靠上游，不能判定修改",
+        "basis": "无独立上游证明",
+        "conflict": null
+      },
+      "upstream": {
+        "repository": "https://github.com/myYangyunfan/dsh_desktop",
+        "refType": "version",
+        "pinnedHead": "ee052c6b007a61e36213d57271309020e20ab24f",
+        "provenance": "dsh_desktop monorepo（2026-09-06 排查确认）"
+      },
+      "resolution": {
+        "date": "2026-09-06",
+        "decision": "upstream（dsh_desktop 伴侣套件）",
+        "evidence": "dsh_desktop 伴侣插件套件同源（上游 v0.2.0 2026-08-13 起；早于 EAC v1.0 2026-08-15）。上游版本可能超前（balance 0.1.1 / plugin-manager 0.1.2），EAC 侧带本地适配。"
+      }
+    },
+    {
+      "id": "C021",
+      "line": "main",
+      "name": "meow-smooth",
+      "type": "plugin",
+      "origin": "upstream",
+      "version": "0.5.0",
+      "path": "dsh-desktop/assets/plugins/dsh-meow-smooth",
+      "registryStatus": "注册表默认启用",
+      "audit": {
+        "verdict": "catalog-hit",
+        "compare": "same-version-modified",
+        "note": "同路径变更涉及：客户端界面/生命周期、宿主/工具/路由。请按基线可比性阅读；缺少历史锚点时不直接归因为EAC修改。",
+        "basis": "package.repository明确声明",
+        "conflict": null
+      },
+      "upstream": {
+        "repository": "https://github.com/Phant0Meow/dsh-meow-smooth",
+        "refType": "version",
+        "catalogName": "Phant0Meow/dsh-meow-smooth",
+        "catalogEntry": "https://github.com/awesome-dsh-plugin/awesome-dsh-plugin/blob/44ae0afab736c06982c00a069f883c3f270884f8/data/plugins/Phant0Meow__dsh-meow-smooth.yml",
+        "provenance": "package.repository明确声明"
+      }
+    },
+    {
+      "id": "C022",
+      "line": "main",
+      "name": "dsh-message-rewind",
+      "type": "plugin",
+      "origin": "upstream",
+      "version": "0.1.0",
+      "path": "dsh-desktop/assets/plugins/dsh-message-rewind",
+      "registryStatus": "注册表默认启用",
+      "audit": {
+        "verdict": "catalog-miss",
+        "compare": "no-upstream",
+        "note": "无可靠上游，不能判定修改",
+        "basis": "无独立上游证明",
+        "conflict": null
+      },
+      "upstream": {
+        "repository": "https://github.com/myYangyunfan/dsh_desktop",
+        "refType": "version",
+        "pinnedHead": "ee052c6b007a61e36213d57271309020e20ab24f",
+        "provenance": "dsh_desktop monorepo（2026-09-06 排查确认）"
+      },
+      "resolution": {
+        "date": "2026-09-06",
+        "decision": "upstream（dsh_desktop 伴侣套件）",
+        "evidence": "dsh_desktop 伴侣插件套件同源（上游 v0.2.0 2026-08-13 起；早于 EAC v1.0 2026-08-15）。上游版本可能超前（balance 0.1.1 / plugin-manager 0.1.2），EAC 侧带本地适配。"
+      }
+    },
+    {
+      "id": "C023",
+      "line": "main",
+      "name": "@vlln/dsh-navbar",
+      "type": "plugin",
+      "origin": "upstream",
+      "version": "0.3.0",
+      "path": "dsh-desktop/assets/plugins/dsh-navbar",
+      "registryStatus": "注册表默认启用",
+      "audit": {
+        "verdict": "catalog-hit",
+        "compare": "same-version-modified",
+        "note": "导航层级提高；布局宽度无效时保留原位置；监听侧栏等外部DOM变化重排；客户端依赖改为ui-settings。",
+        "basis": "README/注册表/上游信息明确署名",
+        "conflict": null
+      },
+      "upstream": {
+        "repository": "https://github.com/vlln/dsh-navbar",
+        "refType": "version",
+        "catalogName": "vlln/dsh-navbar",
+        "catalogEntry": "https://github.com/awesome-dsh-plugin/awesome-dsh-plugin/blob/44ae0afab736c06982c00a069f883c3f270884f8/data/plugins/vlln__dsh-navbar.yml",
+        "provenance": "README/注册表/上游信息明确署名"
+      }
+    },
+    {
+      "id": "C024",
+      "line": "main",
+      "name": "dsh-offpeak",
+      "type": "plugin",
+      "origin": "upstream",
+      "version": "9.9.9",
+      "path": "dsh-desktop/assets/plugins/dsh-offpeak",
+      "registryStatus": "注册表默认启用",
+      "audit": {
+        "verdict": "catalog-miss",
+        "compare": "cross-version-diff-pending",
+        "note": "同路径变更涉及：文档/许可、包元数据/依赖/来源声明、宿主/工具/路由。请按基线可比性阅读；缺少历史锚点时不直接归因为EAC修改。",
+        "basis": "package.repository明确声明",
+        "conflict": null
+      },
+      "upstream": {
+        "repository": "https://github.com/christophersmith2737-commits/OffPeak",
+        "refType": "version",
+        "catalogName": null,
+        "catalogEntry": null,
+        "provenance": "package.repository明确声明"
+      },
+      "dualVersion": {
+        "relation": "两版存在差异",
+        "mainId": "C024",
+        "mainVersion": "9.9.9",
+        "aioId": "C075",
+        "aioVersion": "1.0.0",
+        "sameFiles": "5",
+        "changedFiles": "2",
+        "mainOnly": "0",
+        "aioOnly": "0"
+      }
+    },
+    {
+      "id": "C025",
+      "line": "main",
+      "name": "@deepseek-ai/dsh-openclaw-bridge",
+      "type": "plugin",
+      "origin": "upstream",
+      "version": "0.7.0",
+      "path": "dsh-desktop/assets/plugins/dsh-openclaw-bridge",
+      "registryStatus": "注册表默认启用",
+      "audit": {
+        "verdict": "catalog-miss",
+        "compare": "no-upstream",
+        "note": "无可靠上游，不能判定修改",
+        "basis": "无独立上游证明",
+        "conflict": null
+      },
+      "upstream": {
+        "repository": "https://github.com/myYangyunfan/dsh_desktop",
+        "refType": "version",
+        "pinnedHead": "ee052c6b007a61e36213d57271309020e20ab24f",
+        "provenance": "dsh_desktop monorepo（2026-09-06 排查确认）"
+      },
+      "resolution": {
+        "date": "2026-09-06",
+        "decision": "upstream（dsh_desktop 伴侣套件）",
+        "evidence": "dsh_desktop 伴侣插件套件同源（上游 v0.2.0 2026-08-13 起；早于 EAC v1.0 2026-08-15）。上游版本可能超前（balance 0.1.1 / plugin-manager 0.1.2），EAC 侧带本地适配。"
+      }
+    },
+    {
+      "id": "C026",
+      "line": "main",
+      "name": "dsh-pet-settings",
+      "type": "plugin",
+      "origin": "eac-original",
+      "version": "0.1.0",
+      "path": "dsh-desktop/assets/plugins/dsh-pet-settings",
+      "registryStatus": "注册表默认启用",
+      "audit": {
+        "verdict": "catalog-miss",
+        "compare": "no-upstream",
+        "note": "无可靠上游，不能判定修改",
+        "basis": "无独立上游证明",
+        "conflict": null
+      },
+      "resolution": {
+        "date": "2026-09-06",
+        "decision": "eac-original",
+        "evidence": "EAC 独有：上游 dsh_desktop 全历史 0 提交、npm @deepseek-ai/* 404、dsh-web 仓库无、名录候选无；EAC v4.x 提交首次引入（host 集成型配套插件）。"
+      }
+    },
+    {
+      "id": "C027",
+      "line": "main",
+      "name": "dsh-pet",
+      "type": "plugin",
+      "origin": "upstream",
+      "version": "0.1.3",
+      "path": "dsh-desktop/assets/plugins/dsh-pet",
+      "registryStatus": "注册表默认禁用",
+      "audit": {
+        "verdict": "catalog-hit",
+        "compare": "same-version-modified",
+        "note": "增加设置面板、大小与位置选择、互动开关、隐藏/召唤及localStorage持久化；提高overlay层级，修复侧栏遮挡。",
+        "basis": "package.repository明确声明",
+        "conflict": null
+      },
+      "upstream": {
+        "repository": "https://github.com/PC2005-cloud/dsh-pet",
+        "refType": "version",
+        "catalogName": "PC2005-cloud/dsh-pet#dsh-pet",
+        "catalogEntry": "https://github.com/awesome-dsh-plugin/awesome-dsh-plugin/blob/44ae0afab736c06982c00a069f883c3f270884f8/data/plugins/PC2005-cloud__dsh-pet--dsh-pet.yml",
+        "provenance": "package.repository明确声明"
+      }
+    },
+    {
+      "id": "C028",
+      "line": "main",
+      "name": "dsh-phone",
+      "type": "plugin",
+      "origin": "eac-original",
+      "version": "0.1.0",
+      "path": "dsh-desktop/assets/plugins/dsh-phone",
+      "registryStatus": "注册表默认启用",
+      "audit": {
+        "verdict": "catalog-miss",
+        "compare": "no-upstream",
+        "note": "无可靠上游，不能判定修改",
+        "basis": "无独立上游证明",
+        "conflict": null
+      }
+    },
+    {
+      "id": "C029",
+      "line": "main",
+      "name": "@deepseek-ai/dsh-plugin-manager",
+      "type": "plugin",
+      "origin": "upstream",
+      "version": "0.1.0",
+      "path": "dsh-desktop/assets/plugins/dsh-plugin-manager",
+      "registryStatus": "注册表默认启用",
+      "audit": {
+        "verdict": "same-name-unresolved",
+        "compare": "no-upstream",
+        "note": "无可靠上游，不能判定修改",
+        "basis": "无独立上游证明",
+        "conflict": null
+      },
+      "upstream": {
+        "repository": "https://github.com/myYangyunfan/dsh_desktop",
+        "refType": "version",
+        "pinnedHead": "ee052c6b007a61e36213d57271309020e20ab24f",
+        "provenance": "dsh_desktop monorepo（2026-09-06 排查确认）"
+      },
+      "resolution": {
+        "date": "2026-09-06",
+        "decision": "upstream（dsh_desktop 伴侣套件）",
+        "evidence": "dsh_desktop 伴侣插件套件同源（上游 v0.2.0 2026-08-13 起；早于 EAC v1.0 2026-08-15）。上游版本可能超前（balance 0.1.1 / plugin-manager 0.1.2），EAC 侧带本地适配。"
+      }
+    },
+    {
+      "id": "C030",
+      "line": "main",
+      "name": "dsh-plugin-shield",
+      "type": "plugin",
+      "origin": "eac-original",
+      "version": "0.1.0",
+      "path": "dsh-desktop/assets/plugins/dsh-plugin-shield",
+      "registryStatus": "注册表默认启用",
+      "audit": {
+        "verdict": "catalog-miss",
+        "compare": "no-upstream",
+        "note": "无可靠上游，不能判定修改",
+        "basis": "无独立上游证明",
+        "conflict": null
+      },
+      "dualVersion": {
+        "relation": "两版存在差异",
+        "mainId": "C030",
+        "mainVersion": "0.1.0",
+        "aioId": "C078",
+        "aioVersion": "0.1.0",
+        "sameFiles": "2",
+        "changedFiles": "1",
+        "mainOnly": "0",
+        "aioOnly": "0"
+      },
+      "resolution": {
+        "date": "2026-09-06",
+        "decision": "eac-original",
+        "evidence": "EAC 独有：上游 dsh_desktop 全历史 0 提交、npm @deepseek-ai/* 404、dsh-web 仓库无、名录候选无；EAC v4.x 提交首次引入（host 集成型配套插件）。"
+      }
+    },
+    {
+      "id": "C031",
+      "line": "main",
+      "name": "dsh-plugin-wizard",
+      "type": "plugin",
+      "origin": "eac-original",
+      "version": "0.1.0",
+      "path": "dsh-desktop/assets/plugins/dsh-plugin-wizard",
+      "registryStatus": "注册表默认启用",
+      "audit": {
+        "verdict": "catalog-miss",
+        "compare": "no-upstream",
+        "note": "无可靠上游，不能判定修改",
+        "basis": "无独立上游证明",
+        "conflict": null
+      },
+      "resolution": {
+        "date": "2026-09-06",
+        "decision": "eac-original",
+        "evidence": "EAC 独有：上游 dsh_desktop 全历史 0 提交、npm @deepseek-ai/* 404、dsh-web 仓库无、名录候选无；EAC v4.x 提交首次引入（host 集成型配套插件）。"
+      }
+    },
+    {
+      "id": "C032",
+      "line": "main",
+      "name": "@deepseek-ai/dsh-prompt-custom",
+      "type": "plugin",
+      "origin": "upstream",
+      "version": "0.1.0",
+      "path": "dsh-desktop/assets/plugins/dsh-prompt-custom",
+      "registryStatus": "注册表默认启用",
+      "audit": {
+        "verdict": "catalog-miss",
+        "compare": "no-upstream",
+        "note": "无可靠上游，不能判定修改",
+        "basis": "无独立上游证明",
+        "conflict": null
+      },
+      "upstream": {
+        "repository": "https://github.com/myYangyunfan/dsh_desktop",
+        "refType": "version",
+        "pinnedHead": "ee052c6b007a61e36213d57271309020e20ab24f",
+        "provenance": "dsh_desktop monorepo（2026-09-06 排查确认）"
+      },
+      "resolution": {
+        "date": "2026-09-06",
+        "decision": "upstream（dsh_desktop 伴侣套件）",
+        "evidence": "dsh_desktop 伴侣插件套件同源（上游 v0.2.0 2026-08-13 起；早于 EAC v1.0 2026-08-15）。上游版本可能超前（balance 0.1.1 / plugin-manager 0.1.2），EAC 侧带本地适配。"
+      }
+    },
+    {
+      "id": "C033",
+      "line": "main",
+      "name": "dsh-raw-html",
+      "type": "plugin",
+      "origin": "upstream",
+      "version": "0.6.2",
+      "path": "dsh-desktop/assets/plugins/dsh-raw-html",
+      "registryStatus": "注册表默认启用",
+      "audit": {
+        "verdict": "catalog-hit",
+        "compare": "cross-version-diff-pending",
+        "note": "同路径变更涉及：资源/构建产物、文档/许可、插件注册/预设配置、客户端界面/生命周期、宿主/工具/路由、包元数据/依赖/来源声明。请按基线可比性阅读；缺少历史锚点时不直接归因为EAC修改。",
+        "basis": "README/注册表/上游信息明确署名",
+        "conflict": null
+      },
+      "upstream": {
+        "repository": "https://github.com/plolpl789/dsh-raw-html",
+        "refType": "version",
+        "catalogName": "plolpl789/dsh-raw-html",
+        "catalogEntry": "https://github.com/awesome-dsh-plugin/awesome-dsh-plugin/blob/44ae0afab736c06982c00a069f883c3f270884f8/data/plugins/plolpl789__dsh-raw-html.yml",
+        "provenance": "README/注册表/上游信息明确署名"
+      }
+    },
+    {
+      "id": "C034",
+      "line": "main",
+      "name": "dsh-session-manager",
+      "type": "plugin",
+      "origin": "upstream",
+      "version": "0.1.0",
+      "path": "dsh-desktop/assets/plugins/dsh-session-manager",
+      "registryStatus": "注册表默认启用",
+      "audit": {
+        "verdict": "catalog-hit",
+        "compare": "same-version-modified",
+        "note": "同路径变更涉及：文档/许可、插件注册/预设配置、客户端界面/生命周期、包元数据/依赖/来源声明。请按基线可比性阅读；缺少历史锚点时不直接归因为EAC修改。",
+        "basis": "README/注册表/上游信息明确署名",
+        "conflict": null
+      },
+      "upstream": {
+        "repository": "https://github.com/hkkz9522/dsh-session-manager",
+        "refType": "version",
+        "catalogName": "hkkz9522/dsh-session-manager",
+        "catalogEntry": "https://github.com/awesome-dsh-plugin/awesome-dsh-plugin/blob/44ae0afab736c06982c00a069f883c3f270884f8/data/plugins/hkkz9522__dsh-session-manager.yml",
+        "provenance": "README/注册表/上游信息明确署名"
+      }
+    },
+    {
+      "id": "C035",
+      "line": "main",
+      "name": "dsh-settings-groups",
+      "type": "plugin",
+      "origin": "upstream",
+      "version": "0.1.0",
+      "path": "dsh-desktop/assets/plugins/dsh-settings-groups",
+      "registryStatus": "注册表默认启用",
+      "audit": {
+        "verdict": "catalog-miss",
+        "compare": "no-upstream",
+        "note": "无可靠上游，不能判定修改",
+        "basis": "无独立上游证明",
+        "conflict": null
+      },
+      "upstream": {
+        "repository": "https://github.com/myYangyunfan/dsh_desktop",
+        "refType": "version",
+        "pinnedHead": "ee052c6b007a61e36213d57271309020e20ab24f",
+        "provenance": "dsh_desktop monorepo（2026-09-06 排查确认）"
+      },
+      "resolution": {
+        "date": "2026-09-06",
+        "decision": "upstream（dsh_desktop 伴侣套件）",
+        "evidence": "dsh_desktop 伴侣插件套件同源（上游 v0.2.0 2026-08-13 起；早于 EAC v1.0 2026-08-15）。上游版本可能超前（balance 0.1.1 / plugin-manager 0.1.2），EAC 侧带本地适配。"
+      }
+    },
+    {
+      "id": "C036",
+      "line": "main",
+      "name": "dsh-settings-scroll-fix",
+      "type": "plugin",
+      "origin": "eac-original",
+      "version": "2.0.2",
+      "path": "dsh-desktop/assets/plugins/dsh-settings-scroll-fix",
+      "registryStatus": "注册表默认启用",
+      "audit": {
+        "verdict": "catalog-miss",
+        "compare": "no-upstream",
+        "note": "无可靠上游，不能判定修改",
+        "basis": "无独立上游证明",
+        "conflict": null
+      }
+    },
+    {
+      "id": "C037",
+      "line": "main",
+      "name": "@dsh-external/dsh-side-session",
+      "type": "plugin",
+      "origin": "upstream",
+      "version": "0.2.8",
+      "path": "dsh-desktop/assets/plugins/dsh-side-session",
+      "registryStatus": "注册表默认启用",
+      "audit": {
+        "verdict": "same-name-unresolved",
+        "compare": "no-upstream",
+        "note": "无可靠上游，不能判定修改",
+        "basis": "无独立上游证明",
+        "conflict": null
+      },
+      "upstream": {
+        "repository": "https://github.com/myYangyunfan/dsh_desktop",
+        "refType": "version",
+        "pinnedHead": "ee052c6b007a61e36213d57271309020e20ab24f",
+        "provenance": "dsh_desktop monorepo（2026-09-06 排查确认）"
+      },
+      "resolution": {
+        "date": "2026-09-06",
+        "decision": "upstream（dsh_desktop 伴侣套件）",
+        "evidence": "dsh_desktop 伴侣插件套件同源（上游 v0.2.0 2026-08-13 起；早于 EAC v1.0 2026-08-15）。上游版本可能超前（balance 0.1.1 / plugin-manager 0.1.2），EAC 侧带本地适配。"
+      }
+    },
+    {
+      "id": "C038",
+      "line": "main",
+      "name": "@deepseek-ai/dsh-skin-switch",
+      "type": "plugin",
+      "origin": "eac-original",
+      "version": "0.1.0",
+      "path": "dsh-desktop/assets/plugins/dsh-skin-switch",
+      "registryStatus": "注册表默认启用",
+      "audit": {
+        "verdict": "catalog-miss",
+        "compare": "no-upstream",
+        "note": "无可靠上游，不能判定修改",
+        "basis": "无独立上游证明",
+        "conflict": null
+      },
+      "resolution": {
+        "date": "2026-09-06",
+        "decision": "eac-original",
+        "evidence": "EAC 独有：上游 dsh_desktop 全历史 0 提交、npm @deepseek-ai/* 404、dsh-web 仓库无、名录候选无；EAC v4.x 提交首次引入（host 集成型配套插件）。"
+      }
+    },
+    {
+      "id": "C039",
+      "line": "main",
+      "name": "dsh-soul-md",
+      "type": "plugin",
+      "origin": "upstream",
+      "version": "0.2.8",
+      "path": "dsh-desktop/assets/plugins/dsh-soul-md",
+      "registryStatus": "注册表默认启用",
+      "audit": {
+        "verdict": "catalog-miss",
+        "compare": "same-version-modified",
+        "note": "同路径变更涉及：客户端界面/生命周期、宿主/工具/路由、运行代码。请按基线可比性阅读；缺少历史锚点时不直接归因为EAC修改。",
+        "basis": "package.repository明确声明",
+        "conflict": null
+      },
+      "upstream": {
+        "repository": "https://github.com/Scorp1o117/dsh-soul-md",
+        "refType": "version",
+        "catalogName": null,
+        "catalogEntry": null,
+        "provenance": "package.repository明确声明"
+      },
+      "postAuditChanges": "5.3.6 内核 0.1.3 升级适配（e01d2e2a..HEAD，settings 垫片/契约接线）"
+    },
+    {
+      "id": "C040",
+      "line": "main",
+      "name": "@deepseek-ai/dsh-terminal",
+      "type": "plugin",
+      "origin": "upstream",
+      "version": "0.1.0",
+      "path": "dsh-desktop/assets/plugins/dsh-terminal",
+      "registryStatus": "注册表默认启用",
+      "audit": {
+        "verdict": "catalog-miss",
+        "compare": "no-upstream",
+        "note": "无可靠上游，不能判定修改",
+        "basis": "无独立上游证明",
+        "conflict": null
+      },
+      "upstream": {
+        "repository": "https://github.com/myYangyunfan/dsh_desktop",
+        "refType": "version",
+        "pinnedHead": "ee052c6b007a61e36213d57271309020e20ab24f",
+        "provenance": "dsh_desktop monorepo（2026-09-06 排查确认）"
+      },
+      "resolution": {
+        "date": "2026-09-06",
+        "decision": "upstream（dsh_desktop 伴侣套件）",
+        "evidence": "dsh_desktop 伴侣插件套件同源（上游 v0.2.0 2026-08-13 起；早于 EAC v1.0 2026-08-15）。上游版本可能超前（balance 0.1.1 / plugin-manager 0.1.2），EAC 侧带本地适配。 注意：与官方内核 npm 包 @deepseek-ai/dsh-terminal（PTY seam）同名不同物，本插件为 dsh_desktop 的 SSE 变体；上游亦已退役。"
+      }
+    },
+    {
+      "id": "C041",
+      "line": "main",
+      "name": "dsh-undo-savepoint",
+      "type": "plugin",
+      "origin": "upstream",
+      "version": "0.3.4",
+      "path": "dsh-desktop/assets/plugins/dsh-undo-savepoint",
+      "registryStatus": "注册表默认启用",
+      "audit": {
+        "verdict": "catalog-hit",
+        "compare": "cross-version-diff-pending",
+        "note": "同路径变更涉及：插件注册/预设配置、客户端界面/生命周期、宿主/工具/路由、包元数据/依赖/来源声明。请按基线可比性阅读；缺少历史锚点时不直接归因为EAC修改。",
+        "basis": "README/注册表/上游信息明确署名",
+        "conflict": null
+      },
+      "upstream": {
+        "repository": "https://github.com/lire1131/dsh-undo-savepoint",
+        "refType": "version",
+        "catalogName": "lire1131/dsh-undo-savepoint",
+        "catalogEntry": "https://github.com/awesome-dsh-plugin/awesome-dsh-plugin/blob/44ae0afab736c06982c00a069f883c3f270884f8/data/plugins/lire1131__dsh-undo-savepoint.yml",
+        "provenance": "README/注册表/上游信息明确署名"
+      },
+      "dualVersion": {
+        "relation": "两版存在差异",
+        "mainId": "C041",
+        "mainVersion": "0.3.4",
+        "aioId": "C080",
+        "aioVersion": "0.3.3-1",
+        "sameFiles": "4",
+        "changedFiles": "1",
+        "mainOnly": "0",
+        "aioOnly": "0"
+      }
+    },
+    {
+      "id": "C042",
+      "line": "main",
+      "name": "dsh-unified-market",
+      "type": "plugin",
+      "origin": "upstream",
+      "version": "0.3.1",
+      "path": "dsh-desktop/assets/plugins/dsh-unified-market",
+      "registryStatus": "注册表默认启用",
+      "audit": {
+        "verdict": "catalog-hit",
+        "compare": "same-version-modified",
+        "note": "增加EAC推荐标记及对应客户端样式、文案和宿主目录数据处理。具体变更见lib/client.js和lib/host.js行段。",
+        "basis": "package.repository明确声明",
+        "conflict": null
+      },
+      "upstream": {
+        "repository": "https://github.com/jing-hy/dsh-unified-market",
+        "refType": "version",
+        "catalogName": "jing-hy/dsh-unified-market",
+        "catalogEntry": "https://github.com/awesome-dsh-plugin/awesome-dsh-plugin/blob/44ae0afab736c06982c00a069f883c3f270884f8/data/plugins/jing-hy__dsh-unified-market.yml",
+        "provenance": "package.repository明确声明"
+      }
+    },
+    {
+      "id": "C043",
+      "line": "main",
+      "name": "dsh-viewport-lock",
+      "type": "plugin",
+      "origin": "eac-original",
+      "version": "1.0.1",
+      "path": "dsh-desktop/assets/plugins/dsh-viewport-lock",
+      "registryStatus": "注册表默认启用",
+      "audit": {
+        "verdict": "catalog-miss",
+        "compare": "no-upstream",
+        "note": "无可靠上游，不能判定修改",
+        "basis": "无独立上游证明",
+        "conflict": null
+      }
+    },
+    {
+      "id": "C044",
+      "line": "main",
+      "name": "dsh-web-mobile-fix",
+      "type": "plugin",
+      "origin": "upstream",
+      "version": "1.0.1",
+      "path": "dsh-desktop/assets/plugins/dsh-web-mobile-fix",
+      "registryStatus": "注册表默认启用",
+      "audit": {
+        "verdict": "catalog-hit",
+        "compare": "same-version-modified",
+        "note": "新增工作区名称换行与行高/最小宽度规则，避免长名称挤走菜单和新会话按钮。",
+        "basis": "package.repository明确声明",
+        "conflict": null
+      },
+      "upstream": {
+        "repository": "https://github.com/AcidGr/dsh-web-mobile-fix",
+        "refType": "version",
+        "catalogName": "AcidGr/dsh-web-mobile-fix",
+        "catalogEntry": "https://github.com/awesome-dsh-plugin/awesome-dsh-plugin/blob/44ae0afab736c06982c00a069f883c3f270884f8/data/plugins/AcidGr__dsh-web-mobile-fix.yml",
+        "provenance": "package.repository明确声明"
+      }
+    },
+    {
+      "id": "C045",
+      "line": "main",
+      "name": "dsh-webui-prompt-optimizer",
+      "type": "plugin",
+      "origin": "upstream",
+      "version": "0.1.0",
+      "path": "dsh-desktop/assets/plugins/dsh-webui-prompt-optimizer",
+      "registryStatus": "注册表默认启用",
+      "audit": {
+        "verdict": "catalog-miss",
+        "compare": "same-version-modified",
+        "note": "NOTICE明确固定上游235643c4：从statem-li/dsh-webui提取独立host/client入口，隔离路由及存储名，新增独立包、构建配置和文档。",
+        "basis": "README/注册表/上游信息明确署名",
+        "conflict": null
+      },
+      "upstream": {
+        "repository": "https://github.com/statem-li/dsh-webui",
+        "refType": "version",
+        "catalogName": null,
+        "catalogEntry": null,
+        "provenance": "README/注册表/上游信息明确署名"
+      }
+    },
+    {
+      "id": "C046",
+      "line": "main",
+      "name": "dsh-whale-widget",
+      "type": "plugin",
+      "origin": "upstream",
+      "version": "0.2.10",
+      "path": "dsh-desktop/assets/plugins/dsh-whale-widget",
+      "registryStatus": "注册表默认禁用",
+      "audit": {
+        "verdict": "catalog-hit",
+        "compare": "byte-identical",
+        "note": "全部文件字节一致/仅换行",
+        "basis": "package.repository明确声明",
+        "conflict": null
+      },
+      "upstream": {
+        "repository": "https://github.com/MeteorNOX/DeepSeek-Balance-Whale-Widget",
+        "refType": "version",
+        "catalogName": "MeteorNOX/DeepSeek-Balance-Whale-Widget",
+        "catalogEntry": "https://github.com/awesome-dsh-plugin/awesome-dsh-plugin/blob/44ae0afab736c06982c00a069f883c3f270884f8/data/plugins/MeteorNOX__DeepSeek-Balance-Whale-Widget.yml",
+        "provenance": "package.repository明确声明"
+      },
+      "dualVersion": {
+        "relation": "两版一致（归一化换行）",
+        "mainId": "C046",
+        "mainVersion": "0.2.10",
+        "aioId": "C107",
+        "aioVersion": "0.2.10",
+        "sameFiles": "13",
+        "changedFiles": "0",
+        "mainOnly": "0",
+        "aioOnly": "0"
+      }
+    },
+    {
+      "id": "C047",
+      "line": "main",
+      "name": "picturereader",
+      "type": "plugin",
+      "origin": "upstream",
+      "version": "3.3.2",
+      "path": "dsh-desktop/assets/plugins/picturereader",
+      "registryStatus": "注册表默认启用",
+      "audit": {
+        "verdict": "catalog-hit",
+        "compare": "same-version-modified",
+        "note": "同步 picturereader 3.3.2：补齐文本模型将 image block 预降级为 attachment sha256 提示时的本地附件恢复；仍保留 EAC 内核 settings namespace 适配说明与内嵌运行依赖分类。",
+        "basis": "package.repository明确声明",
+        "conflict": null
+      },
+      "upstream": {
+        "repository": "https://github.com/jing-hy/picturereader",
+        "refType": "version",
+        "catalogName": "jing-hy/picturereader",
+        "catalogEntry": "https://github.com/awesome-dsh-plugin/awesome-dsh-plugin/blob/44ae0afab736c06982c00a069f883c3f270884f8/data/plugins/jing-hy__picturereader.yml",
+        "provenance": "package.repository明确声明"
+      },
+      "postAuditChanges": "5.3.6 内核 0.1.3 升级适配（e01d2e2a..HEAD，settings 垫片/契约接线）"
+    },
+    {
+      "id": "C048",
+      "line": "main",
+      "name": "sample-sdk-plugin",
+      "type": "sdk-sample",
+      "origin": "eac-original",
+      "version": "1.0.0",
+      "path": "dsh-desktop/assets/sdk-plugins/sample-sdk-plugin",
+      "registryStatus": "存在源码；需按皮肤/预设选择加载",
+      "audit": {
+        "verdict": "catalog-miss",
+        "compare": "no-upstream",
+        "note": "VNext Phase 2 SDK V1 示例插件：演示工具注册（参数校验）、上下文贡献、设置命名空间与事件订阅。运行于独立 Extension Host 进程（Job Object 围栏），零侵入 Core Profile。",
+        "basis": "无独立上游证明",
+        "conflict": null
+      }
+    },
+    {
+      "id": "C049",
+      "line": "main",
+      "name": "@linxin666/dsh-client-ui-skin-blue-fantasy",
+      "type": "skin",
+      "origin": "upstream",
+      "version": "0.1.11",
+      "path": "dsh-desktop/assets/skins/blue-fantasy",
+      "registryStatus": "存在源码；需按皮肤/预设选择加载",
+      "audit": {
+        "verdict": "catalog-miss",
+        "compare": "same-version-modified",
+        "note": "同路径变更涉及：客户端界面/生命周期、包元数据/依赖/来源声明。请按基线可比性阅读；缺少历史锚点时不直接归因为EAC修改。",
+        "basis": "package.repository明确声明",
+        "conflict": null
+      },
+      "upstream": {
+        "repository": "https://github.com/zhu1090093659/dsh-web",
+        "refType": "version",
+        "catalogName": null,
+        "catalogEntry": null,
+        "provenance": "package.repository明确声明"
+      }
+    },
+    {
+      "id": "C050",
+      "line": "main",
+      "name": "@linxin666/dsh-client-ui-skin-dragon-heir",
+      "type": "skin",
+      "origin": "upstream",
+      "version": "0.1.11",
+      "path": "dsh-desktop/assets/skins/dragon-heir",
+      "registryStatus": "存在源码；需按皮肤/预设选择加载",
+      "audit": {
+        "verdict": "catalog-miss",
+        "compare": "same-version-modified",
+        "note": "同路径变更涉及：客户端界面/生命周期、包元数据/依赖/来源声明。请按基线可比性阅读；缺少历史锚点时不直接归因为EAC修改。",
+        "basis": "package.repository明确声明",
+        "conflict": null
+      },
+      "upstream": {
+        "repository": "https://github.com/zhu1090093659/dsh-web",
+        "refType": "version",
+        "catalogName": null,
+        "catalogEntry": null,
+        "provenance": "package.repository明确声明"
+      }
+    },
+    {
+      "id": "C051",
+      "line": "main",
+      "name": "@dsh-external/dsh-client-ui-skin-maid-atelier",
+      "type": "skin",
+      "origin": "upstream",
+      "version": "0.0.1",
+      "path": "dsh-desktop/assets/skins/maid-atelier",
+      "registryStatus": "存在源码；需按皮肤/预设选择加载",
+      "audit": {
+        "verdict": "catalog-hit",
+        "compare": "cross-version-diff-pending",
+        "note": "同路径变更涉及：文档/许可、客户端界面/生命周期、包元数据/依赖/来源声明。请按基线可比性阅读；缺少历史锚点时不直接归因为EAC修改。",
+        "basis": "README/注册表/上游信息明确署名",
+        "conflict": null
+      },
+      "upstream": {
+        "repository": "https://github.com/Small-tailqwq/dsh-deep-whale",
+        "refType": "version",
+        "catalogName": "Small-tailqwq/dsh-deep-whale#maid-atelier",
+        "catalogEntry": "https://github.com/awesome-dsh-plugin/awesome-dsh-plugin/blob/44ae0afab736c06982c00a069f883c3f270884f8/data/plugins/Small-tailqwq__dsh-deep-whale--maid-atelier.yml",
+        "provenance": "README/注册表/上游信息明确署名"
+      }
+    },
+    {
+      "id": "C052",
+      "line": "main",
+      "name": "@linxin666/dsh-client-ui-skin-miku",
+      "type": "skin",
+      "origin": "upstream",
+      "version": "0.1.11",
+      "path": "dsh-desktop/assets/skins/miku",
+      "registryStatus": "存在源码；需按皮肤/预设选择加载",
+      "audit": {
+        "verdict": "catalog-miss",
+        "compare": "same-version-modified",
+        "note": "同路径变更涉及：客户端界面/生命周期、包元数据/依赖/来源声明。请按基线可比性阅读；缺少历史锚点时不直接归因为EAC修改。",
+        "basis": "package.repository明确声明",
+        "conflict": null
+      },
+      "upstream": {
+        "repository": "https://github.com/zhu1090093659/dsh-web",
+        "refType": "version",
+        "catalogName": null,
+        "catalogEntry": null,
+        "provenance": "package.repository明确声明"
+      }
+    },
+    {
+      "id": "C053",
+      "line": "main",
+      "name": "@linxin666/dsh-client-ui-skin-minecraft",
+      "type": "skin",
+      "origin": "upstream",
+      "version": "0.1.11",
+      "path": "dsh-desktop/assets/skins/minecraft",
+      "registryStatus": "存在源码；需按皮肤/预设选择加载",
+      "audit": {
+        "verdict": "catalog-miss",
+        "compare": "same-version-modified",
+        "note": "同路径变更涉及：客户端界面/生命周期、包元数据/依赖/来源声明。请按基线可比性阅读；缺少历史锚点时不直接归因为EAC修改。",
+        "basis": "package.repository明确声明",
+        "conflict": null
+      },
+      "upstream": {
+        "repository": "https://github.com/zhu1090093659/dsh-web",
+        "refType": "version",
+        "catalogName": null,
+        "catalogEntry": null,
+        "provenance": "package.repository明确声明"
+      }
+    },
+    {
+      "id": "C054",
+      "line": "main",
+      "name": "@linxin666/dsh-client-ui-skin-qq98",
+      "type": "skin",
+      "origin": "upstream",
+      "version": "0.1.11",
+      "path": "dsh-desktop/assets/skins/qq98",
+      "registryStatus": "存在源码；需按皮肤/预设选择加载",
+      "audit": {
+        "verdict": "catalog-miss",
+        "compare": "same-version-modified",
+        "note": "同路径变更涉及：客户端界面/生命周期、包元数据/依赖/来源声明。请按基线可比性阅读；缺少历史锚点时不直接归因为EAC修改。",
+        "basis": "package.repository明确声明",
+        "conflict": null
+      },
+      "upstream": {
+        "repository": "https://github.com/zhu1090093659/dsh-web",
+        "refType": "version",
+        "catalogName": null,
+        "catalogEntry": null,
+        "provenance": "package.repository明确声明"
+      }
+    },
+    {
+      "id": "C055",
+      "line": "main",
+      "name": "@linxin666/dsh-client-ui-skin-ths",
+      "type": "skin",
+      "origin": "upstream",
+      "version": "0.1.11",
+      "path": "dsh-desktop/assets/skins/ths",
+      "registryStatus": "存在源码；需按皮肤/预设选择加载",
+      "audit": {
+        "verdict": "catalog-miss",
+        "compare": "same-version-modified",
+        "note": "同路径变更涉及：客户端界面/生命周期、包元数据/依赖/来源声明。请按基线可比性阅读；缺少历史锚点时不直接归因为EAC修改。",
+        "basis": "package.repository明确声明",
+        "conflict": null
+      },
+      "upstream": {
+        "repository": "https://github.com/zhu1090093659/dsh-web",
+        "refType": "version",
+        "catalogName": null,
+        "catalogEntry": null,
+        "provenance": "package.repository明确声明"
+      }
+    },
+    {
+      "id": "C056",
+      "line": "main",
+      "name": "@linxin666/dsh-client-ui-skin-trading",
+      "type": "skin",
+      "origin": "upstream",
+      "version": "0.1.11",
+      "path": "dsh-desktop/assets/skins/trading",
+      "registryStatus": "存在源码；需按皮肤/预设选择加载",
+      "audit": {
+        "verdict": "catalog-miss",
+        "compare": "same-version-modified",
+        "note": "同路径变更涉及：客户端界面/生命周期、包元数据/依赖/来源声明。请按基线可比性阅读；缺少历史锚点时不直接归因为EAC修改。",
+        "basis": "package.repository明确声明",
+        "conflict": null
+      },
+      "upstream": {
+        "repository": "https://github.com/zhu1090093659/dsh-web",
+        "refType": "version",
+        "catalogName": null,
+        "catalogEntry": null,
+        "provenance": "package.repository明确声明"
+      }
+    },
+    {
+      "id": "C057",
+      "line": "main",
+      "name": "@linxin666/dsh-client-ui-skin-whale-song",
+      "type": "skin",
+      "origin": "upstream",
+      "version": "0.1.11",
+      "path": "dsh-desktop/assets/skins/whale-song",
+      "registryStatus": "存在源码；需按皮肤/预设选择加载",
+      "audit": {
+        "verdict": "catalog-miss",
+        "compare": "same-version-modified",
+        "note": "同路径变更涉及：客户端界面/生命周期、包元数据/依赖/来源声明。请按基线可比性阅读；缺少历史锚点时不直接归因为EAC修改。",
+        "basis": "package.repository明确声明",
+        "conflict": null
+      },
+      "upstream": {
+        "repository": "https://github.com/zhu1090093659/dsh-web",
+        "refType": "version",
+        "catalogName": null,
+        "catalogEntry": null,
+        "provenance": "package.repository明确声明"
+      }
+    },
+    {
+      "id": "C058",
+      "line": "main",
+      "name": "@linxin666/dsh-client-ui-skin-xp",
+      "type": "skin",
+      "origin": "upstream",
+      "version": "0.1.11",
+      "path": "dsh-desktop/assets/skins/xp",
+      "registryStatus": "存在源码；需按皮肤/预设选择加载",
+      "audit": {
+        "verdict": "catalog-miss",
+        "compare": "same-version-modified",
+        "note": "同路径变更涉及：客户端界面/生命周期、包元数据/依赖/来源声明。请按基线可比性阅读；缺少历史锚点时不直接归因为EAC修改。",
+        "basis": "package.repository明确声明",
+        "conflict": null
+      },
+      "upstream": {
+        "repository": "https://github.com/zhu1090093659/dsh-web",
+        "refType": "version",
+        "catalogName": null,
+        "catalogEntry": null,
+        "provenance": "package.repository明确声明"
+      }
+    },
+    {
+      "id": "C059",
+      "line": "main",
+      "name": "@deepseek-ai/dsh-openclaw-bridge",
+      "type": "source-copy",
+      "origin": "upstream",
+      "version": "0.6.0",
+      "path": "openclaw-dsh-bridge",
+      "registryStatus": "注册表默认启用",
+      "audit": {
+        "verdict": "catalog-miss",
+        "compare": "no-upstream",
+        "note": "无可靠上游，不能判定修改",
+        "basis": "无独立上游证明",
+        "conflict": null
+      },
+      "upstream": {
+        "repository": "https://github.com/myYangyunfan/dsh_desktop",
+        "refType": "version",
+        "pinnedHead": "ee052c6b007a61e36213d57271309020e20ab24f",
+        "provenance": "dsh_desktop monorepo（2026-09-06 排查确认）"
+      },
+      "resolution": {
+        "date": "2026-09-06",
+        "decision": "upstream（dsh_desktop 伴侣套件）",
+        "evidence": "dsh_desktop 伴侣插件套件同源（上游 v0.2.0 2026-08-13 起；早于 EAC v1.0 2026-08-15）。上游版本可能超前（balance 0.1.1 / plugin-manager 0.1.2），EAC 侧带本地适配。"
+      }
+    },
+    {
+      "id": "C060",
+      "line": "main",
+      "name": "_preset",
+      "type": "preset",
+      "origin": "eac-original",
+      "version": null,
+      "path": "dsh-desktop/assets/agent-presets/_preset",
+      "registryStatus": "存在源码；需按皮肤/预设选择加载",
+      "audit": {
+        "verdict": "catalog-miss",
+        "compare": "no-upstream",
+        "note": "无可靠上游，不能判定修改",
+        "basis": "无独立上游证明",
+        "conflict": null
+      },
+      "dualVersion": {
+        "relation": "两版存在差异",
+        "mainId": "C060",
+        "aioId": "C091",
+        "sameFiles": "4",
+        "changedFiles": "1",
+        "mainOnly": "0",
+        "aioOnly": "0"
+      }
+    },
+    {
+      "id": "C061",
+      "line": "main",
+      "name": "anchored-standard",
+      "type": "preset",
+      "origin": "unresolved",
+      "version": null,
+      "path": "dsh-desktop/assets/agent-presets/anchored-standard",
+      "registryStatus": "存在源码；需按皮肤/预设选择加载",
+      "audit": {
+        "verdict": "same-name-unresolved",
+        "compare": "no-upstream",
+        "note": "无可靠上游，不能判定修改",
+        "basis": "NOTICE仅明确官方preset祖先；两个社区同名候选未能唯一归因",
+        "conflict": null
+      },
+      "candidates": [
+        {
+          "name": "Jungod1121/dsh-anchored-standard",
+          "github": "https://github.com/Jungod1121/dsh-anchored-standard"
+        },
+        {
+          "name": "ruby1304/dsh-preset-anchored-standard",
+          "github": "https://github.com/ruby1304/dsh-preset-anchored-standard"
+        }
+      ],
+      "upstream": {
+        "repository": null
+      },
+      "dualVersion": {
+        "relation": "两版存在差异",
+        "mainId": "C061",
+        "aioId": "C092",
+        "sameFiles": "8",
+        "changedFiles": "2",
+        "mainOnly": "0",
+        "aioOnly": "0"
+      }
+    },
+    {
+      "id": "C062",
+      "line": "main",
+      "name": "minimal-gitbash",
+      "type": "preset",
+      "origin": "eac-original",
+      "version": null,
+      "path": "dsh-desktop/assets/agent-presets/minimal-gitbash",
+      "registryStatus": "存在源码；需按皮肤/预设选择加载",
+      "audit": {
+        "verdict": "catalog-miss",
+        "compare": "no-upstream",
+        "note": "无可靠上游，不能判定修改",
+        "basis": "无独立上游证明",
+        "conflict": null
+      }
+    },
+    {
+      "id": "C063",
+      "line": "main",
+      "name": "minimal-win",
+      "type": "preset",
+      "origin": "eac-original",
+      "version": null,
+      "path": "dsh-desktop/assets/agent-presets/minimal-win",
+      "registryStatus": "存在源码；需按皮肤/预设选择加载",
+      "audit": {
+        "verdict": "catalog-miss",
+        "compare": "no-upstream",
+        "note": "无可靠上游，不能判定修改",
+        "basis": "无独立上游证明",
+        "conflict": null
+      }
+    },
+    {
+      "id": "C064",
+      "line": "main",
+      "name": "router-standard",
+      "type": "preset",
+      "origin": "eac-original",
+      "version": null,
+      "path": "dsh-desktop/assets/agent-presets/router-standard",
+      "registryStatus": "存在源码；需按皮肤/预设选择加载",
+      "audit": {
+        "verdict": "catalog-miss",
+        "compare": "no-upstream",
+        "note": "无可靠上游，不能判定修改",
+        "basis": "无独立上游证明",
+        "conflict": null
+      },
+      "dualVersion": {
+        "relation": "两版存在差异",
+        "mainId": "C064",
+        "aioId": "C094",
+        "sameFiles": "0",
+        "changedFiles": "4",
+        "mainOnly": "2",
+        "aioOnly": "1"
+      }
+    },
+    {
+      "id": "C065",
+      "line": "main",
+      "name": "v4-flash-godmode-opencode-go",
+      "type": "preset",
+      "origin": "eac-original",
+      "version": null,
+      "path": "dsh-desktop/assets/agent-presets/v4-flash-godmode-opencode-go",
+      "registryStatus": "存在源码；需按皮肤/预设选择加载",
+      "audit": {
+        "verdict": "catalog-miss",
+        "compare": "no-upstream",
+        "note": "无可靠上游，不能判定修改",
+        "basis": "无独立上游证明",
+        "conflict": null
+      }
+    },
+    {
+      "id": "C066",
+      "line": "main",
+      "name": "warmupbetter-replay",
+      "type": "preset",
+      "origin": "eac-original",
+      "version": null,
+      "path": "dsh-desktop/assets/agent-presets/warmupbetter-replay",
+      "registryStatus": "存在源码；需按皮肤/预设选择加载",
+      "audit": {
+        "verdict": "catalog-miss",
+        "compare": "no-upstream",
+        "note": "无可靠上游，不能判定修改",
+        "basis": "无独立上游证明",
+        "conflict": null
+      }
+    },
+    {
+      "id": "C067",
+      "line": "main",
+      "name": "warmupbetter",
+      "type": "preset",
+      "origin": "eac-original",
+      "version": null,
+      "path": "dsh-desktop/assets/agent-presets/warmupbetter",
+      "registryStatus": "存在源码；需按皮肤/预设选择加载",
+      "audit": {
+        "verdict": "catalog-miss",
+        "compare": "no-upstream",
+        "note": "无可靠上游，不能判定修改",
+        "basis": "无独立上游证明",
+        "conflict": null
+      }
+    },
+    {
+      "id": "C068",
+      "line": "main",
+      "name": "whoami-standard",
+      "type": "preset",
+      "origin": "eac-original",
+      "version": null,
+      "path": "dsh-desktop/assets/agent-presets/whoami-standard",
+      "registryStatus": "存在源码；需按皮肤/预设选择加载",
+      "audit": {
+        "verdict": "catalog-miss",
+        "compare": "no-upstream",
+        "note": "无可靠上游，不能判定修改",
+        "basis": "无独立上游证明",
+        "conflict": null
+      }
+    },
+    {
+      "id": "C069",
+      "line": "main",
+      "name": "zero-anchored-standard",
+      "type": "preset",
+      "origin": "eac-original",
+      "version": null,
+      "path": "dsh-desktop/assets/agent-presets/zero-anchored-standard",
+      "registryStatus": "存在源码；需按皮肤/预设选择加载",
+      "audit": {
+        "verdict": "catalog-miss",
+        "compare": "no-upstream",
+        "note": "无可靠上游，不能判定修改",
+        "basis": "无独立上游证明",
+        "conflict": null
+      }
+    },
+    {
+      "id": "C108",
+      "line": "main",
+      "name": "dsh-plugin-guard",
+      "type": "host-fused",
+      "origin": "eac-original",
+      "version": null,
+      "path": "dsh-desktop",
+      "registryStatus": "宿主内置保护中心",
+      "audit": {
+        "verdict": "same-name-unresolved",
+        "compare": "已确认宿主融合重写；不可按同路径量化",
+        "note": "安装前快照、回滚、守护启动、事故报告",
+        "basis": "package.repository明确声明",
+        "conflict": null
+      },
+      "credits": {
+        "repository": "https://github.com/lxzy-7/dsh-plugin-guard",
+        "note": "宿主融合改写，非整包复制；上游仓库仅作能力出处致谢"
+      },
+      "candidates": [
+        {
+          "name": "DingZhiQi5596/dsh-plugin-guard",
+          "github": "https://github.com/DingZhiQi5596/dsh-plugin-guard"
+        },
+        {
+          "name": "taxueseek/dsh-plugin-guard",
+          "github": "https://github.com/taxueseek/dsh-plugin-guard"
+        }
+      ],
+      "dualVersion": {
+        "relation": "两版均宿主融合；见宿主源码",
+        "mainId": "C108",
+        "aioId": "C111",
+        "sameFiles": "0",
+        "changedFiles": "0",
+        "mainOnly": "0",
+        "aioOnly": "0"
+      }
+    },
+    {
+      "id": "C109",
+      "line": "main",
+      "name": "dsh-web-plugin-manager",
+      "type": "host-fused",
+      "origin": "eac-original",
+      "version": null,
+      "path": "dsh-desktop",
+      "registryStatus": "宿主内置保护中心",
+      "audit": {
+        "verdict": "catalog-miss",
+        "compare": "已确认宿主融合重写；不可按同路径量化",
+        "note": "安装验证、失败回滚与健康检查入口",
+        "basis": "package.repository明确声明",
+        "conflict": null
+      },
+      "credits": {
+        "repository": "https://github.com/LX2000WASD/dsh-web-plugin-manager",
+        "note": "宿主融合改写，非整包复制；上游仓库仅作能力出处致谢"
+      },
+      "dualVersion": {
+        "relation": "两版均宿主融合；见宿主源码",
+        "mainId": "C109",
+        "aioId": "C112",
+        "sameFiles": "0",
+        "changedFiles": "0",
+        "mainOnly": "0",
+        "aioOnly": "0"
+      }
+    },
+    {
+      "id": "C110",
+      "line": "main",
+      "name": "dsh-plugin-healthcheck",
+      "type": "host-fused",
+      "origin": "eac-original",
+      "version": null,
+      "path": "dsh-desktop",
+      "registryStatus": "宿主内置保护中心",
+      "audit": {
+        "verdict": "catalog-miss",
+        "compare": "已确认宿主融合重写；不可按同路径量化",
+        "note": "静态体检、模块遮蔽和高风险扫描",
+        "basis": "package.repository明确声明",
+        "conflict": null
+      },
+      "credits": {
+        "repository": "https://github.com/chenw2759-wq/dsh-plugin-healthcheck",
+        "note": "宿主融合改写，非整包复制；上游仓库仅作能力出处致谢"
+      },
+      "dualVersion": {
+        "relation": "两版均宿主融合；见宿主源码",
+        "mainId": "C110",
+        "aioId": "C113",
+        "sameFiles": "0",
+        "changedFiles": "0",
+        "mainOnly": "0",
+        "aioOnly": "0"
+      }
+    },
+    {
+      "id": "C070",
+      "line": "aio-v1",
+      "name": "dsh-auto-compact",
+      "type": "plugin",
+      "origin": "upstream",
+      "version": "0.1.0",
+      "path": "assets/plugins/dsh-auto-compact",
+      "registryStatus": "seed默认启用",
+      "audit": {
+        "verdict": "same-name-unresolved",
+        "compare": "no-upstream",
+        "note": "无可靠上游，不能判定修改",
+        "basis": "无独立上游证明",
+        "conflict": null
+      },
+      "upstream": {
+        "repository": "https://github.com/myYangyunfan/dsh_desktop",
+        "refType": "version",
+        "pinnedHead": "ee052c6b007a61e36213d57271309020e20ab24f",
+        "provenance": "dsh_desktop monorepo（2026-09-06 排查确认）"
+      },
+      "dualVersion": {
+        "relation": "仅AIO",
+        "aioId": "C070",
+        "aioVersion": "0.1.0",
+        "sameFiles": "0",
+        "changedFiles": "0",
+        "mainOnly": "0",
+        "aioOnly": "0"
+      },
+      "resolution": {
+        "date": "2026-09-06",
+        "decision": "upstream（dsh_desktop 伴侣套件）",
+        "evidence": "dsh_desktop 伴侣插件套件同源（上游 v0.2.0 2026-08-13 起；早于 EAC v1.0 2026-08-15）。上游版本可能超前（balance 0.1.1 / plugin-manager 0.1.2），EAC 侧带本地适配。"
+      }
+    },
+    {
+      "id": "C071",
+      "line": "aio-v1",
+      "name": "@deepseek-ai/dsh-balance",
+      "type": "plugin",
+      "origin": "upstream",
+      "version": "0.1.0",
+      "path": "assets/plugins/dsh-balance",
+      "registryStatus": "seed默认启用",
+      "audit": {
+        "verdict": "same-name-unresolved",
+        "compare": "no-upstream",
+        "note": "无可靠上游，不能判定修改",
+        "basis": "无独立上游证明",
+        "conflict": null
+      },
+      "upstream": {
+        "repository": "https://github.com/myYangyunfan/dsh_desktop",
+        "refType": "version",
+        "pinnedHead": "ee052c6b007a61e36213d57271309020e20ab24f",
+        "provenance": "dsh_desktop monorepo（2026-09-06 排查确认）"
+      },
+      "resolution": {
+        "date": "2026-09-06",
+        "decision": "upstream（dsh_desktop 伴侣套件）",
+        "evidence": "dsh_desktop 伴侣插件套件同源（上游 v0.2.0 2026-08-13 起；早于 EAC v1.0 2026-08-15）。上游版本可能超前（balance 0.1.1 / plugin-manager 0.1.2），EAC 侧带本地适配。"
+      }
+    },
+    {
+      "id": "C072",
+      "line": "aio-v1",
+      "name": "dsh-better-sidebar",
+      "type": "plugin",
+      "origin": "upstream",
+      "version": "0.12.2",
+      "path": "assets/plugins/dsh-better-sidebar",
+      "registryStatus": "seed默认启用",
+      "audit": {
+        "verdict": "catalog-hit",
+        "compare": "same-version-modified",
+        "note": "同路径变更涉及：文档/许可、客户端界面/生命周期。请按基线可比性阅读；缺少历史锚点时不直接归因为EAC修改。",
+        "basis": "package.repository明确声明",
+        "conflict": null
+      },
+      "upstream": {
+        "repository": "https://github.com/omdsh-dev/DSH-better-sidebar",
+        "refType": "version",
+        "catalogName": "omdsh-dev/DSH-better-sidebar",
+        "catalogEntry": "https://github.com/awesome-dsh-plugin/awesome-dsh-plugin/blob/44ae0afab736c06982c00a069f883c3f270884f8/data/plugins/omdsh-dev__DSH-better-sidebar.yml",
+        "provenance": "package.repository明确声明"
+      },
+      "dualVersion": {
+        "relation": "两版存在差异",
+        "mainId": "C004",
+        "mainVersion": "0.15.3-eac.2",
+        "aioId": "C072",
+        "aioVersion": "0.12.2",
+        "sameFiles": "2",
+        "changedFiles": "10",
+        "mainOnly": "102",
+        "aioOnly": "0"
+      }
+    },
+    {
+      "id": "C073",
+      "line": "aio-v1",
+      "name": "dsh-composer-dynamic-island",
+      "type": "plugin",
+      "origin": "upstream",
+      "version": "2.1.0",
+      "path": "assets/plugins/dsh-composer-dynamic-island",
+      "registryStatus": "seed默认启用",
+      "audit": {
+        "verdict": "catalog-miss",
+        "compare": "same-version-modified",
+        "note": "销毁后取消排队动画帧并拒绝布局；后代保有焦点时不关闭；移除空背景的aria-controls；补充视口和读屏顺序说明。",
+        "basis": "package.repository明确声明",
+        "conflict": null
+      },
+      "upstream": {
+        "repository": "https://github.com/says693/dsh-composer-dynamic-island",
+        "refType": "version",
+        "catalogName": null,
+        "catalogEntry": null,
+        "provenance": "package.repository明确声明"
+      },
+      "dualVersion": {
+        "relation": "两版存在差异",
+        "mainId": "C008",
+        "mainVersion": "2.1.0",
+        "aioId": "C073",
+        "aioVersion": "2.1.0",
+        "sameFiles": "6",
+        "changedFiles": "5",
+        "mainOnly": "1",
+        "aioOnly": "1"
+      }
+    },
+    {
+      "id": "C074",
+      "line": "aio-v1",
+      "name": "dshmarket",
+      "type": "plugin",
+      "origin": "upstream",
+      "version": "1.20.2",
+      "path": "assets/plugins/dsh-market",
+      "registryStatus": "JS表已注册；Tauri sidecar表未登记",
+      "audit": {
+        "verdict": "catalog-hit",
+        "compare": "byte-identical",
+        "note": "全部文件字节一致/仅换行",
+        "basis": "package.repository明确声明",
+        "conflict": "运行链路差异：sidecar/src/desktop-core.ts 的COMPANION_PLUGINS没有dshmarket；仅凭JS表不能断定Tauri已启用"
+      },
+      "upstream": {
+        "repository": "https://github.com/dsh-market/dsh-market",
+        "refType": "version",
+        "catalogName": "dsh-market/dsh-market",
+        "catalogEntry": "https://github.com/awesome-dsh-plugin/awesome-dsh-plugin/blob/44ae0afab736c06982c00a069f883c3f270884f8/data/plugins/dsh-market__dsh-market.yml",
+        "provenance": "package.repository明确声明"
+      },
+      "dualVersion": {
+        "relation": "仅AIO",
+        "aioId": "C074",
+        "aioVersion": "1.20.2",
+        "sameFiles": "0",
+        "changedFiles": "0",
+        "mainOnly": "0",
+        "aioOnly": "0"
+      }
+    },
+    {
+      "id": "C075",
+      "line": "aio-v1",
+      "name": "dsh-offpeak",
+      "type": "plugin",
+      "origin": "upstream",
+      "version": "1.0.0",
+      "path": "assets/plugins/dsh-offpeak",
+      "registryStatus": "seed默认禁用",
+      "audit": {
+        "verdict": "catalog-miss",
+        "compare": "cross-version-diff-pending",
+        "note": "同路径变更涉及：文档/许可、包元数据/依赖/来源声明。请按基线可比性阅读；缺少历史锚点时不直接归因为EAC修改。",
+        "basis": "package.repository明确声明",
+        "conflict": null
+      },
+      "upstream": {
+        "repository": "https://github.com/christophersmith2737-commits/OffPeak",
+        "refType": "version",
+        "catalogName": null,
+        "catalogEntry": null,
+        "provenance": "package.repository明确声明"
+      },
+      "dualVersion": {
+        "relation": "两版存在差异",
+        "mainId": "C024",
+        "mainVersion": "9.9.9",
+        "aioId": "C075",
+        "aioVersion": "1.0.0",
+        "sameFiles": "5",
+        "changedFiles": "2",
+        "mainOnly": "0",
+        "aioOnly": "0"
+      }
+    },
+    {
+      "id": "C076",
+      "line": "aio-v1",
+      "name": "@deepseek-ai/dsh-plugin-manager",
+      "type": "plugin",
+      "origin": "upstream",
+      "version": "0.1.0",
+      "path": "assets/plugins/dsh-plugin-manager",
+      "registryStatus": "seed默认启用",
+      "audit": {
+        "verdict": "same-name-unresolved",
+        "compare": "no-upstream",
+        "note": "无可靠上游，不能判定修改",
+        "basis": "无独立上游证明",
+        "conflict": null
+      },
+      "upstream": {
+        "repository": "https://github.com/myYangyunfan/dsh_desktop",
+        "refType": "version",
+        "pinnedHead": "ee052c6b007a61e36213d57271309020e20ab24f",
+        "provenance": "dsh_desktop monorepo（2026-09-06 排查确认）"
+      },
+      "resolution": {
+        "date": "2026-09-06",
+        "decision": "upstream（dsh_desktop 伴侣套件）",
+        "evidence": "dsh_desktop 伴侣插件套件同源（上游 v0.2.0 2026-08-13 起；早于 EAC v1.0 2026-08-15）。上游版本可能超前（balance 0.1.1 / plugin-manager 0.1.2），EAC 侧带本地适配。"
+      }
+    },
+    {
+      "id": "C077",
+      "line": "aio-v1",
+      "name": "@deepseek-ai/dsh-plugin-marketplace",
+      "type": "plugin",
+      "origin": "upstream",
+      "version": "0.1.0",
+      "path": "assets/plugins/dsh-plugin-marketplace",
+      "registryStatus": "seed默认禁用",
+      "audit": {
+        "verdict": "same-name-unresolved",
+        "compare": "no-upstream",
+        "note": "无可靠上游，不能判定修改",
+        "basis": "无独立上游证明",
+        "conflict": null
+      },
+      "upstream": {
+        "repository": "https://github.com/myYangyunfan/dsh_desktop",
+        "refType": "version",
+        "pinnedHead": "ee052c6b007a61e36213d57271309020e20ab24f",
+        "provenance": "dsh_desktop monorepo（2026-09-06 排查确认）"
+      },
+      "resolution": {
+        "date": "2026-09-06",
+        "decision": "upstream（dsh_desktop 伴侣套件）",
+        "evidence": "dsh_desktop 伴侣插件套件同源（上游 v0.2.0 2026-08-13 起；早于 EAC v1.0 2026-08-15）。上游版本可能超前（balance 0.1.1 / plugin-manager 0.1.2），EAC 侧带本地适配。 上游已于 2026-08-15 以 Zat-DSH Engine（MIT）替换；AIO seed 收录的是旧版。"
+      }
+    },
+    {
+      "id": "C078",
+      "line": "aio-v1",
+      "name": "dsh-plugin-shield",
+      "type": "plugin",
+      "origin": "eac-original",
+      "version": "0.1.0",
+      "path": "assets/plugins/dsh-plugin-shield",
+      "registryStatus": "seed默认启用",
+      "audit": {
+        "verdict": "catalog-miss",
+        "compare": "no-upstream",
+        "note": "无可靠上游，不能判定修改",
+        "basis": "无独立上游证明",
+        "conflict": null
+      },
+      "dualVersion": {
+        "relation": "两版存在差异",
+        "mainId": "C030",
+        "mainVersion": "0.1.0",
+        "aioId": "C078",
+        "aioVersion": "0.1.0",
+        "sameFiles": "2",
+        "changedFiles": "1",
+        "mainOnly": "0",
+        "aioOnly": "0"
+      },
+      "resolution": {
+        "date": "2026-09-06",
+        "decision": "eac-original",
+        "evidence": "EAC 独有：上游 dsh_desktop 全历史 0 提交、npm @deepseek-ai/* 404、dsh-web 仓库无、名录候选无；EAC v4.x 提交首次引入（host 集成型配套插件）。"
+      }
+    },
+    {
+      "id": "C079",
+      "line": "aio-v1",
+      "name": "@deepseek-ai/dsh-skin-switch",
+      "type": "plugin",
+      "origin": "eac-original",
+      "version": "0.1.0",
+      "path": "assets/plugins/dsh-skin-switch",
+      "registryStatus": "seed默认启用",
+      "audit": {
+        "verdict": "catalog-miss",
+        "compare": "no-upstream",
+        "note": "无可靠上游，不能判定修改",
+        "basis": "无独立上游证明",
+        "conflict": null
+      },
+      "resolution": {
+        "date": "2026-09-06",
+        "decision": "eac-original",
+        "evidence": "EAC 独有：上游 dsh_desktop 全历史 0 提交、npm @deepseek-ai/* 404、dsh-web 仓库无、名录候选无；EAC v4.x 提交首次引入（host 集成型配套插件）。"
+      }
+    },
+    {
+      "id": "C080",
+      "line": "aio-v1",
+      "name": "dsh-undo-savepoint",
+      "type": "plugin",
+      "origin": "upstream",
+      "version": "0.3.3-1",
+      "path": "assets/plugins/dsh-undo-savepoint",
+      "registryStatus": "seed默认启用",
+      "audit": {
+        "verdict": "catalog-hit",
+        "compare": "cross-version-diff-pending",
+        "note": "同路径变更涉及：插件注册/预设配置、客户端界面/生命周期、宿主/工具/路由、包元数据/依赖/来源声明。请按基线可比性阅读；缺少历史锚点时不直接归因为EAC修改。",
+        "basis": "README/注册表/上游信息明确署名",
+        "conflict": null
+      },
+      "upstream": {
+        "repository": "https://github.com/lire1131/dsh-undo-savepoint",
+        "refType": "version",
+        "catalogName": "lire1131/dsh-undo-savepoint",
+        "catalogEntry": "https://github.com/awesome-dsh-plugin/awesome-dsh-plugin/blob/44ae0afab736c06982c00a069f883c3f270884f8/data/plugins/lire1131__dsh-undo-savepoint.yml",
+        "provenance": "README/注册表/上游信息明确署名"
+      },
+      "dualVersion": {
+        "relation": "两版存在差异",
+        "mainId": "C041",
+        "mainVersion": "0.3.4",
+        "aioId": "C080",
+        "aioVersion": "0.3.3-1",
+        "sameFiles": "4",
+        "changedFiles": "1",
+        "mainOnly": "0",
+        "aioOnly": "0"
+      }
+    },
+    {
+      "id": "C081",
+      "line": "aio-v1",
+      "name": "@sanqi-normal/dsh-webui-market-plugin",
+      "type": "plugin",
+      "origin": "upstream",
+      "version": "0.1.2",
+      "path": "assets/plugins/dsh-webui-market",
+      "registryStatus": "seed默认启用",
+      "audit": {
+        "verdict": "catalog-hit",
+        "compare": "same-version-modified",
+        "note": "同路径变更涉及：客户端界面/生命周期、宿主/工具/路由。请按基线可比性阅读；缺少历史锚点时不直接归因为EAC修改。",
+        "basis": "package.repository明确声明",
+        "conflict": null
+      },
+      "upstream": {
+        "repository": "https://github.com/Sanqi-normal/dsh-webui-market-plugin",
+        "refType": "version",
+        "catalogName": "Sanqi-normal/dsh-webui-market-plugin",
+        "catalogEntry": "https://github.com/awesome-dsh-plugin/awesome-dsh-plugin/blob/44ae0afab736c06982c00a069f883c3f270884f8/data/plugins/Sanqi-normal__dsh-webui-market-plugin.yml",
+        "provenance": "package.repository明确声明"
+      }
+    },
+    {
+      "id": "C082",
+      "line": "aio-v1",
+      "name": "@linxin666/dsh-client-ui-skin-blue-fantasy",
+      "type": "skin",
+      "origin": "upstream",
+      "version": "0.1.11",
+      "path": "assets/skins/blue-fantasy",
+      "registryStatus": "seed默认禁用",
+      "audit": {
+        "verdict": "catalog-miss",
+        "compare": "same-version-modified",
+        "note": "同路径变更涉及：客户端界面/生命周期、包元数据/依赖/来源声明。请按基线可比性阅读；缺少历史锚点时不直接归因为EAC修改。",
+        "basis": "package.repository明确声明",
+        "conflict": null
+      },
+      "upstream": {
+        "repository": "https://github.com/zhu1090093659/dsh-web",
+        "refType": "version",
+        "catalogName": null,
+        "catalogEntry": null,
+        "provenance": "package.repository明确声明"
+      }
+    },
+    {
+      "id": "C083",
+      "line": "aio-v1",
+      "name": "@linxin666/dsh-client-ui-skin-dragon-heir",
+      "type": "skin",
+      "origin": "upstream",
+      "version": "0.1.11",
+      "path": "assets/skins/dragon-heir",
+      "registryStatus": "seed默认禁用",
+      "audit": {
+        "verdict": "catalog-miss",
+        "compare": "same-version-modified",
+        "note": "同路径变更涉及：客户端界面/生命周期、包元数据/依赖/来源声明。请按基线可比性阅读；缺少历史锚点时不直接归因为EAC修改。",
+        "basis": "package.repository明确声明",
+        "conflict": null
+      },
+      "upstream": {
+        "repository": "https://github.com/zhu1090093659/dsh-web",
+        "refType": "version",
+        "catalogName": null,
+        "catalogEntry": null,
+        "provenance": "package.repository明确声明"
+      }
+    },
+    {
+      "id": "C084",
+      "line": "aio-v1",
+      "name": "@linxin666/dsh-client-ui-skin-miku",
+      "type": "skin",
+      "origin": "upstream",
+      "version": "0.1.11",
+      "path": "assets/skins/miku",
+      "registryStatus": "seed默认禁用",
+      "audit": {
+        "verdict": "catalog-miss",
+        "compare": "same-version-modified",
+        "note": "同路径变更涉及：客户端界面/生命周期、包元数据/依赖/来源声明。请按基线可比性阅读；缺少历史锚点时不直接归因为EAC修改。",
+        "basis": "package.repository明确声明",
+        "conflict": null
+      },
+      "upstream": {
+        "repository": "https://github.com/zhu1090093659/dsh-web",
+        "refType": "version",
+        "catalogName": null,
+        "catalogEntry": null,
+        "provenance": "package.repository明确声明"
+      }
+    },
+    {
+      "id": "C085",
+      "line": "aio-v1",
+      "name": "@linxin666/dsh-client-ui-skin-minecraft",
+      "type": "skin",
+      "origin": "upstream",
+      "version": "0.1.11",
+      "path": "assets/skins/minecraft",
+      "registryStatus": "seed默认禁用",
+      "audit": {
+        "verdict": "catalog-miss",
+        "compare": "same-version-modified",
+        "note": "同路径变更涉及：客户端界面/生命周期、包元数据/依赖/来源声明。请按基线可比性阅读；缺少历史锚点时不直接归因为EAC修改。",
+        "basis": "package.repository明确声明",
+        "conflict": null
+      },
+      "upstream": {
+        "repository": "https://github.com/zhu1090093659/dsh-web",
+        "refType": "version",
+        "catalogName": null,
+        "catalogEntry": null,
+        "provenance": "package.repository明确声明"
+      }
+    },
+    {
+      "id": "C086",
+      "line": "aio-v1",
+      "name": "@linxin666/dsh-client-ui-skin-qq98",
+      "type": "skin",
+      "origin": "upstream",
+      "version": "0.1.11",
+      "path": "assets/skins/qq98",
+      "registryStatus": "seed默认禁用",
+      "audit": {
+        "verdict": "catalog-miss",
+        "compare": "same-version-modified",
+        "note": "同路径变更涉及：客户端界面/生命周期、包元数据/依赖/来源声明。请按基线可比性阅读；缺少历史锚点时不直接归因为EAC修改。",
+        "basis": "package.repository明确声明",
+        "conflict": null
+      },
+      "upstream": {
+        "repository": "https://github.com/zhu1090093659/dsh-web",
+        "refType": "version",
+        "catalogName": null,
+        "catalogEntry": null,
+        "provenance": "package.repository明确声明"
+      }
+    },
+    {
+      "id": "C087",
+      "line": "aio-v1",
+      "name": "@linxin666/dsh-client-ui-skin-ths",
+      "type": "skin",
+      "origin": "upstream",
+      "version": "0.1.11",
+      "path": "assets/skins/ths",
+      "registryStatus": "seed默认禁用",
+      "audit": {
+        "verdict": "catalog-miss",
+        "compare": "same-version-modified",
+        "note": "同路径变更涉及：客户端界面/生命周期、包元数据/依赖/来源声明。请按基线可比性阅读；缺少历史锚点时不直接归因为EAC修改。",
+        "basis": "package.repository明确声明",
+        "conflict": null
+      },
+      "upstream": {
+        "repository": "https://github.com/zhu1090093659/dsh-web",
+        "refType": "version",
+        "catalogName": null,
+        "catalogEntry": null,
+        "provenance": "package.repository明确声明"
+      }
+    },
+    {
+      "id": "C088",
+      "line": "aio-v1",
+      "name": "@linxin666/dsh-client-ui-skin-trading",
+      "type": "skin",
+      "origin": "upstream",
+      "version": "0.1.11",
+      "path": "assets/skins/trading",
+      "registryStatus": "seed默认禁用",
+      "audit": {
+        "verdict": "catalog-miss",
+        "compare": "same-version-modified",
+        "note": "同路径变更涉及：客户端界面/生命周期、包元数据/依赖/来源声明。请按基线可比性阅读；缺少历史锚点时不直接归因为EAC修改。",
+        "basis": "package.repository明确声明",
+        "conflict": null
+      },
+      "upstream": {
+        "repository": "https://github.com/zhu1090093659/dsh-web",
+        "refType": "version",
+        "catalogName": null,
+        "catalogEntry": null,
+        "provenance": "package.repository明确声明"
+      }
+    },
+    {
+      "id": "C089",
+      "line": "aio-v1",
+      "name": "@linxin666/dsh-client-ui-skin-whale-song",
+      "type": "skin",
+      "origin": "upstream",
+      "version": "0.1.11",
+      "path": "assets/skins/whale-song",
+      "registryStatus": "seed默认禁用",
+      "audit": {
+        "verdict": "catalog-miss",
+        "compare": "same-version-modified",
+        "note": "同路径变更涉及：客户端界面/生命周期、包元数据/依赖/来源声明。请按基线可比性阅读；缺少历史锚点时不直接归因为EAC修改。",
+        "basis": "package.repository明确声明",
+        "conflict": null
+      },
+      "upstream": {
+        "repository": "https://github.com/zhu1090093659/dsh-web",
+        "refType": "version",
+        "catalogName": null,
+        "catalogEntry": null,
+        "provenance": "package.repository明确声明"
+      }
+    },
+    {
+      "id": "C090",
+      "line": "aio-v1",
+      "name": "@linxin666/dsh-client-ui-skin-xp",
+      "type": "skin",
+      "origin": "upstream",
+      "version": "0.1.11",
+      "path": "assets/skins/xp",
+      "registryStatus": "seed默认禁用",
+      "audit": {
+        "verdict": "catalog-miss",
+        "compare": "same-version-modified",
+        "note": "同路径变更涉及：客户端界面/生命周期、包元数据/依赖/来源声明。请按基线可比性阅读；缺少历史锚点时不直接归因为EAC修改。",
+        "basis": "package.repository明确声明",
+        "conflict": null
+      },
+      "upstream": {
+        "repository": "https://github.com/zhu1090093659/dsh-web",
+        "refType": "version",
+        "catalogName": null,
+        "catalogEntry": null,
+        "provenance": "package.repository明确声明"
+      }
+    },
+    {
+      "id": "C091",
+      "line": "aio-v1",
+      "name": "_preset",
+      "type": "preset",
+      "origin": "eac-original",
+      "version": null,
+      "path": "assets/agent-presets/_preset",
+      "registryStatus": "存在源码；需按皮肤/预设选择加载",
+      "audit": {
+        "verdict": "catalog-miss",
+        "compare": "no-upstream",
+        "note": "无可靠上游，不能判定修改",
+        "basis": "无独立上游证明",
+        "conflict": null
+      },
+      "dualVersion": {
+        "relation": "两版存在差异",
+        "mainId": "C060",
+        "aioId": "C091",
+        "sameFiles": "4",
+        "changedFiles": "1",
+        "mainOnly": "0",
+        "aioOnly": "0"
+      }
+    },
+    {
+      "id": "C092",
+      "line": "aio-v1",
+      "name": "anchored-standard",
+      "type": "preset",
+      "origin": "unresolved",
+      "version": null,
+      "path": "assets/agent-presets/anchored-standard",
+      "registryStatus": "存在源码；需按皮肤/预设选择加载",
+      "audit": {
+        "verdict": "same-name-unresolved",
+        "compare": "no-upstream",
+        "note": "无可靠上游，不能判定修改",
+        "basis": "NOTICE仅明确官方preset祖先；两个社区同名候选未能唯一归因",
+        "conflict": null
+      },
+      "candidates": [
+        {
+          "name": "Jungod1121/dsh-anchored-standard",
+          "github": "https://github.com/Jungod1121/dsh-anchored-standard"
+        },
+        {
+          "name": "ruby1304/dsh-preset-anchored-standard",
+          "github": "https://github.com/ruby1304/dsh-preset-anchored-standard"
+        }
+      ],
+      "upstream": {
+        "repository": null
+      },
+      "dualVersion": {
+        "relation": "两版存在差异",
+        "mainId": "C061",
+        "aioId": "C092",
+        "sameFiles": "8",
+        "changedFiles": "2",
+        "mainOnly": "0",
+        "aioOnly": "0"
+      }
+    },
+    {
+      "id": "C093",
+      "line": "aio-v1",
+      "name": "router-spec",
+      "type": "preset",
+      "origin": "eac-original",
+      "version": null,
+      "path": "assets/agent-presets/router-spec",
+      "registryStatus": "存在源码；需按皮肤/预设选择加载",
+      "audit": {
+        "verdict": "catalog-miss",
+        "compare": "no-upstream",
+        "note": "无可靠上游，不能判定修改",
+        "basis": "无独立上游证明",
+        "conflict": null
+      },
+      "dualVersion": {
+        "relation": "仅AIO",
+        "aioId": "C093",
+        "sameFiles": "0",
+        "changedFiles": "0",
+        "mainOnly": "0",
+        "aioOnly": "0"
+      }
+    },
+    {
+      "id": "C094",
+      "line": "aio-v1",
+      "name": "router-standard",
+      "type": "preset",
+      "origin": "eac-original",
+      "version": null,
+      "path": "assets/agent-presets/router-standard",
+      "registryStatus": "存在源码；需按皮肤/预设选择加载",
+      "audit": {
+        "verdict": "catalog-miss",
+        "compare": "no-upstream",
+        "note": "无可靠上游，不能判定修改",
+        "basis": "无独立上游证明",
+        "conflict": null
+      },
+      "dualVersion": {
+        "relation": "两版存在差异",
+        "mainId": "C064",
+        "aioId": "C094",
+        "sameFiles": "0",
+        "changedFiles": "4",
+        "mainOnly": "2",
+        "aioOnly": "1"
+      }
+    },
+    {
+      "id": "C095",
+      "line": "aio-v1",
+      "name": "@dsh-external/dsh-visualize",
+      "type": "seed",
+      "origin": "upstream",
+      "version": "0.1.2",
+      "path": "distribution/profile-seed/profiles/web-desktop/package.json",
+      "registryStatus": "seed bundle加载",
+      "audit": {
+        "verdict": "catalog-hit",
+        "compare": "byte-identical-fileset-differs",
+        "note": "DSH inline visualization plugin: a visualize tool + bundled skill let the model render interactive HTML fragments as sandboxed cards in the conversation (Codex /visualize semantics).",
+        "basis": "AIO受控profile package.json dependencies Git URL",
+        "conflict": null
+      },
+      "upstream": {
+        "repository": "https://github.com/Nagi-ovo/dsh-visualize",
+        "refType": "version",
+        "catalogName": "Nagi-ovo/dsh-visualize",
+        "catalogEntry": "https://github.com/awesome-dsh-plugin/awesome-dsh-plugin/blob/44ae0afab736c06982c00a069f883c3f270884f8/data/plugins/Nagi-ovo__dsh-visualize.yml",
+        "provenance": "AIO受控profile package.json dependencies Git URL"
+      }
+    },
+    {
+      "id": "C096",
+      "line": "aio-v1",
+      "name": "@dsh-external/dsh-webui",
+      "type": "seed",
+      "origin": "upstream",
+      "version": "0.5.1",
+      "path": "distribution/profile-seed/profiles/web-desktop/package.json",
+      "registryStatus": "seed bundle加载",
+      "audit": {
+        "verdict": "catalog-miss",
+        "compare": "cross-version-diff-pending",
+        "note": "webui：视图图块/消息导航 + 工具调用聚合 + Markdown 渲染 + 模型推理等级同步 + AnySearch 网页搜索（合并 dsh-tool-summary / dsh-better-markdown / dsh-web-search-anysearch）",
+        "basis": "README/注册表/上游信息明确署名",
+        "conflict": null
+      },
+      "upstream": {
+        "repository": "https://github.com/statem-li/dsh-webui",
+        "refType": "version",
+        "catalogName": null,
+        "catalogEntry": null,
+        "provenance": "README/注册表/上游信息明确署名"
+      }
+    },
+    {
+      "id": "C097",
+      "line": "aio-v1",
+      "name": "@ha-na-bi/dsh-client-ui-custom",
+      "type": "seed",
+      "origin": "upstream",
+      "version": "0.1.0-rc.6",
+      "path": "distribution/profile-seed/profiles/web-desktop/package.json",
+      "registryStatus": "seed bundle加载",
+      "audit": {
+        "verdict": "catalog-miss",
+        "compare": "byte-identical-fileset-differs",
+        "note": "客制化DSH（Custom DSH）: web-surface theming (wallpaper, frosted glass, accent, translucent surfaces), configurable keyboard shortcuts (new conversation / model / thinking effort / composer gestures / usage panel), an app-usage panel, and entrance motion for conversations, the sidebar, and new conversations. Zero shell edits.",
+        "basis": "package.repository明确声明",
+        "conflict": null
+      },
+      "upstream": {
+        "repository": "https://github.com/Yoli-mi/dsh-client-ui-custom",
+        "refType": "version",
+        "catalogName": null,
+        "catalogEntry": null,
+        "provenance": "package.repository明确声明"
+      }
+    },
+    {
+      "id": "C098",
+      "line": "aio-v1",
+      "name": "@local/dsh-webui-statem-bridge",
+      "type": "seed",
+      "origin": "eac-original",
+      "version": "1.2.2",
+      "path": "distribution/profile-seed/profiles/web-desktop/package.json",
+      "registryStatus": "seed bundle加载",
+      "audit": {
+        "verdict": "catalog-miss",
+        "compare": "no-upstream",
+        "note": "无可靠上游，不能判定修改",
+        "basis": "无独立上游证明",
+        "conflict": null
+      }
+    },
+    {
+      "id": "C099",
+      "line": "aio-v1",
+      "name": "@vlln/dsh-navbar",
+      "type": "seed",
+      "origin": "upstream",
+      "version": "0.4.0",
+      "path": "distribution/profile-seed/profiles/web-desktop/package.json",
+      "registryStatus": "seed依赖；未直接列入bundle",
+      "audit": {
+        "verdict": "catalog-hit",
+        "compare": "same-version-modified",
+        "note": "对话节点导航条——user 消息快速跳转（自渲染 DOM，官方 client 通道）",
+        "basis": "README/注册表/上游信息明确署名",
+        "conflict": null
+      },
+      "upstream": {
+        "repository": "https://github.com/vlln/dsh-navbar",
+        "refType": "version",
+        "catalogName": "vlln/dsh-navbar",
+        "catalogEntry": "https://github.com/awesome-dsh-plugin/awesome-dsh-plugin/blob/44ae0afab736c06982c00a069f883c3f270884f8/data/plugins/vlln__dsh-navbar.yml",
+        "provenance": "README/注册表/上游信息明确署名"
+      }
+    },
+    {
+      "id": "C100",
+      "line": "aio-v1",
+      "name": "dsh-drag-and-drop",
+      "type": "seed",
+      "origin": "upstream",
+      "version": "0.1.6",
+      "path": "distribution/profile-seed/profiles/web-desktop/package.json",
+      "registryStatus": "seed bundle加载",
+      "audit": {
+        "verdict": "名录命中；安装声明与包内来源冲突",
+        "compare": "byte-identical-fileset-differs",
+        "note": "Drag local files into the DSH Web UI and insert their original filesystem paths without uploading or copying them",
+        "basis": "package.repository明确声明",
+        "conflict": "seed声明来源bill9109/dsh-drag-and-drop；包内repository为omdsh-dev/dsh-drag-and-drop；不可静默视作同一仓库"
+      },
+      "upstream": {
+        "repository": "https://github.com/omdsh-dev/dsh-drag-and-drop",
+        "refType": "version",
+        "catalogName": "bill9109/dsh-drag-and-drop",
+        "catalogEntry": "https://github.com/awesome-dsh-plugin/awesome-dsh-plugin/blob/44ae0afab736c06982c00a069f883c3f270884f8/data/plugins/bill9109__dsh-drag-and-drop.yml",
+        "provenance": "package.repository明确声明"
+      },
+      "dualVersion": {
+        "relation": "仅AIO",
+        "aioId": "C100",
+        "aioVersion": "0.1.6",
+        "sameFiles": "0",
+        "changedFiles": "0",
+        "mainOnly": "0",
+        "aioOnly": "0"
+      }
+    },
+    {
+      "id": "C101",
+      "line": "aio-v1",
+      "name": "dsh-find-plugin",
+      "type": "seed",
+      "origin": "upstream",
+      "version": "0.3.7",
+      "path": "distribution/profile-seed/profiles/web-desktop/package.json",
+      "registryStatus": "seed bundle加载",
+      "audit": {
+        "verdict": "catalog-hit",
+        "compare": "byte-identical",
+        "note": "Find DeepSeek Harness plugins inside the agent — live GitHub dsh-plugin topic search, ranked by stars.",
+        "basis": "package.repository明确声明",
+        "conflict": null
+      },
+      "upstream": {
+        "repository": "https://github.com/awesome-dsh-plugin/dsh-find-plugin",
+        "refType": "version",
+        "catalogName": "awesome-dsh-plugin/dsh-find-plugin",
+        "catalogEntry": "https://github.com/awesome-dsh-plugin/awesome-dsh-plugin/blob/44ae0afab736c06982c00a069f883c3f270884f8/data/plugins/awesome-dsh-plugin__dsh-find-plugin.yml",
+        "provenance": "package.repository明确声明"
+      },
+      "dualVersion": {
+        "relation": "仅AIO",
+        "aioId": "C101",
+        "aioVersion": "0.3.7",
+        "sameFiles": "0",
+        "changedFiles": "0",
+        "mainOnly": "0",
+        "aioOnly": "0"
+      }
+    },
+    {
+      "id": "C102",
+      "line": "aio-v1",
+      "name": "dsh-meme",
+      "type": "seed",
+      "origin": "upstream",
+      "version": "0.1.40",
+      "path": "distribution/profile-seed/profiles/web-desktop/package.json",
+      "registryStatus": "seed bundle加载",
+      "audit": {
+        "verdict": "catalog-hit",
+        "compare": "byte-identical",
+        "note": "DeepSeek Harness 表情包插件:内置官方-001 与大肥鱼两套图库,设置页扫描切换,send_meme 发图(Web/QQ)。",
+        "basis": "package.repository明确声明",
+        "conflict": null
+      },
+      "upstream": {
+        "repository": "https://github.com/yyh-001/dsh-meme",
+        "refType": "version",
+        "catalogName": "yyh-001/dsh-meme",
+        "catalogEntry": "https://github.com/awesome-dsh-plugin/awesome-dsh-plugin/blob/44ae0afab736c06982c00a069f883c3f270884f8/data/plugins/yyh-001__dsh-meme.yml",
+        "provenance": "package.repository明确声明"
+      },
+      "dualVersion": {
+        "relation": "仅AIO",
+        "aioId": "C102",
+        "aioVersion": "0.1.40",
+        "sameFiles": "0",
+        "changedFiles": "0",
+        "mainOnly": "0",
+        "aioOnly": "0"
+      }
+    },
+    {
+      "id": "C103",
+      "line": "aio-v1",
+      "name": "dsh-plugin-wallpaper-engine",
+      "type": "seed",
+      "origin": "upstream",
+      "version": "0.6.8",
+      "path": "distribution/profile-seed/profiles/web-desktop/package.json",
+      "registryStatus": "seed bundle加载",
+      "audit": {
+        "verdict": "catalog-hit",
+        "compare": "byte-identical",
+        "note": "Wallpaper Engine backgrounds for the DSH web GUI: render your local Wallpaper Engine Video/Web wallpapers behind the chat, Scene wallpapers as extracted static frames, with iOS-style liquid glass, adjustable scrim/border/blur, and a customizable accent color + glass transparency for the whole settings window.",
+        "basis": "package.repository明确声明",
+        "conflict": null
+      },
+      "upstream": {
+        "repository": "https://github.com/elysia395/dsh-wallpaper-engine",
+        "refType": "version",
+        "catalogName": "elysia395/dsh-wallpaper-engine",
+        "catalogEntry": "https://github.com/awesome-dsh-plugin/awesome-dsh-plugin/blob/44ae0afab736c06982c00a069f883c3f270884f8/data/plugins/elysia395__dsh-wallpaper-engine.yml",
+        "provenance": "package.repository明确声明"
+      },
+      "dualVersion": {
+        "relation": "仅AIO",
+        "aioId": "C103",
+        "aioVersion": "0.6.8",
+        "sameFiles": "0",
+        "changedFiles": "0",
+        "mainOnly": "0",
+        "aioOnly": "0"
+      }
+    },
+    {
+      "id": "C104",
+      "line": "aio-v1",
+      "name": "dsh-smooth-stream",
+      "type": "seed",
+      "origin": "upstream",
+      "version": "0.4.3",
+      "path": "distribution/profile-seed/profiles/web-desktop/package.json",
+      "registryStatus": "seed依赖；未直接列入bundle",
+      "audit": {
+        "verdict": "catalog-hit",
+        "compare": "byte-identical",
+        "note": "Fluid streaming rendering and silky scrolling for DeepSeek Harness replies, including Markdown, code blocks, tables, and tool results.",
+        "basis": "package.repository明确声明",
+        "conflict": null
+      },
+      "upstream": {
+        "repository": "https://github.com/Laplace-bit/dsh-smooth-stream",
+        "refType": "version",
+        "catalogName": "Laplace-bit/dsh-smooth-stream",
+        "catalogEntry": "https://github.com/awesome-dsh-plugin/awesome-dsh-plugin/blob/44ae0afab736c06982c00a069f883c3f270884f8/data/plugins/Laplace-bit__dsh-smooth-stream.yml",
+        "provenance": "package.repository明确声明"
+      },
+      "dualVersion": {
+        "relation": "仅AIO",
+        "aioId": "C104",
+        "aioVersion": "0.4.3",
+        "sameFiles": "0",
+        "changedFiles": "0",
+        "mainOnly": "0",
+        "aioOnly": "0"
+      }
+    },
+    {
+      "id": "C105",
+      "line": "aio-v1",
+      "name": "dsh-status-rotator",
+      "type": "seed",
+      "origin": "upstream",
+      "version": "0.9.1",
+      "path": "distribution/profile-seed/profiles/web-desktop/package.json",
+      "registryStatus": "seed bundle加载",
+      "audit": {
+        "verdict": "catalog-hit",
+        "compare": "byte-identical",
+        "note": "Rotates the DSH chat turn-status label (\"Deep diving...\") through user-defined phrases with typewriter animation, rainbow gradient, live placeholder values, tab-title rotation, schedule presets, and video-site-style danmaku floating behind the UI.",
+        "basis": "package.repository明确声明",
+        "conflict": null
+      },
+      "upstream": {
+        "repository": "https://github.com/01Virex/dsh-status-rotator",
+        "refType": "version",
+        "catalogName": "01Virex/dsh-status-rotator",
+        "catalogEntry": "https://github.com/awesome-dsh-plugin/awesome-dsh-plugin/blob/44ae0afab736c06982c00a069f883c3f270884f8/data/plugins/01Virex__dsh-status-rotator.yml",
+        "provenance": "package.repository明确声明"
+      },
+      "dualVersion": {
+        "relation": "仅AIO",
+        "aioId": "C105",
+        "aioVersion": "0.9.1",
+        "sameFiles": "0",
+        "changedFiles": "0",
+        "mainOnly": "0",
+        "aioOnly": "0"
+      }
+    },
+    {
+      "id": "C106",
+      "line": "aio-v1",
+      "name": "dsh-usage-skill",
+      "type": "seed",
+      "origin": "upstream",
+      "version": "0.3.0",
+      "path": "distribution/profile-seed/profiles/web-desktop/package.json",
+      "registryStatus": "seed依赖；未直接列入bundle",
+      "audit": {
+        "verdict": "catalog-miss",
+        "compare": "byte-identical-fileset-differs",
+        "note": "Token usage analytics, provider balances, and skill bundle management for the dsh web GUI",
+        "basis": "package.repository明确声明",
+        "conflict": null
+      },
+      "upstream": {
+        "repository": "https://github.com/statem-li/dsh-usage-skill",
+        "refType": "version",
+        "catalogName": null,
+        "catalogEntry": null,
+        "provenance": "package.repository明确声明"
+      },
+      "dualVersion": {
+        "relation": "仅AIO",
+        "aioId": "C106",
+        "aioVersion": "0.3.0",
+        "sameFiles": "0",
+        "changedFiles": "0",
+        "mainOnly": "0",
+        "aioOnly": "0"
+      }
+    },
+    {
+      "id": "C107",
+      "line": "aio-v1",
+      "name": "dsh-whale-widget",
+      "type": "seed",
+      "origin": "upstream",
+      "version": "0.2.10",
+      "path": "distribution/profile-seed/profiles/web-desktop/package.json",
+      "registryStatus": "seed bundle加载",
+      "audit": {
+        "verdict": "catalog-hit",
+        "compare": "byte-identical",
+        "note": "DSH Web 界面右下角的 DeepSeek 余额小鲸鱼挂件（含今日已用、峰谷定价、随机台词、音效与每轮消耗统计）",
+        "basis": "package.repository明确声明",
+        "conflict": null
+      },
+      "upstream": {
+        "repository": "https://github.com/MeteorNOX/DeepSeek-Balance-Whale-Widget",
+        "refType": "version",
+        "catalogName": "MeteorNOX/DeepSeek-Balance-Whale-Widget",
+        "catalogEntry": "https://github.com/awesome-dsh-plugin/awesome-dsh-plugin/blob/44ae0afab736c06982c00a069f883c3f270884f8/data/plugins/MeteorNOX__DeepSeek-Balance-Whale-Widget.yml",
+        "provenance": "package.repository明确声明"
+      },
+      "dualVersion": {
+        "relation": "两版一致（归一化换行）",
+        "mainId": "C046",
+        "mainVersion": "0.2.10",
+        "aioId": "C107",
+        "aioVersion": "0.2.10",
+        "sameFiles": "13",
+        "changedFiles": "0",
+        "mainOnly": "0",
+        "aioOnly": "0"
+      }
+    },
+    {
+      "id": "C111",
+      "line": "aio-v1",
+      "name": "dsh-plugin-guard",
+      "type": "host-fused",
+      "origin": "eac-original",
+      "version": null,
+      "path": null,
+      "registryStatus": "宿主内置保护中心",
+      "audit": {
+        "verdict": "same-name-unresolved",
+        "compare": "已确认宿主融合重写；不可按同路径量化",
+        "note": "安装前快照、回滚、守护启动、事故报告",
+        "basis": "package.repository明确声明",
+        "conflict": null
+      },
+      "credits": {
+        "repository": "https://github.com/lxzy-7/dsh-plugin-guard",
+        "note": "宿主融合改写，非整包复制；上游仓库仅作能力出处致谢"
+      },
+      "candidates": [
+        {
+          "name": "DingZhiQi5596/dsh-plugin-guard",
+          "github": "https://github.com/DingZhiQi5596/dsh-plugin-guard"
+        },
+        {
+          "name": "taxueseek/dsh-plugin-guard",
+          "github": "https://github.com/taxueseek/dsh-plugin-guard"
+        }
+      ],
+      "dualVersion": {
+        "relation": "两版均宿主融合；见宿主源码",
+        "mainId": "C108",
+        "aioId": "C111",
+        "sameFiles": "0",
+        "changedFiles": "0",
+        "mainOnly": "0",
+        "aioOnly": "0"
+      }
+    },
+    {
+      "id": "C112",
+      "line": "aio-v1",
+      "name": "dsh-web-plugin-manager",
+      "type": "host-fused",
+      "origin": "eac-original",
+      "version": null,
+      "path": null,
+      "registryStatus": "宿主内置保护中心",
+      "audit": {
+        "verdict": "catalog-miss",
+        "compare": "已确认宿主融合重写；不可按同路径量化",
+        "note": "安装验证、失败回滚与健康检查入口",
+        "basis": "package.repository明确声明",
+        "conflict": null
+      },
+      "credits": {
+        "repository": "https://github.com/LX2000WASD/dsh-web-plugin-manager",
+        "note": "宿主融合改写，非整包复制；上游仓库仅作能力出处致谢"
+      },
+      "dualVersion": {
+        "relation": "两版均宿主融合；见宿主源码",
+        "mainId": "C109",
+        "aioId": "C112",
+        "sameFiles": "0",
+        "changedFiles": "0",
+        "mainOnly": "0",
+        "aioOnly": "0"
+      }
+    },
+    {
+      "id": "C113",
+      "line": "aio-v1",
+      "name": "dsh-plugin-healthcheck",
+      "type": "host-fused",
+      "origin": "eac-original",
+      "version": null,
+      "path": null,
+      "registryStatus": "宿主内置保护中心",
+      "audit": {
+        "verdict": "catalog-miss",
+        "compare": "已确认宿主融合重写；不可按同路径量化",
+        "note": "静态体检、模块遮蔽和高风险扫描",
+        "basis": "package.repository明确声明",
+        "conflict": null
+      },
+      "credits": {
+        "repository": "https://github.com/chenw2759-wq/dsh-plugin-healthcheck",
+        "note": "宿主融合改写，非整包复制；上游仓库仅作能力出处致谢"
+      },
+      "dualVersion": {
+        "relation": "两版均宿主融合；见宿主源码",
+        "mainId": "C110",
+        "aioId": "C113",
+        "sameFiles": "0",
+        "changedFiles": "0",
+        "mainOnly": "0",
+        "aioOnly": "0"
+      }
+    }
+  ]
+}

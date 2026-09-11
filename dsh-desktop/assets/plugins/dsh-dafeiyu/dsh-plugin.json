@@ -1,0 +1,33 @@
+{
+  "$schema": "https://raw.githubusercontent.com/Yan-Zero/dsh-std/614dfa1ac168db79fcf4577cf0ebb34e2e3b944b/packages/manifest/schema/dsh-plugin-0.15.schema.json",
+  "manifestVersion": "0.15",
+  "id": "io.github.qcytsn.dsh-dafeiyu",
+  "name": "dsh-dafeiyu",
+  "version": "0.1.0-alpha.6",
+  "facets": {
+    "host": {
+      "entry": "src/index.js",
+      "apiVersion": "v1alpha1"
+    }
+  },
+  "requires": {
+    "contracts": []
+  },
+  "permissions": [],
+  "contributes": {
+    "commands": []
+  },
+  "subscriptions": [],
+  "license": "SEE LICENSE IN ASSET_LICENSE.md",
+  "source": {
+    "repository": "https://github.com/QCYTSN/dsh-dafeiyu"
+  },
+  "overrides": [],
+  "x-eac": {
+    "role": "identity-metadata",
+    "note": "EAC 经 companion-sync 注册表加载（非 std adapter）；facets 留空 = 尚未参与 std 协商",
+    "ledger": "assets/SOURCES.json#C010",
+    "patched": true,
+    "patchNote": "same-version-modified"
+  }
+}

@@ -70,10 +70,9 @@ test('raw-html is EAC-managed, opt-in, and cannot be overwritten by upstream aut
   assert.match(host, /let aesthetic = false/);
 
   const companion = readFileSync(join(root, 'lib', 'desktop', 'companion-sync.ts'), 'utf8');
-  const sourcesStart = companion.indexOf('export const PLUGIN_UPDATE_SOURCES');
-  const sourcesEnd = companion.indexOf('};', sourcesStart);
-  assert.ok(sourcesStart >= 0 && sourcesEnd > sourcesStart, 'pluginUpdateSources must exist');
-  assert.doesNotMatch(companion.slice(sourcesStart, sourcesEnd), /['"]dsh-raw-html['"]\s*:/,
+  const generatedRegistry = readFileSync(join(root, 'lib', 'desktop', 'plugin-sync-registry.ts'), 'utf8');
+  assert.match(companion, /PLUGIN_UPDATE_SOURCES[^=]*=\s*GENERATED_PLUGIN_UPDATE_SOURCES/);
+  assert.doesNotMatch(generatedRegistry, /plugin-sync:update-sources[^\n]*dsh-raw-html/,
     'EAC-managed raw-html must not be replaced by the upstream updater');
 });
 

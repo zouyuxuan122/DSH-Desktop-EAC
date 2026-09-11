@@ -19,6 +19,7 @@ import test from 'node:test';
 const desktopRoot = join(dirname(fileURLToPath(import.meta.url)), '..');
 const repoRoot = join(desktopRoot, '..');
 const script = join(desktopRoot, 'scripts', 'plugin-sync.mjs');
+const registryScript = join(desktopRoot, 'scripts', 'generate-plugin-registry.mjs');
 const manifestPath = join(repoRoot, '.sync', 'plugins.json');
 const schemaPath = join(repoRoot, '.sync', 'plugins.schema.json');
 const policiesPath = join(repoRoot, '.sync', 'policies.json');
@@ -27,6 +28,15 @@ const sync = await import(pathToFileURL(script).href);
 
 function run(args: string[], cwd = repoRoot) {
   return spawnSync(process.execPath, [script, ...args], {
+    cwd,
+    encoding: 'utf8',
+    env: { ...process.env, NO_COLOR: '1' },
+  });
+}
+
+
+function runRegistryGenerator(args: string[], cwd = repoRoot) {
+  return spawnSync(process.execPath, [registryScript, ...args], {
     cwd,
     encoding: 'utf8',
     env: { ...process.env, NO_COLOR: '1' },
@@ -78,6 +88,8 @@ function fixture(location = tmpdir()) {
   policies.runtimeUpdates.legacySourceCount = 0;
   writeFileSync(join(root, '.sync', 'policies.json'), JSON.stringify(policies, null, 2) + '\n');
   writeFileSync(join(root, '.sync', 'plugins.json'), JSON.stringify(manifest, null, 2) + '\n');
+  const generated = runRegistryGenerator(['--root', root]);
+  if (generated.status !== 0) throw new Error(generated.stderr || generated.stdout);
   return { root, pluginRoot, manifest, cleanup: () => rmSync(root, { recursive: true, force: true }) };
 }
 
@@ -265,6 +277,66 @@ test('generate-registry is deterministic and --check detects generated drift', (
     assert.match(check.stderr, /drift|generated registry/);
   } finally {
     run(['generate-registry']);
+  }
+});
+
+test('standalone registry generator checks the checked-in generated file', () => {
+  const registry = join(repoRoot, 'dsh-desktop', 'lib', 'desktop', 'plugin-sync-registry.ts');
+  const result = runRegistryGenerator(['--check']);
+  assert.equal(result.status, 0, result.stderr || result.stdout);
+  assert.match(result.stdout, /generated registry valid/);
+  assert.match(readFileSync(registry, 'utf8'), /run generate-plugin-registry\.mjs/);
+});
+
+test('standalone registry generator can create a missing registry from manifest sources', () => {
+  const t = fixture();
+  try {
+    const manifestPath = join(t.root, '.sync', 'plugins.json');
+    const policiesPath = join(t.root, '.sync', 'policies.json');
+    const manifest = JSON.parse(readFileSync(manifestPath, 'utf8'));
+    manifest.plugins[0].runtimeUpdate = {
+      allowed: true,
+      defaultAction: 'prompt',
+      source: { kind: 'npm', name: 'demo-plugin' },
+    };
+    const policies = JSON.parse(readFileSync(policiesPath, 'utf8'));
+    policies.runtimeUpdates.legacySourceCount = 1;
+    writeFileSync(manifestPath, JSON.stringify(manifest, null, 2) + '\n');
+    writeFileSync(policiesPath, JSON.stringify(policies, null, 2) + '\n');
+
+    const result = runRegistryGenerator(['--root', t.root]);
+    assert.equal(result.status, 0, result.stderr || result.stdout);
+    const registry = join(t.root, 'dsh-desktop', 'lib', 'desktop', 'plugin-sync-registry.ts');
+    assert.ok(existsSync(registry));
+    assert.equal(runRegistryGenerator(['--root', t.root, '--check']).status, 0);
+  } finally {
+    t.cleanup();
+  }
+});
+
+test('validate-manifest requires the generated registry instead of a legacy companion source table', () => {
+  const t = fixture();
+  try {
+    const registry = join(t.root, 'dsh-desktop', 'lib', 'desktop', 'plugin-sync-registry.ts');
+    rmSync(registry, { force: true });
+    const result = run(['validate-manifest', '--root', t.root]);
+    assert.equal(result.status, 1, result.stdout || result.stderr);
+    assert.match(result.stderr, /runtime source registry is missing/);
+  } finally {
+    t.cleanup();
+  }
+});
+
+test('validate-manifest rejects a generated registry without its source marker', () => {
+  const t = fixture();
+  try {
+    const registry = join(t.root, 'dsh-desktop', 'lib', 'desktop', 'plugin-sync-registry.ts');
+    writeFileSync(registry, 'export const PLUGIN_UPDATE_SOURCES = {};\n');
+    const result = run(['validate-manifest', '--root', t.root]);
+    assert.equal(result.status, 1, result.stdout || result.stderr);
+    assert.match(result.stderr, /runtime source registry is missing/);
+  } finally {
+    t.cleanup();
   }
 });
 

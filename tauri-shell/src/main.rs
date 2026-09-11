@@ -63,6 +63,19 @@ fn ws_port() -> u16 {
     WS_PORT_EFFECTIVE.load(Ordering::SeqCst)
 }
 
+/// 生成带实际桥端口的 WebView 初始化脚本。
+///
+/// 主窗首屏 /loading 会通过页面 HTML 注入端口，但导航到真实 Web UI
+/// 后页面上下文会重建；仅注入裸 BRIDGE_JS 会让客户端退回固定的
+/// 19873，端口发生回退时窗口控制全部失效。
+fn bridge_init_script() -> String {
+    format!(
+        "window.__DSH_BRIDGE_WS__='ws://127.0.0.1:{}/ws';\n{}",
+        ws_port(),
+        BRIDGE_JS,
+    )
+}
+
 fn locale_tag_is_chinese(tag: &str) -> bool {
     tag.trim()
         .split(['-', '_'])
@@ -1486,7 +1499,7 @@ fn open_float_window(app: &tauri::AppHandle, session_id: &str) -> Result<bool, S
          window.dshDesktop._onReady(function(){{\
            window.dshDesktop._send('float.ready',{{win:{:?}}});\
          }});",
-        session_id, label, BRIDGE_JS, label
+        session_id, label, bridge_init_script(), label
     );
     let data_dir: PathBuf = app
         .path()
@@ -2445,7 +2458,7 @@ fn main() {
                                     // msWebOOUI/msPdfOOUI/msSmartScreenProtection 禁用项，
                                     // 与浮窗（显式拼接该前缀）行为分裂。
                                     .additional_browser_args("--disable-features=msWebOOUI,msPdfOOUI,msSmartScreenProtection --autoplay-policy=no-user-gesture-required")
-                                    .initialization_script(BRIDGE_JS);
+                                    .initialization_script(&bridge_init_script());
                                     if let Some((px, py)) = sim_pos {
                                         builder = builder.position(px, py);
                                     }

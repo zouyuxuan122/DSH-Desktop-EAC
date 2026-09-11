@@ -44,12 +44,15 @@ function clamp(text) {
 
 const fileChangesProjectionDefinition = {
   key: "fileChanges",
-  // dsh 0.1.0-rc.6 requires stateVersion (non-negative integer) and a
-  // `view` that shapes the raw state into the schema-validated value.
+  // dsh 5.3.x 使用 stateSchema + wire.{viewSchema,view} 契约。
+  // 旧版顶层 schema/view 不会进入客户端可见的 snapshot。
   stateVersion: 0,
-  schema: fileChangesSchema,
+  stateSchema: fileChangesSchema,
   init: () => ({ changes: [], truncated: false }),
-  view: (state) => state,
+  wire: {
+    viewSchema: fileChangesSchema,
+    view: (state) => state
+  },
   apply: (state, event) => {
     if (event.type !== "tool/result") return state;
     const diffs = event.data?.meta?.diffs;

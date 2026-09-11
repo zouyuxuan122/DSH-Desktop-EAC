@@ -1,5 +1,5 @@
 // GENERATED FILE — do not edit by hand.
-// Source: .sync/plugins.json (run plugin-sync.mjs generate-registry).
+// Source: .sync/plugins.json (run generate-plugin-registry.mjs).
 // plugin-sync:update-sources {"better-sidebar":{"npm":"dsh-better-sidebar"},"computer-user":{"npm":"computer-user"},"dsh-navbar":{"npm":"@vlln/dsh-navbar"},"dsh-pet":{"npm":"dsh-pet"},"dsh-session-manager":{"npm":"dsh-session-manager"},"dsh-undo":{"github":"lire1131/dsh-undo-savepoint"},"mobile-fix":{"npm":"dsh-web-mobile-fix"},"offpeak":{"npm":"dsh-offpeak"},"picturereader":{"npm":"picturereader"},"soul-md":{"npm":"dsh-soul-md"},"unified-market":{"npm":"dsh-unified-market"}}
 
 export const PLUGIN_SYNC_REGISTRY = {

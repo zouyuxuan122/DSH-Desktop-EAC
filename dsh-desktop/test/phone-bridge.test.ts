@@ -161,12 +161,18 @@ test('phone bridge: start → 配对页/门禁/状态，错误 token 被拒', as
 
 test('phone bridge: 桌面批准 → approved + cookie + 完整代理（Host/Origin 改写 + 正文透传）', async () => {
   // 模拟内核：记录收到的头，回一个静态页/JSON。
-  const seen: { url: string; host: string | undefined; origin: string | undefined; body: string }[] = []
+  const seen: { url: string; host: string | undefined; origin: string | undefined; acceptEncoding: string | undefined; body: string }[] = []
   const kernel = http.createServer((req, res) => {
     const body: Buffer[] = []
     req.on('data', (c) => body.push(c as Buffer))
     req.on('end', () => {
-      seen.push({ url: req.url ?? '', host: req.headers.host, origin: req.headers.origin, body: Buffer.concat(body).toString('utf8') })
+      seen.push({
+        url: req.url ?? '',
+        host: req.headers.host,
+        origin: req.headers.origin,
+        acceptEncoding: req.headers['accept-encoding'],
+        body: Buffer.concat(body).toString('utf8'),
+      })
       if ((req.url ?? '').startsWith('/api/')) {
         res.writeHead(200, { 'content-type': 'application/json', connection: 'close' })
         res.end(JSON.stringify({ ok: true, items: [1, 2, 3] }))
@@ -204,9 +210,11 @@ test('phone bridge: 桌面批准 → approved + cookie + 完整代理（Host/Ori
     const page = await request(base + '/', { cookie: mobileCookie })
     assert.equal(page.status, 200)
     assert.match(page.text, /DeepSeek Harness/)
+    assert.match(page.text, /crypto\.randomUUID/)
     assert.equal(seen[0].url, '/')
     // Host/Origin 改写：内核看到自己的 origin（信任围栏视为同源）
     assert.equal(seen[0].host, `127.0.0.1:${kernelPort(kernel)}`)
+    assert.equal(seen[0].acceptEncoding, 'identity')
 
     // POST /api/*：请求体原样透传（不再有 client-request 信封协议）
     const api = await request(base + '/api/session.list', { method: 'POST', body: { cursor: 7 }, cookie: mobileCookie, headers: { origin: `http://192.168.1.20:${info.port}` } })
@@ -246,6 +254,42 @@ test('phone bridge: 桌面批准 → approved + cookie + 完整代理（Host/Ori
     // 断言失败也必须停桥：泄漏的监听句柄会让 node --test 进程永不退出
     // （全量测试「跑完不退出」挂起的直接来源）。stop 幂等，重复调用无害。
     if (bridge !== null) await bridge.stop().catch(() => {})
+  }
+})
+
+test('phone bridge: 上游已有 gzip 编码时不重复压缩 JSON', async () => {
+  const payload = JSON.stringify({ ok: true, items: ['历史会话 A', '历史会话 B'] })
+  const kernel = http.createServer((req, res) => {
+    if ((req.url ?? '').startsWith('/api/')) {
+      res.writeHead(200, {
+        'content-type': 'application/json',
+        'content-encoding': 'gzip',
+        connection: 'close',
+      })
+      res.end(zlib.gzipSync(payload))
+      return
+    }
+    res.writeHead(200, { 'content-type': 'text/html; charset=utf-8', connection: 'close' })
+    res.end('<!doctype html><html><head><title>DeepSeek Harness</title></head><body><div id="root"></div></body></html>')
+  })
+  await new Promise<void>((resolve) => kernel.listen(0, '127.0.0.1', resolve))
+  const { bridge } = launch(kernel)
+  try {
+    const info = await bridge.start()
+    const base = `http://127.0.0.1:${info.port}`
+    const cookie = await approveAndCookie(bridge, info)
+    const response = await request(base + '/api/session.list', {
+      method: 'POST',
+      body: {},
+      cookie,
+      headers: { 'accept-encoding': 'gzip' },
+    })
+    assert.equal(response.status, 200)
+    assert.equal(response.headers['content-encoding'], 'gzip')
+    assert.deepEqual(JSON.parse(zlib.gunzipSync(response.raw).toString('utf8')), JSON.parse(payload))
+  } finally {
+    await bridge.stop()
+    kernel.close()
   }
 })
 
@@ -386,8 +430,19 @@ test('phone bridge: lanAddress 优先 RFC1918 私网地址，避免 169.254 链�
   })
   // 混合网卡：有家用网段就不选 APIPA/虚拟网卡
   assert.equal(lanAddress({ 'Wi-Fi': [v4('192.168.1.23')], 'Ethernet': [v4('169.254.83.107'), v4('10.0.0.5')] }), '192.168.1.23')
+  // VMware/VirtualBox/Hyper-V 等虚拟网卡即使是 RFC1918，也不能抢在物理网卡前。
+  assert.equal(lanAddress({
+    'VMware Network Adapter VMnet1': [v4('192.168.230.1')],
+    'Wi-Fi': [v4('192.168.1.23')],
+  }), '192.168.1.23')
+  assert.equal(lanAddress({
+    'vEthernet (Default Switch)': [v4('172.22.0.1')],
+    Ethernet: [v4('192.168.1.23')],
+  }), '192.168.1.23')
   // 10./172.16-31 网段同样优先
   assert.equal(lanAddress({ 'VPN': [v4('10.8.0.2')], 'Ethernet': [v4('172.22.0.9')], 'Wi-Fi': [v4('192.168.1.23')] }), '10.8.0.2')
+  // 没有普通 LAN 时允许 Tailscale 地址作为远程配对入口。
+  assert.equal(lanAddress({ Tailscale: [v4('100.89.1.2')] }), '100.89.1.2')
   // 只有链路本地 → 兜底可用（好过直接回环）
   assert.equal(lanAddress({ 'Ethernet': [v4('169.254.83.107')] }), '169.254.83.107')
   // 只有回环 → 127.0.0.1

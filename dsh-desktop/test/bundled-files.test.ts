@@ -70,3 +70,8 @@ test('Tauri 资源装配不再携带 WSL 后端', () => {
   assert.doesNotMatch(stageScript, /wsl-backend/i);
   assert.ok(!fs.existsSync(join(root, 'wsl-backend.ts')));
 });
+
+test('generated plugin registry is included in the staged desktop runtime', () => {
+  const lists = stageLists();
+  assert.ok(lists.LIB_DESKTOP.includes('plugin-sync-registry.js'));
+});
