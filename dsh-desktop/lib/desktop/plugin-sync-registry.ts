@@ -1,6 +1,6 @@
 // GENERATED FILE — do not edit by hand.
 // Source: .sync/plugins.json (run generate-plugin-registry.mjs).
-// plugin-sync:update-sources {"better-sidebar":{"npm":"dsh-better-sidebar"},"computer-user":{"npm":"computer-user"},"dsh-navbar":{"npm":"@vlln/dsh-navbar"},"dsh-pet":{"npm":"dsh-pet"},"dsh-session-manager":{"npm":"dsh-session-manager"},"dsh-undo":{"github":"lire1131/dsh-undo-savepoint"},"mobile-fix":{"npm":"dsh-web-mobile-fix"},"offpeak":{"npm":"dsh-offpeak"},"picturereader":{"npm":"picturereader"},"soul-md":{"npm":"dsh-soul-md"},"unified-market":{"npm":"dsh-unified-market"}}
+// plugin-sync:update-sources {"better-sidebar":{"npm":"dsh-better-sidebar"},"computer-user":{"npm":"computer-user"},"dsh-navbar":{"npm":"@vlln/dsh-navbar"},"dsh-pet":{"npm":"dsh-pet"},"dsh-session-manager":{"npm":"dsh-session-manager"},"dsh-undo":{"github":"lire1131/dsh-undo-savepoint"},"mobile-fix":{"npm":"dsh-web-mobile-fix"},"offpeak":{"npm":"dsh-offpeak"},"picturereader":{"npm":"picturereader"},"soul-md":{"npm":"dsh-soul-md"},"think-zh-expand-eac":{"github":"jing-hy/dsh-think-zh-expand-eac"},"unified-market":{"npm":"dsh-unified-market"}}
 
 export const PLUGIN_SYNC_REGISTRY = {
   "entries": {
@@ -758,6 +758,25 @@ export const PLUGIN_SYNC_REGISTRY = {
       },
       "syncMode": "manual"
     },
+    "think-zh-expand-eac": {
+      "class": "follow-upstream",
+      "kind": "plugin",
+      "packageName": "dsh-think-zh-expand-eac",
+      "path": "dsh-desktop/assets/plugins/dsh-think-zh-expand-eac",
+      "runtimeUpdate": {
+        "allowed": true,
+        "defaultAction": "prompt",
+        "source": {
+          "kind": "github",
+          "repository": "https://github.com/jing-hy/dsh-think-zh-expand-eac"
+        }
+      },
+      "source": {
+        "kind": "github",
+        "repository": "https://github.com/jing-hy/dsh-think-zh-expand-eac"
+      },
+      "syncMode": "mirror"
+    },
     "ui-skin-blue-fantasy": {
       "class": "resource",
       "kind": "skin",
@@ -978,6 +997,9 @@ export const PLUGIN_SYNC_REGISTRY = {
     },
     "soul-md": {
       "npm": "dsh-soul-md"
+    },
+    "think-zh-expand-eac": {
+      "github": "jing-hy/dsh-think-zh-expand-eac"
     },
     "unified-market": {
       "npm": "dsh-unified-market"

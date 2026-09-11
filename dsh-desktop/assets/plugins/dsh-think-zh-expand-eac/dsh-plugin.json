@@ -1,12 +1,12 @@
 {
   "$schema": "https://raw.githubusercontent.com/Yan-Zero/dsh-std/614dfa1ac168db79fcf4577cf0ebb34e2e3b944b/packages/manifest/schema/dsh-plugin-0.15.schema.json",
   "manifestVersion": "0.15",
-  "id": "io.github.jing-hy.dsh-unified-market",
-  "name": "dsh-unified-market",
-  "version": "0.4.0",
+  "id": "io.github.jing-hy.dsh-think-zh-expand-eac",
+  "name": "dsh-think-zh-expand-eac",
+  "version": "1.0.0",
   "facets": {
     "host": {
-      "entry": "lib/host.js",
+      "entry": "lib/index.js",
       "apiVersion": "v1alpha1"
     }
   },
@@ -20,14 +20,14 @@
   "subscriptions": [],
   "license": "MIT",
   "source": {
-    "repository": "https://github.com/jing-hy/dsh-unified-market"
+    "repository": "https://github.com/jing-hy/dsh-think-zh-expand-eac"
   },
   "overrides": [],
   "x-eac": {
     "role": "identity-metadata",
     "note": "EAC 经 companion-sync 注册表加载（非 std adapter）；facets 留空 = 尚未参与 std 协商",
-    "ledger": "assets/SOURCES.json#C042",
+    "ledger": "assets/SOURCES.json#C114",
     "patched": true,
-    "patchNote": "same-version-modified"
+    "patchNote": "fork-of-upstream"
   }
 }

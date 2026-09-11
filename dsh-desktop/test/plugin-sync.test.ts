@@ -94,7 +94,7 @@ test('validate-manifest accepts the checked-in inventory without network access'
   const result = run(['validate-manifest']);
   assert.equal(result.status, 0, result.stderr || result.stdout);
   assert.match(result.stdout, /manifest valid/);
-  assert.match(result.stdout, /plugins=47/);
+  assert.match(result.stdout, /plugins=48/);
   assert.match(result.stdout, /skins=10/);
   assert.match(result.stdout, /sdkPlugins=1/);
 });
@@ -272,7 +272,7 @@ test('generate-lock and validate --locked enforce completeness and digests', () 
   assert.equal(generated.status, 0, generated.stderr || generated.stdout);
   const lockPath = join(repoRoot, '.sync', 'plugins.lock.json');
   const lock = JSON.parse(readFileSync(lockPath, 'utf8'));
-  assert.equal(Object.keys(lock.plugins).length, 58);
+  assert.equal(Object.keys(lock.plugins).length, 59);
   assert.equal(run(['validate', '--locked']).status, 0);
 
   const original = readFileSync(lockPath);

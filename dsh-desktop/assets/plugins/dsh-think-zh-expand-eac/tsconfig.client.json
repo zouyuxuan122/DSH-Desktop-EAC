@@ -1,0 +1,23 @@
+{
+  // dsh-think-zh-expand-eac — client 端构建配置：src/client/index.ts →
+  // lib/.client-build/index.js（CommonJS 单文件，scripts/build.mjs 注入模板）。
+  // CommonJS 产物内联进 __ModuleLoader__ factory 作用域后，
+  // require / exports / module 均为 factory 作用域变量，可直接运行。
+  //
+  // EAC 定制：已移除渲染器替换，故不再需要 react 类型；仅中文化逻辑用 DOM。
+  // lib 需含 DOM.Iterable —— 中文化代码对 NodeList 做迭代。
+  "compilerOptions": {
+    "strict": true,
+    "target": "es2022",
+    "module": "commonjs",
+    "moduleResolution": "bundler",
+    "outDir": "lib/.client-build",
+    "rootDir": "src/client",
+    "lib": ["es2022", "dom", "dom.iterable"],
+    "skipLibCheck": true,
+    "esModuleInterop": true,
+    "forceConsistentCasingInFileNames": true,
+    "types": []
+  },
+  "include": ["src/client/**/*.ts"]
+}

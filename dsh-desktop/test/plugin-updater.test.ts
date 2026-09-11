@@ -33,7 +33,7 @@ function generatedUpdateSources() {
 }
 
 describe('版本判定', () => {
-  it('generated registry preserves the existing eleven runtime update sources', () => {
+  it('generated registry preserves the existing twelve runtime update sources', () => {
     assert.deepEqual(generatedUpdateSources(), {
       'picturereader': { npm: 'picturereader' },
       'computer-user': { npm: 'computer-user' },
@@ -46,6 +46,8 @@ describe('版本判定', () => {
       'unified-market': { npm: 'dsh-unified-market' },
       'dsh-session-manager': { npm: 'dsh-session-manager' },
       'dsh-undo': { github: 'lire1131/dsh-undo-savepoint' },
+      // 5.4.x 新增：内置「中文思考增强」EAC 派生版（GitHub 源，未发 npm）
+      'think-zh-expand-eac': { github: 'jing-hy/dsh-think-zh-expand-eac' },
     });
   });
 

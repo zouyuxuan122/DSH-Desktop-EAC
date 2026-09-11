@@ -1,0 +1,16 @@
+# dsh-think-zh-expand-eac bundle patch: inserts the plugin row into the profile
+# roster.
+#
+# 挂载内容（EAC 定制版）：
+#   - host 半：注册 system-prompt section，强制 agent 用中文思考与回复
+#   - client 半：界面标签中文化（DOM 精准文本替换）
+#
+# 与上游 dsh-think-zh-expand 的区别：本版**不注册任何渲染器**，因此不再
+# 抢占 conversation.chat.node 的 assistant-step 座位，可与 dsh-auto-collapse
+# / dsh-turn-fold 等折叠类插件共存。
+#
+# 安装：
+#   dsh plugin --profile web-desktop add github:jing-hy/dsh-think-zh-expand-eac
+- insert:
+    - id: think-zh-expand-eac
+      name: 'dsh-think-zh-expand-eac'

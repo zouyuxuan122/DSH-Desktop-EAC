@@ -53,7 +53,7 @@
   "runtimeUpdates": {
     "defaultAllowed": false,
     "requiresExplicitSource": true,
-    "legacySourceCount": 11,
+    "legacySourceCount": 12,
     "sourceMapMustBeOneToOne": true
   },
   "forbiddenTrackedNames": [

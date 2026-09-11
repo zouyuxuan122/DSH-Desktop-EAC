@@ -268,6 +268,18 @@ export const COMPANION_PLUGINS: CompanionPluginDef[] = [
   // 多轮并行出「均衡/精简/详尽」三候选择优迭代，可包装 /goal。
   // 纯客户端 + host 半边（loopback 路由），peer 依赖全部由 dsh 宿主提供。
   { id: 'dsh-webui-prompt-optimizer', name: 'dsh-webui-prompt-optimizer', dir: 'dsh-webui-prompt-optimizer' },
+  // 思考增强（中文）：强制 agent 用中文思考与回复（system-prompt section），
+  // 并把界面残留的硬编码英文（Thinking / Tool Call 等）中文化。
+  // 这是上游 baosfeng/dsh-think-zh-expand 的 EAC 定制派生版
+  // （https://github.com/jing-hy/dsh-think-zh-expand-eac，MIT）：**已移除全部
+  // 接管对话渲染器的显示功能**（assistant-step 渲染器抢占、ThinkBlock 默认
+  // 展开、自绘 SVG 图标与样式表），因此可与 dsh-auto-collapse / dsh-turn-fold
+  // 等折叠插件共存 —— 上游版会与他们抢 conversation.chat.node 座位，导致
+  // 折叠失效且不报错。section 名改为 dsh-think-zh-eac，避免与上游版同层同名
+  // 注册抛错拖垮插件树。
+  // 走 patch 行（非 bundles）：用户可在「设置 → 插件 → 管理」关闭；
+  // 其夹带 patch 是普通 insert 行，本行不会被 removeBundledRowDuplicates 去重。
+  { id: 'think-zh-expand-eac', name: 'dsh-think-zh-expand-eac', dir: 'dsh-think-zh-expand-eac' },
 ];
 
 export function companionPluginsForPlatform(platform: NodeJS.Platform = 'win32'): CompanionPluginDef[] {

@@ -170,6 +170,7 @@ dsh-unified-market/
 │   ├── client.js           # 浏览器半边：设置页「统一市场」tab
 │   ├── allow-builds.mjs    # pnpm allowBuilds 拦截自动放行
 │   ├── artifact-keep.mjs   # 第三方本地构建产物保留
+│   ├── profile-sync.mjs    # profile 配置的「双边同步」写层（v0.4.0 起）
 │   └── plugin-conflict-scan.mjs  # 安装前冲突预检
 ├── data/catalog-snapshot.json    # 精选目录离线快照（官网不可达时兜底）
 ├── data/packs-snapshot.json      # 功能包市场索引离线快照（v0.3.0 起）
@@ -179,6 +180,56 @@ dsh-unified-market/
 
 通信：client 通过 `POST /api/dsh-unified-market`（兼容 `/api/dsh-market`）调用 host。
 host 半边运行在 `dsh web` 进程（Cordis plugin，注入 `webServer`）。
+
+---
+
+## profile 配置：双边同步（v0.4.0 起）
+
+市场对 profile 配置（`package.json` 的 `dsh.profile.bundles` 与
+`cordis.patch.yml`）的写入**不再是单向复写**。
+
+**旧行为的问题**：市场原先只经 `dsh plugin add/remove` 间接改配置，由 dsh 内核
+`reconcilePlugins` 按 `dependencies` 整文件重写 `package.json`。整文件重写 =
+「以内存状态覆盖磁盘」——读取之后、写入之前发生的任何外部改动（用户手编、
+其他插件、壳侧 heal、并发会话）都会被丢掉。
+
+**新行为**：所有配置写盘收敛到 `lib/profile-sync.mjs` 一个入口，规则如下：
+
+| 规则 | 说明 |
+|---|---|
+| 每次重读磁盘 | 无模块级缓存；绝不用操作开始前的快照覆盖当前状态 |
+| 并集合并 | 以 id 为键，只增删本层管理的条目；外部行/未知行/注释/空行**原样保留** |
+| CAS 校验 | 写前比对 SHA256 + size + mtime，冲突则重读重合并（最多 3 次） |
+| 原子写 | 同目录临时文件 + `rename`（patch 被截断 = 启动死循环） |
+| 写前校验 | 空 `- insert:` 块、duplicate loader entry、JSON 可解析 —— 非法产出拒绝落盘 |
+| 写后复核 | 不一致自动回滚到操作前快照 |
+| 快照 | 同时备 `package.json` 与 `cordis.patch.yml`，并提供 `profile.restore` 还原 |
+
+新增 host 方法：
+
+| 方法 | 作用 |
+|---|---|
+| `profile.state` | 读实时状态（bundles / 禁用 id / patch 合法性 / revision / 快照列表） |
+| `profile.toggle` | 启用或禁用某个插件包，双边同步落盘 |
+| `profile.snapshots` | 列出配置快照 |
+| `profile.restore` | 从指定快照还原配置 |
+
+### 禁用插件的正确写法
+
+禁用必须写**顶层编辑型**行：
+
+```yaml
+# 插件市场（dsh-unified-market）：关闭 <id>
+- id: <id>
+  name: '<pkg>'
+  disabled: true
+```
+
+**不要**写成 `- insert:` 块。桌面壳 boot 期的 `removeBundledRowDuplicates`
+（`dsh-desktop/patch-row-heal.js`）会删除与 bundle 包内 patch 同 id 的 insert 块，
+**即使该块带 `disabled: true`** —— 表现为"手写的禁用行凭空消失、插件又启用了"。
+顶层编辑型行不受该去重影响。市场写禁用时会自动把 insert 块内的同 id 内层条目
+一并移除，并清理因此产生的孤立空 `- insert:` 块。
 
 ---
 

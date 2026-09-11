@@ -1,0 +1,5 @@
+node_modules/
+lib/.client-build/
+*.log
+.DS_Store
+Thumbs.db

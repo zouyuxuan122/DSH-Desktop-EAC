@@ -35,11 +35,20 @@ import { parseBlockedBuildKeys, readAllowBuilds, ensureAllowBuilds } from './all
 // 安装前轻量冲突预检（patch 行/settings 命名空间/核心依赖版本），
 // refuse 直接拒绝、warn 由 UI 红字提醒；只读不写。
 import { scanCandidate, collectProfileState } from './plugin-conflict-scan.mjs'
+// v0.4.0：profile 配置的「双边同步」写层。此前市场只经 `dsh plugin add/remove`
+// 间接改配置，由内核 reconcilePlugins 整文件重写 package.json —— 等于「以内存
+// 状态覆盖磁盘」，任何外部改动（用户手编、其他插件、壳侧 heal、并发会话）都会
+// 被丢掉。本层把配置写盘收敛到唯一入口：每次重读磁盘、以 id 为键并集合并、
+// CAS + 原子写 + 写后校验 + 失败回滚，外部行/注释一律保留。
+import {
+  readProfileConfig, commitProfileConfig, applyPatchToggle, mergeBundles, applyBundles,
+  validatePatchText, listConfigSnapshots, restoreConfigSnapshot,
+} from './profile-sync.mjs'
 
 export const name = 'dsh-unified-market'
 
 /** 本市场自身版本（与 package.json 同步；自更新检测用）。 */
-export const SELF_VERSION = '0.3.1'
+export const SELF_VERSION = '0.4.0'
 
 /** Hard dependency: the HTTP carrier must exist before the route registers. */
 export const inject = ['webServer']
@@ -372,6 +381,25 @@ function startOp(kind, profile, target, label, explicitBin, initialOutput) {
         }
       }
     }
+    if (ok && (op.kind === 'install' || op.kind === 'uninstall')) {
+      // v0.4.0 双边同步：内核已在 CLI 内重写过 profile 配置，这里以「磁盘现状」
+      // 为基准做增量合并 —— 本次操作的意图（启用/禁用 + patch 行）落盘，同时
+      // 保留期间发生的一切外部改动。
+      const pkgName = op.pkg || op.target
+      const id = loaderEntryId(op.profile, pkgName)
+      const disabled = op.kind === 'uninstall'
+      syncProfileConfig(
+        op,
+        (patchText) => {
+          const r = applyPatchToggle(
+            patchText, id, pkgName, disabled,
+            '# 插件市场（dsh-unified-market）：' + (disabled ? '关闭 ' : '启用 ') + id,
+          )
+          return r.changed ? r.text : null
+        },
+        (disabled ? '禁用并移除 ' : '启用 ') + pkgName + '（id: ' + id + '）',
+      )
+    }
     if (ok && op.kind === 'install' && hotCtx !== null) {
       // Trial-boot already proved the bundle boots; hot-mount is the bonus
       // that skips the restart. Failure here only falls back to restart.
@@ -399,6 +427,65 @@ function startOp(kind, profile, target, label, explicitBin, initialOutput) {
 
 /** Host ctx for hot-mounting, set by apply(); null in headless/test contexts. */
 let hotCtx = null
+
+/**
+ * v0.4.0 双边同步：在 CLI（pnpm/dsh plugin）结束后，把「外部可能做过的改动」
+ * 与「本次操作的意图」合并落盘，而不是让任一方覆盖另一方。
+ *
+ * 时序要点：内核 reconcilePlugins 已在 CLI 进程内重写过一次 package.json，
+ * 因此这里必须**在 CLI 退出之后**再重读磁盘，绝不使用操作开始前的快照覆盖。
+ *
+ * @param {object} op - 操作对象（含 kind/target/profile）
+ * @param {(patchText: string) => string|null} producePatch - 基于读到的 patch 产出新 patch（null=不改）
+ * @param {string} summary - 写入说明（落进操作输出）
+ */
+function syncProfileConfig(op, producePatch, summary) {
+  try {
+    const dir = profileDir(op.profile)
+    const res = commitProfileConfig(dir, (cfg) => {
+      // 1) bundles：以磁盘现状为基准做增量并集（保留既有相对顺序与其他改动）
+      let pkgText = cfg.pkgText
+      const name = op.pkg || op.target
+      const enable = op.kind === 'uninstall' ? [] : [name]
+      const disable = op.kind === 'uninstall' ? [name] : []
+      const merged = mergeBundles(cfg.bundles, enable, disable)
+      if (merged.changed) {
+        const built = applyBundles(cfg.pkgText, merged.bundles)
+        if (built.error) return { summary: 'bundles 未改动：' + built.error }
+        pkgText = built.text
+      }
+      // 2) patch：把目标 id 规范为顶层编辑型行（禁用）或复位（启用）
+      let patchText
+      if (typeof producePatch === 'function') {
+        const out = producePatch(cfg.patchText, cfg)
+        if (typeof out === 'string') patchText = out
+      }
+      return { pkgText, patch: patchText, summary }
+    })
+    if (res.ok && res.changed) {
+      appendOutput(op, '\n[同步] 双边同步写入 profile 配置：' + summary + (res.snapshot ? '（快照 ' + res.snapshot + '）' : '') + '\n')
+    } else if (!res.ok) {
+      appendOutput(op, '\n[同步] 配置同步未完成：' + String(res.error || '未知原因') + '（外部改动未被覆盖）\n')
+    }
+    return res
+  } catch (err) {
+    appendOutput(op, '\n[同步] 配置同步异常：' + String((err && err.message) || err) + '\n')
+    return { ok: false, error: String((err && err.message) || err) }
+  }
+}
+
+/**
+ * 找出某个包对应的 loader 条目 id（用于禁用/复位 patch 行）。
+ * 优先取包内 cordis.patch.yml 自己声明的 id —— 那是它挂载时使用的真实 id。
+ */
+function loaderEntryId(profile, pkgName) {
+  try {
+    const patch = readFileSync(join(profileDir(profile), 'node_modules', pkgName, 'cordis.patch.yml'), 'utf8')
+    const m = /^\s*-\s*id:\s*([\w.-]+)\s*$/m.exec(patch)
+    if (m !== null) return m[1]
+  } catch { /* 包未落地或没有 patch */ }
+  return pkgName
+}
 
 /** Abort the live op (used by the panel's kill button). */
 function killOp() {
@@ -753,8 +840,6 @@ function matchInstalledPackage(plugin, installedState) {
 const REGISTRY_URL = 'https://awesome-dsh-plugin.com/plugins.json'
 /** Static page fallback when the JSON API is unreachable. */
 const CATALOG_PAGE_URL = 'https://awesome-dsh-plugin.com/zh/'
-/** EAC-owned recommendations merged into every catalog source. */
-const EAC_RECOMMENDED_PATH = join(dirname(fileURLToPath(import.meta.url)), '..', 'data', 'eac-recommended.json')
 
 function pickLang(lang) {
   return lang === 'en' ? 'en' : 'zh'
@@ -782,6 +867,95 @@ function fromRegistryPlugin(p, lang) {
   }
 }
 
+/** Derive the category chips (incl. the leading "all" chip) from the registry. */
+function registryCats(data, lang) {
+  const cats = []
+  const labels = (data.categories && typeof data.categories === 'object') ? data.categories : {}
+  cats.push({ id: 'all', label: lang === 'en' ? 'All' : '全部', count: Array.isArray(data.plugins) ? data.plugins.length : 0 })
+  for (const id of Object.keys(labels)) {
+    const l = labels[id]
+    const label = (l && (l[lang] || l.zh || l.en)) || id
+    const count = Array.isArray(data.plugins) ? data.plugins.filter((p) => p.category === id).length : 0
+    cats.push({ id, label, count })
+  }
+  return cats
+}
+
+/** Map a parsed plugins.json document onto the catalog card shape. */
+function registryToCatalog(data, lang) {
+  const locale = pickLang(lang)
+  return {
+    plugins: Array.isArray(data.plugins) ? data.plugins.map((p) => fromRegistryPlugin(p, locale)) : [],
+    cats: registryCats(data, locale),
+  }
+}
+
+/**
+ * Load the plugin catalog, mirroring dsh-market's registry + snapshot: the
+ * site's own JSON API first (it carries stars/added), then the static page,
+ * then the bundled snapshot as offline fallback. Cached briefly.
+ * @returns {Promise<{plugins: any[], cats: any[], source: 'live'|'cache'|'snapshot'|'none'}>}
+ */
+async function loadCatalogBase(lang) {
+  const now = Date.now()
+  const locale = pickLang(lang)
+  if (catalogCache && catalogCache.lang === locale && now - catalogCache.at < CATALOG_TTL_MS) {
+    return { ...catalogCache.data, source: 'cache' }
+  }
+  // 1) The site's JSON API — the canonical target data.
+  try {
+    const r = await fetch(REGISTRY_URL, { redirect: 'follow', signal: AbortSignal.timeout(10000) })
+    if (!r.ok) throw new Error('HTTP ' + r.status)
+    const data = await r.json()
+    const parsed = registryToCatalog(data, locale)
+    if (parsed.plugins.length === 0) throw new Error('empty registry')
+    catalogCache = { at: now, lang: locale, data: parsed }
+    return { ...parsed, source: 'live' }
+  } catch {
+    // 2) Static page fallback (same card shape).
+    try {
+      const r = await fetch(CATALOG_PAGE_URL, { redirect: 'follow', signal: AbortSignal.timeout(10000) })
+      if (!r.ok) throw new Error('HTTP ' + r.status)
+      const parsed = parseSite(await r.text())
+      if (parsed.plugins.length === 0) throw new Error('empty catalog')
+      catalogCache = { at: now, lang: locale, data: parsed }
+      return { ...parsed, source: 'live' }
+    } catch {
+      // 3) Bundled offline snapshot.
+      try {
+        const snap = JSON.parse(readFileSync(join(dirname(fileURLToPath(import.meta.url)), '..', 'data', 'catalog-snapshot.json'), 'utf8'))
+        if (Array.isArray(snap.plugins) && snap.plugins.length > 0) return { ...snap, source: 'snapshot' }
+      } catch {}
+      return { plugins: [], cats: [], source: 'none' }
+    }
+  }
+}
+
+/**
+ * EAC 定制包装：在原始目录之上合并本地推荐清单，并把合并结果写入缓存，
+ * 使 live / 静态页 / 离线快照三条路径与缓存命中都带推荐标记。
+ */
+async function loadCatalog(lang) {
+  const locale = pickLang(lang)
+  const now = Date.now()
+  if (catalogCache && catalogCache.lang === locale && now - catalogCache.at < CATALOG_TTL_MS) {
+    return { ...catalogCache.data, source: 'cache' }
+  }
+  const base = await loadCatalogBase(lang)
+  const merged = mergeRecommendedCatalog(base, locale)
+  const out = { ...merged, source: base.source }
+  if (out.source !== 'none' && Array.isArray(out.plugins) && out.plugins.length > 0) {
+    catalogCache = { at: now, lang: locale, data: { plugins: out.plugins, cats: out.cats } }
+  }
+  return out
+}
+
+/**
+ * EAC-owned recommendations merged into every catalog source.
+ * （EAC 定制：本地推荐清单随包分发；上游仓库不含此逻辑。）
+ */
+const EAC_RECOMMENDED_PATH = join(dirname(fileURLToPath(import.meta.url)), '..', 'data', 'eac-recommended.json')
+
 function pluginIdentityKeys(plugin) {
   const keys = []
   const repo = normalizeRepoUrl(plugin && plugin.url)
@@ -807,6 +981,10 @@ function loadEacRecommendations(lang) {
  * Put EAC recommendations first while retaining live metadata for duplicates.
  * URL, install source, and display name are all treated as stable identities.
  */
+/** Catalog cache: 5 minutes; snapshot path is the offline fallback. */
+let catalogCache = null
+const CATALOG_TTL_MS = 5 * 60 * 1000
+
 function mergeRecommendedCatalog(catalog, lang) {
   const recommended = loadEacRecommendations(lang)
   if (recommended.length === 0) return catalog
@@ -853,78 +1031,6 @@ function mergeRecommendedCatalog(catalog, lang) {
   ]
   return { plugins, cats }
 }
-
-/** Derive the category chips (incl. the leading "all" chip) from the registry. */
-function registryCats(data, lang) {
-  const cats = []
-  const labels = (data.categories && typeof data.categories === 'object') ? data.categories : {}
-  cats.push({ id: 'all', label: lang === 'en' ? 'All' : '全部', count: Array.isArray(data.plugins) ? data.plugins.length : 0 })
-  for (const id of Object.keys(labels)) {
-    const l = labels[id]
-    const label = (l && (l[lang] || l.zh || l.en)) || id
-    const count = Array.isArray(data.plugins) ? data.plugins.filter((p) => p.category === id).length : 0
-    cats.push({ id, label, count })
-  }
-  return cats
-}
-
-/** Map a parsed plugins.json document onto the catalog card shape. */
-function registryToCatalog(data, lang) {
-  const locale = pickLang(lang)
-  return {
-    plugins: Array.isArray(data.plugins) ? data.plugins.map((p) => fromRegistryPlugin(p, locale)) : [],
-    cats: registryCats(data, locale),
-  }
-}
-
-/**
- * Load the plugin catalog, mirroring dsh-market's registry + snapshot: the
- * site's own JSON API first (it carries stars/added), then the static page,
- * then the bundled snapshot as offline fallback. Cached briefly.
- * @returns {Promise<{plugins: any[], cats: any[], source: 'live'|'cache'|'snapshot'|'none'}>}
- */
-async function loadCatalog(lang) {
-  const now = Date.now()
-  const locale = pickLang(lang)
-  if (catalogCache && catalogCache.lang === locale && now - catalogCache.at < CATALOG_TTL_MS) {
-    return { ...catalogCache.data, source: 'cache' }
-  }
-  // 1) The site's JSON API — the canonical target data.
-  try {
-    const r = await fetch(REGISTRY_URL, { redirect: 'follow', signal: AbortSignal.timeout(10000) })
-    if (!r.ok) throw new Error('HTTP ' + r.status)
-    const data = await r.json()
-    const parsed = mergeRecommendedCatalog(registryToCatalog(data, locale), locale)
-    if (parsed.plugins.length === 0) throw new Error('empty registry')
-    catalogCache = { at: now, lang: locale, data: parsed }
-    return { ...parsed, source: 'live' }
-  } catch {
-    // 2) Static page fallback (same card shape).
-    try {
-      const r = await fetch(CATALOG_PAGE_URL, { redirect: 'follow', signal: AbortSignal.timeout(10000) })
-      if (!r.ok) throw new Error('HTTP ' + r.status)
-      const parsed = mergeRecommendedCatalog(parseSite(await r.text()), locale)
-      if (parsed.plugins.length === 0) throw new Error('empty catalog')
-      catalogCache = { at: now, lang: locale, data: parsed }
-      return { ...parsed, source: 'live' }
-    } catch {
-      // 3) Bundled offline snapshot.
-      try {
-        const snap = JSON.parse(readFileSync(join(dirname(fileURLToPath(import.meta.url)), '..', 'data', 'catalog-snapshot.json'), 'utf8'))
-        if (Array.isArray(snap.plugins) && snap.plugins.length > 0) {
-          return { ...mergeRecommendedCatalog(snap, locale), source: 'snapshot' }
-        }
-      } catch {}
-      const local = mergeRecommendedCatalog({ plugins: [], cats: [] }, locale)
-      if (local.plugins.length > 0) return { ...local, source: 'recommended' }
-      return { plugins: [], cats: [], source: 'none' }
-    }
-  }
-}
-
-/** Catalog cache: 5 minutes; snapshot path is the offline fallback. */
-let catalogCache = null
-const CATALOG_TTL_MS = 5 * 60 * 1000
 
 // ── hot mount (restart-free activation) ─────────────────────────────────────
 // Mirrors dsh-market's approach: after a successful install, if the new
@@ -1863,7 +1969,7 @@ async function loadPacksIndex() {
   return { packs: [], source: 'none' }
 }
 
-export { classifyPlugin, runProbe, whitelistSource, loadCatalog, loadEacRecommendations, mergeRecommendedCatalog, parseSimplePatch, checkUpdates, parseSite, registryToCatalog, normalizeRepoUrl, readInstalledProvenance, matchInstalledPackage, resolveProfile, githubList, npmSearch, readZhIntro, selfUpdateCheck, autoUpdateState, setAutoUpdate, desktopProfile, resolveLinkedUpstream, fetchUpstreamVersion, findUpstreamByName, npmLatestInfo, linkedUpdateTarget } // test hooks; cordis only reads name/inject/apply
+export { classifyPlugin, runProbe, whitelistSource, loadCatalog, parseSimplePatch, checkUpdates, parseSite, registryToCatalog, normalizeRepoUrl, readInstalledProvenance, matchInstalledPackage, resolveProfile, githubList, npmSearch, readZhIntro, selfUpdateCheck, autoUpdateState, setAutoUpdate, desktopProfile, resolveLinkedUpstream, fetchUpstreamVersion, findUpstreamByName, npmLatestInfo, linkedUpdateTarget, loadEacRecommendations, mergeRecommendedCatalog } // test hooks; cordis only reads name/inject/apply
 
 export function apply(ctx) {
   const webServer = ctx.get('webServer')
@@ -1906,6 +2012,77 @@ export function apply(ctx) {
             dshBin: dshBin(),
             binProvided: explicit || null,
             binValid,
+          })
+        }
+        // ── v0.4.0：profile 配置的双边同步接口 ──────────────────────────
+        // 全部以「每次重读磁盘」为准，不使用任何页面侧缓存；写操作走 CAS +
+        // 原子写 + 写后校验，外部改动不会被覆盖。
+        if (method === 'profile.state') {
+          const profile = resolveProfile(body.profile)
+          const cfg = readProfileConfig(profileDir(profile))
+          const v = validatePatchText(cfg.patchText)
+          return sendJson(res, 200, {
+            ok: true,
+            profile,
+            bundles: cfg.bundles,
+            dependencies: Object.keys(cfg.dependencies),
+            // 顶层编辑型禁用行（带 disabled: true 的 patch 行 id）
+            disabledIds: cfg.patchBlocks
+              .filter((b) => b.indent === '' && b.lines.some((l) => /^\s*disabled:\s*true\s*$/.test(l)))
+              .map((b) => b.id),
+            patchRowCount: cfg.patchBlocks.length,
+            patchValid: v.ok,
+            patchProblems: v.problems,
+            revision: cfg.revision,
+            snapshots: listConfigSnapshots(profileDir(profile)).slice(0, 20),
+          })
+        }
+        if (method === 'profile.snapshots') {
+          const profile = resolveProfile(body.profile)
+          return sendJson(res, 200, { ok: true, profile, snapshots: listConfigSnapshots(profileDir(profile)) })
+        }
+        if (method === 'profile.restore') {
+          if (!sameOrigin(req)) return sendJson(res, 403, { ok: false, error: 'untrusted origin' })
+          const profile = resolveProfile(body.profile)
+          const stamp = String(body.stamp || '').trim()
+          const file = String(body.file || 'cordis.patch.yml').trim()
+          if (!stamp) return sendJson(res, 400, { ok: false, error: '缺少快照时间戳' })
+          const r = restoreConfigSnapshot(profileDir(profile), stamp, file)
+          return sendJson(res, 200, r.ok
+            ? { ok: true, restored: r.restored, from: r.from }
+            : { ok: false, error: r.error })
+        }
+        if (method === 'profile.toggle') {
+          if (!sameOrigin(req)) return sendJson(res, 403, { ok: false, error: 'untrusted origin' })
+          const profile = resolveProfile(body.profile)
+          const pkgName = String(body.pkg || '').trim()
+          if (!pkgName) return sendJson(res, 400, { ok: false, error: '缺少包名' })
+          const enable = body.enabled !== false
+          const id = loaderEntryId(profile, pkgName)
+          const dir = profileDir(profile)
+          const result = commitProfileConfig(dir, (cfg) => {
+            const merged = mergeBundles(cfg.bundles, enable ? [pkgName] : [], enable ? [] : [pkgName])
+            const built = merged.changed ? applyBundles(cfg.pkgText, merged.bundles) : { text: cfg.pkgText, error: null }
+            if (built.error) return { summary: 'bundles 合并失败：' + built.error }
+            const tog = applyPatchToggle(
+              cfg.patchText, id, pkgName, !enable,
+              '# 插件市场（dsh-unified-market）：' + (enable ? '启用 ' : '关闭 ') + id,
+            )
+            return {
+              pkgText: built.text,
+              patch: tog.changed ? tog.text : cfg.patchText,
+              summary: (enable ? '启用 ' : '关闭 ') + pkgName + '（id: ' + id + '）',
+            }
+          })
+          return sendJson(res, 200, {
+            ok: result.ok,
+            changed: result.changed,
+            enabled: enable,
+            id,
+            summary: result.summary,
+            error: result.error,
+            snapshot: result.snapshot,
+            attempts: result.attempts,
           })
         }
         if (method === 'installed') {

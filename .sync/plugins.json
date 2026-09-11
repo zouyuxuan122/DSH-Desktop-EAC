@@ -1729,6 +1729,46 @@
         "reviewOnChange": true
       },
       "owner": "desktop-plugins"
+    },
+    {
+      "id": "think-zh-expand-eac",
+      "kind": "plugin",
+      "path": "dsh-desktop/assets/plugins/dsh-think-zh-expand-eac",
+      "packageName": "dsh-think-zh-expand-eac",
+      "class": "follow-upstream",
+      "source": {
+        "kind": "github",
+        "repository": "https://github.com/jing-hy/dsh-think-zh-expand-eac"
+      },
+      "request": {
+        "mode": "latest",
+        "range": "*",
+        "releaseAgeHours": 24
+      },
+      "sync": {
+        "mode": "mirror",
+        "patches": [],
+        "preservePaths": []
+      },
+      "runtimeUpdate": {
+        "allowed": true,
+        "defaultAction": "prompt",
+        "source": {
+          "kind": "github",
+          "repository": "https://github.com/jing-hy/dsh-think-zh-expand-eac"
+        }
+      },
+      "validation": {
+        "entrypoints": [
+          "lib/index.js"
+        ],
+        "commands": []
+      },
+      "license": {
+        "expected": "MIT",
+        "reviewOnChange": true
+      },
+      "owner": "desktop-plugins"
     }
   ],
   "skins": [

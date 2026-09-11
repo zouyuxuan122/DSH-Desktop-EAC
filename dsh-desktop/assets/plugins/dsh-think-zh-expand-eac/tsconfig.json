@@ -1,0 +1,19 @@
+{
+  // dsh-think-zh-expand-eac — server 端构建配置：src/*.ts → lib/*.js（tsc 编译产物）。
+  // 产物必须提交（DSH 直接加载 lib/index.js，不在安装时构建）。
+  // client 端构建见 tsconfig.client.json + scripts/build.mjs。
+  "compilerOptions": {
+    "strict": true,
+    "target": "es2022",
+    "module": "nodenext",
+    "moduleResolution": "nodenext",
+    "outDir": "lib",
+    "rootDir": "src",
+    "skipLibCheck": true,
+    "esModuleInterop": true,
+    "forceConsistentCasingInFileNames": true,
+    "types": ["node"]
+  },
+  "include": ["src/**/*.ts", "src/**/*.d.ts"],
+  "exclude": ["src/client"]
+}

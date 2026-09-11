@@ -1069,13 +1069,13 @@
       "name": "dsh-unified-market",
       "type": "plugin",
       "origin": "upstream",
-      "version": "0.3.1",
+      "version": "0.4.0",
       "path": "dsh-desktop/assets/plugins/dsh-unified-market",
       "registryStatus": "注册表默认启用",
       "audit": {
         "verdict": "catalog-hit",
         "compare": "same-version-modified",
-        "note": "增加EAC推荐标记及对应客户端样式、文案和宿主目录数据处理。具体变更见lib/client.js和lib/host.js行段。",
+        "note": "v0.4.0：profile 配置写入改为双边同步（每次重读磁盘 / 以 id 并集合并 / CAS + 原子写 + 写前校验 + 写后复核回滚 / 双文件快照与还原），新增 profile.state|toggle|snapshots|restore 四个 host 方法，CLI 操作后新增增量同步；保留 EAC 定制（本地推荐清单 data/eac-recommended.json 合并与 EAC 推荐徽章）。",
         "basis": "package.repository明确声明",
         "conflict": null
       },
@@ -2989,6 +2989,28 @@
         "changedFiles": "0",
         "mainOnly": "0",
         "aioOnly": "0"
+      }
+    },
+    {
+      "id": "C114",
+      "line": "main",
+      "name": "dsh-think-zh-expand-eac",
+      "type": "plugin",
+      "origin": "upstream",
+      "version": "1.0.0",
+      "path": "dsh-desktop/assets/plugins/dsh-think-zh-expand-eac",
+      "registryStatus": "注册表默认启用",
+      "audit": {
+        "verdict": "catalog-miss",
+        "compare": "fork-of-upstream",
+        "note": "jing-hy/dsh-think-zh-expand-eac：上游 baosfeng/dsh-think-zh-expand@0.4.8 的 EAC 派生版。移除全部接管对话渲染器的显示功能（assistant-step 渲染器抢占、ThinkBlock 默认展开、自绘图标/样式表），保留强制中文思考与界面中文化；system-prompt section 名改为 dsh-think-zh-eac 以避免与上游同层同名注册抛错。",
+        "basis": "package.repository 明确声明",
+        "conflict": null
+      },
+      "upstream": {
+        "repository": "https://github.com/jing-hy/dsh-think-zh-expand-eac",
+        "refType": "version",
+        "provenance": "Fork of https://github.com/baosfeng/my-dsh-plugins (plugins/dsh-think-zh-expand, MIT, 原作者 @baosfeng)"
       }
     }
   ]

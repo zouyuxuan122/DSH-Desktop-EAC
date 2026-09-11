@@ -1,7 +1,7 @@
 {
   "generatedRegistry": "dsh-desktop/lib/desktop/plugin-sync-registry.ts",
   "manifest": ".sync/plugins.json",
-  "manifestRevision": "607f34e28aaeb18f570a62e1c84bab93e0ed3572fd12b53603886ac45789cd67",
+  "manifestRevision": "699f9a9e4e6ae55bf0cefe82e5db0c35576bb91c40bd41f50ba87d15298d1e97",
   "plugins": {
     "agent-teams": {
       "compatibility": {},
@@ -10,12 +10,12 @@
           "lib/index.js"
         ],
         "excludedPaths": [],
-        "fileCount": 64,
+        "fileCount": 65,
         "license": "MIT",
         "packageName": "@nanmicoder/dsh-agent-teams",
         "packageVersion": "0.1.13-eac.3",
         "path": "dsh-desktop/assets/plugins/dsh-agent-teams",
-        "treeSha256": "008de766b0a63082d856568573a921522a945d751bd23838a775287704f0284f"
+        "treeSha256": "058202948a0bc1fa4b2d9538738ded4ff580a8bf74c03e343008b8f1e7bced6d"
       },
       "manifestEntrySha256": "120ff5689beba794843f70ff0cc9f9acee40d886ab131278a0e13c3978d75fb6",
       "patchFiles": [],
@@ -26,7 +26,7 @@
       "source": {
         "kind": "github",
         "repository": "git+https://github.com/NanmiCoder/dsh-agent-teams.git",
-        "sha256": "008de766b0a63082d856568573a921522a945d751bd23838a775287704f0284f",
+        "sha256": "058202948a0bc1fa4b2d9538738ded4ff580a8bf74c03e343008b8f1e7bced6d",
         "version": "0.1.13-eac.3"
       },
       "sourceCommit": null
@@ -38,12 +38,12 @@
           "lib/index.js"
         ],
         "excludedPaths": [],
-        "fileCount": 3,
+        "fileCount": 4,
         "license": "MIT",
         "packageName": "@deepseek-ai/dsh-balance",
         "packageVersion": "0.1.0",
         "path": "dsh-desktop/assets/plugins/dsh-balance",
-        "treeSha256": "724979b2283c960637d87c71d20e81bce43a70027c27cff6f55afdee2d2910c1"
+        "treeSha256": "d6fd395d9153b96ad207774919329e934fc442634e673328582933ee2c357bb4"
       },
       "manifestEntrySha256": "1ecb7c22a146fbf7726b952163e567192302879b232cb2fc9dbbed0f413ee8ca",
       "patchFiles": [],
@@ -54,7 +54,7 @@
       "source": {
         "kind": "internal",
         "name": "@deepseek-ai/dsh-balance",
-        "sha256": "724979b2283c960637d87c71d20e81bce43a70027c27cff6f55afdee2d2910c1",
+        "sha256": "d6fd395d9153b96ad207774919329e934fc442634e673328582933ee2c357bb4",
         "version": "0.1.0"
       },
       "sourceCommit": null
@@ -66,12 +66,12 @@
           "lib/index.js"
         ],
         "excludedPaths": [],
-        "fileCount": 115,
+        "fileCount": 116,
         "license": "MIT",
         "packageName": "dsh-better-sidebar",
         "packageVersion": "0.15.3-eac.2",
         "path": "dsh-desktop/assets/plugins/dsh-better-sidebar",
-        "treeSha256": "75492306c5db2e79775fccf7268e3f6741857f9aca8392205f57113e6cf838c7"
+        "treeSha256": "797a9aa65e744cf8eab12ab2e902182346252e1cce243eb29891a5f85a465b44"
       },
       "manifestEntrySha256": "aa31f11c164097334b61ce1b19a7324668e8d680a244a8ae57b3ba77b52f35e3",
       "patchFiles": [],
@@ -83,7 +83,7 @@
         "kind": "npm",
         "name": "dsh-better-sidebar",
         "repository": "https://github.com/omdsh-dev/DSH-better-sidebar",
-        "sha256": "75492306c5db2e79775fccf7268e3f6741857f9aca8392205f57113e6cf838c7",
+        "sha256": "797a9aa65e744cf8eab12ab2e902182346252e1cce243eb29891a5f85a465b44",
         "version": "0.15.3-eac.2"
       },
       "sourceCommit": null
@@ -95,12 +95,12 @@
           "lib/index.js"
         ],
         "excludedPaths": [],
-        "fileCount": 3,
+        "fileCount": 4,
         "license": "MIT",
         "packageName": "dsh-change-review",
         "packageVersion": "0.1.0",
         "path": "dsh-desktop/assets/plugins/dsh-change-review",
-        "treeSha256": "5f0fd1cc43871a5e3a12e0ae4f7e2c89768e3156ede7cbc33d4ab4dbd68e24b0"
+        "treeSha256": "3a94180a86a9f6aaa19a0d175bd32e76b4944c39640eedc65083c95bb0d6401f"
       },
       "manifestEntrySha256": "f63d8a7351724d644eb89f4707a019d4f14ad6c582f5a7c1caa587cce6746961",
       "patchFiles": [],
@@ -110,7 +110,7 @@
       "runtimeUpdate": "disabled",
       "source": {
         "kind": "unknown",
-        "sha256": "5f0fd1cc43871a5e3a12e0ae4f7e2c89768e3156ede7cbc33d4ab4dbd68e24b0",
+        "sha256": "3a94180a86a9f6aaa19a0d175bd32e76b4944c39640eedc65083c95bb0d6401f",
         "version": "0.1.0"
       },
       "sourceCommit": null
@@ -122,12 +122,12 @@
           "lib/index.js"
         ],
         "excludedPaths": [],
-        "fileCount": 3,
+        "fileCount": 4,
         "license": "MIT",
         "packageName": "@deepseek-ai/dsh-client-file-changes",
         "packageVersion": "0.1.0",
         "path": "dsh-desktop/assets/plugins/dsh-client-file-changes",
-        "treeSha256": "6de3a924956a7a0b324a82109e79ecf2d14a78d9c27efd6a70b371e082740a10"
+        "treeSha256": "3a36aace2409a17bbb0721b4d2fab38dc25f52b04c332f0ba43f7fec2feed66d"
       },
       "manifestEntrySha256": "29784a5442ed92ceaa93721d3e7364ee1ce61ae66a8bacf0d6b4b0779213d234",
       "patchFiles": [],
@@ -138,7 +138,7 @@
       "source": {
         "kind": "internal",
         "name": "@deepseek-ai/dsh-client-file-changes",
-        "sha256": "6de3a924956a7a0b324a82109e79ecf2d14a78d9c27efd6a70b371e082740a10",
+        "sha256": "3a36aace2409a17bbb0721b4d2fab38dc25f52b04c332f0ba43f7fec2feed66d",
         "version": "0.1.0"
       },
       "sourceCommit": null
@@ -150,12 +150,12 @@
           "lib/index.js"
         ],
         "excludedPaths": [],
-        "fileCount": 9,
+        "fileCount": 10,
         "license": "MIT",
         "packageName": "dsh-compact",
         "packageVersion": "1.0.0",
         "path": "dsh-desktop/assets/plugins/dsh-compact",
-        "treeSha256": "319befbb1f5312e9f573f6daf5fa52806d1f96f4e0c78e80ac98af72c82ecb51"
+        "treeSha256": "190eb4915553fc1a60da53851d284e8d15987957a7cc8a6391cb9047b4dff725"
       },
       "manifestEntrySha256": "2cf65bbbf0a3240bd02fc40d42dc564446219a88f6d972da681a64370bd666c5",
       "patchFiles": [],
@@ -165,7 +165,7 @@
       "runtimeUpdate": "disabled",
       "source": {
         "kind": "unknown",
-        "sha256": "319befbb1f5312e9f573f6daf5fa52806d1f96f4e0c78e80ac98af72c82ecb51",
+        "sha256": "190eb4915553fc1a60da53851d284e8d15987957a7cc8a6391cb9047b4dff725",
         "version": "1.0.0"
       },
       "sourceCommit": null
@@ -182,7 +182,7 @@
         "packageName": "dsh-composer-dynamic-island",
         "packageVersion": "2.1.0",
         "path": "dsh-desktop/assets/plugins/dsh-composer-dynamic-island",
-        "treeSha256": "c12a2654229976a425c341413da2494119e4c909318c711c378b389ab67d474e"
+        "treeSha256": "c2cbb1c34aa9c049ae816889a61e8ced4c40505e2be5bba4a03ed220125d15f5"
       },
       "manifestEntrySha256": "c3201847d612da00fa8eabff0b509d69a1214dbe98975199deeda5a44f444741",
       "patchFiles": [],
@@ -193,7 +193,7 @@
       "source": {
         "kind": "github",
         "repository": "git+https://github.com/says693/dsh-composer-dynamic-island.git",
-        "sha256": "c12a2654229976a425c341413da2494119e4c909318c711c378b389ab67d474e",
+        "sha256": "c2cbb1c34aa9c049ae816889a61e8ced4c40505e2be5bba4a03ed220125d15f5",
         "version": "2.1.0"
       },
       "sourceCommit": null
@@ -205,12 +205,12 @@
           "src/index.js"
         ],
         "excludedPaths": [],
-        "fileCount": 24,
+        "fileCount": 25,
         "license": "MIT",
         "packageName": "computer-user",
         "packageVersion": "0.3.6",
         "path": "dsh-desktop/assets/plugins/computer-user",
-        "treeSha256": "b3d159d6bf39718d6aca90e8614d2a0fa114b0174c26b6b03e6c20b758fda552"
+        "treeSha256": "8ec2f3dfc45096cbdf1dd9a781f02621d51c3b9c3d0354c5c07245bc1ff9029e"
       },
       "manifestEntrySha256": "1fe24465c04f34c3b32d85da98af5254e7550be0d621b76570c889c21d8483ac",
       "patchFiles": [],
@@ -222,7 +222,7 @@
         "kind": "npm",
         "name": "computer-user",
         "repository": "git+https://github.com/jing-hy/computer-user.git",
-        "sha256": "b3d159d6bf39718d6aca90e8614d2a0fa114b0174c26b6b03e6c20b758fda552",
+        "sha256": "8ec2f3dfc45096cbdf1dd9a781f02621d51c3b9c3d0354c5c07245bc1ff9029e",
         "version": "0.3.6"
       },
       "sourceCommit": null
@@ -234,12 +234,12 @@
           "lib/index.js"
         ],
         "excludedPaths": [],
-        "fileCount": 4,
+        "fileCount": 5,
         "license": "MIT",
         "packageName": "@deepseek-ai/dsh-conversation-tweaks",
         "packageVersion": "0.1.0",
         "path": "dsh-desktop/assets/plugins/dsh-conversation-tweaks",
-        "treeSha256": "33922e597a36ac154daf073592e6463a60b771e80bdc58d513612d9855974537"
+        "treeSha256": "88d6ef3c067e0caa2e655bb2e6380133f189d115ad986d8178865bbf9f5e4057"
       },
       "manifestEntrySha256": "981db0608e6d011c717137a18497655f1f5d7312b0edbe4495ddcc3689a209a3",
       "patchFiles": [],
@@ -250,7 +250,7 @@
       "source": {
         "kind": "internal",
         "name": "@deepseek-ai/dsh-conversation-tweaks",
-        "sha256": "33922e597a36ac154daf073592e6463a60b771e80bdc58d513612d9855974537",
+        "sha256": "88d6ef3c067e0caa2e655bb2e6380133f189d115ad986d8178865bbf9f5e4057",
         "version": "0.1.0"
       },
       "sourceCommit": null
@@ -262,12 +262,12 @@
           "lib/host.js"
         ],
         "excludedPaths": [],
-        "fileCount": 6,
+        "fileCount": 7,
         "license": "MIT",
         "packageName": "dsh-dock-settings",
         "packageVersion": "0.1.0",
         "path": "dsh-desktop/assets/plugins/dsh-dock-settings",
-        "treeSha256": "bc683696a055008206b63b12b2300f31e6e4da1ac8551bf095f96d5e7a947bf7"
+        "treeSha256": "72d369ac4ad0da55a765daf45545eacfbff631dd70250844c4e7e18c6bea6e3e"
       },
       "manifestEntrySha256": "a30fb9b9d132ca6f5c7402ff0ac605bc4c18a4b6df0197aa1035df0827c30d67",
       "patchFiles": [],
@@ -277,7 +277,7 @@
       "runtimeUpdate": "disabled",
       "source": {
         "kind": "unknown",
-        "sha256": "bc683696a055008206b63b12b2300f31e6e4da1ac8551bf095f96d5e7a947bf7",
+        "sha256": "72d369ac4ad0da55a765daf45545eacfbff631dd70250844c4e7e18c6bea6e3e",
         "version": "0.1.0"
       },
       "sourceCommit": null
@@ -289,12 +289,12 @@
           "src/index.js"
         ],
         "excludedPaths": [],
-        "fileCount": 71,
+        "fileCount": 72,
         "license": "SEE LICENSE IN ASSET_LICENSE.md",
         "packageName": "dsh-dafeiyu",
         "packageVersion": "0.1.0-alpha.6",
         "path": "dsh-desktop/assets/plugins/dsh-dafeiyu",
-        "treeSha256": "7d291df3f269aed3ddc6f8874469a858a19531611c497db90171c795e0216ed4"
+        "treeSha256": "ced8c98459dab8261dcde2fbb426f668506a6cbde94e843977f7cb52a6ed6784"
       },
       "manifestEntrySha256": "964210a5fe5501a6a43204e9e93f7ad1e58f9a765d2419505d19a05c1eac764a",
       "patchFiles": [],
@@ -305,7 +305,7 @@
       "source": {
         "kind": "github",
         "repository": "git+https://github.com/QCYTSN/dsh-dafeiyu.git",
-        "sha256": "7d291df3f269aed3ddc6f8874469a858a19531611c497db90171c795e0216ed4",
+        "sha256": "ced8c98459dab8261dcde2fbb426f668506a6cbde94e843977f7cb52a6ed6784",
         "version": "0.1.0-alpha.6"
       },
       "sourceCommit": null
@@ -317,12 +317,12 @@
           "lib/index.js"
         ],
         "excludedPaths": [],
-        "fileCount": 3,
+        "fileCount": 4,
         "license": "MIT",
         "packageName": "dsh-feature-toggles",
         "packageVersion": "0.1.1",
         "path": "dsh-desktop/assets/plugins/dsh-feature-toggles",
-        "treeSha256": "4f433b46e8f8cf9580147a53d3439e80d2e62fd2364ac3560c39887333396687"
+        "treeSha256": "2da3162441c422484d530824b05f76864b4a2d0dc845fd83d2a371a199c88a4c"
       },
       "manifestEntrySha256": "6e313940c15585dd1f72d45cd3da36d69e68724144128daf38e4f02c8595cd8e",
       "patchFiles": [],
@@ -332,7 +332,7 @@
       "runtimeUpdate": "disabled",
       "source": {
         "kind": "unknown",
-        "sha256": "4f433b46e8f8cf9580147a53d3439e80d2e62fd2364ac3560c39887333396687",
+        "sha256": "2da3162441c422484d530824b05f76864b4a2d0dc845fd83d2a371a199c88a4c",
         "version": "0.1.1"
       },
       "sourceCommit": null
@@ -344,12 +344,12 @@
           "lib/index.mjs"
         ],
         "excludedPaths": [],
-        "fileCount": 6,
+        "fileCount": 7,
         "license": "MIT",
         "packageName": "@vlln/dsh-navbar",
         "packageVersion": "0.3.0",
         "path": "dsh-desktop/assets/plugins/dsh-navbar",
-        "treeSha256": "4e78d9d45a87fc9053d8bdb87b3ddc6a7a689e736440f7c44708b4d8a5db4905"
+        "treeSha256": "616be114c0cc98b84747e74d6c1f44c57245a348421f99a83204b944977c34b9"
       },
       "manifestEntrySha256": "6583905ad3fc8d712ebbc92b7e9ba747a2a578dd4d5eef0e2fa4dca8965ba343",
       "patchFiles": [],
@@ -360,7 +360,7 @@
       "source": {
         "kind": "npm",
         "name": "@vlln/dsh-navbar",
-        "sha256": "4e78d9d45a87fc9053d8bdb87b3ddc6a7a689e736440f7c44708b4d8a5db4905",
+        "sha256": "616be114c0cc98b84747e74d6c1f44c57245a348421f99a83204b944977c34b9",
         "version": "0.3.0"
       },
       "sourceCommit": null
@@ -372,12 +372,12 @@
           "lib/index.js"
         ],
         "excludedPaths": [],
-        "fileCount": 37,
+        "fileCount": 38,
         "license": "MIT",
         "packageName": "dsh-pet",
         "packageVersion": "0.1.3",
         "path": "dsh-desktop/assets/plugins/dsh-pet",
-        "treeSha256": "bb924c4efb4a1b83ed4fa86164c4165b9247faa06c78af17f6bd50f29aa3a8e8"
+        "treeSha256": "b190e8e87deb710a2b5e516fd78797d6d16107a1745f3ba39017c3b03ed2cf48"
       },
       "manifestEntrySha256": "f923bfc1a15b06fcfad8e4505f34954dc0b031bdaad670f6abbc8c8e34e6046e",
       "patchFiles": [],
@@ -389,7 +389,7 @@
         "kind": "npm",
         "name": "dsh-pet",
         "repository": "git+https://github.com/PC2005-cloud/dsh-pet.git",
-        "sha256": "bb924c4efb4a1b83ed4fa86164c4165b9247faa06c78af17f6bd50f29aa3a8e8",
+        "sha256": "b190e8e87deb710a2b5e516fd78797d6d16107a1745f3ba39017c3b03ed2cf48",
         "version": "0.1.3"
       },
       "sourceCommit": null
@@ -401,12 +401,12 @@
           "lib/index.js"
         ],
         "excludedPaths": [],
-        "fileCount": 3,
+        "fileCount": 4,
         "license": "MIT",
         "packageName": "dsh-pet-settings",
         "packageVersion": "0.1.0",
         "path": "dsh-desktop/assets/plugins/dsh-pet-settings",
-        "treeSha256": "f45bbb9e2c827104b1a59cbd1622bbbb945b13c11a2ca4ba4366d856fccb9272"
+        "treeSha256": "8e16ecd0b62d7a8c81cad8eafe57e550d11dad5c75b3c09126f541b74abbd90c"
       },
       "manifestEntrySha256": "651355060428101a7df530cfc5b929dd4ce4d0eb515e1cf92cc6df5a788d568b",
       "patchFiles": [],
@@ -416,7 +416,7 @@
       "runtimeUpdate": "disabled",
       "source": {
         "kind": "unknown",
-        "sha256": "f45bbb9e2c827104b1a59cbd1622bbbb945b13c11a2ca4ba4366d856fccb9272",
+        "sha256": "8e16ecd0b62d7a8c81cad8eafe57e550d11dad5c75b3c09126f541b74abbd90c",
         "version": "0.1.0"
       },
       "sourceCommit": null
@@ -428,12 +428,12 @@
           "lib/index.js"
         ],
         "excludedPaths": [],
-        "fileCount": 5,
+        "fileCount": 6,
         "license": "MIT",
         "packageName": "dsh-phone",
         "packageVersion": "0.1.0",
         "path": "dsh-desktop/assets/plugins/dsh-phone",
-        "treeSha256": "5c823dfbbcc53b115263e2cfbf3277e9e813a677dad56df8fe4565e42d21b003"
+        "treeSha256": "2253ef1d54aa49e764adbffff3d034bb2c8412953e68aafe1d7a177c88a128fa"
       },
       "manifestEntrySha256": "ebea0b3ed84ab4c80368ada3accaa7d89f35d0fc4af2606027e31aaa911f2399",
       "patchFiles": [],
@@ -444,7 +444,7 @@
       "source": {
         "kind": "internal",
         "name": "dsh-phone",
-        "sha256": "5c823dfbbcc53b115263e2cfbf3277e9e813a677dad56df8fe4565e42d21b003",
+        "sha256": "2253ef1d54aa49e764adbffff3d034bb2c8412953e68aafe1d7a177c88a128fa",
         "version": "0.1.0"
       },
       "sourceCommit": null
@@ -455,13 +455,15 @@
         "entrypoints": [
           "lib/index.js"
         ],
-        "excludedPaths": [],
-        "fileCount": 54,
+        "excludedPaths": [
+          "assets/vendor"
+        ],
+        "fileCount": 55,
         "license": "MIT",
         "packageName": "dsh-raw-html",
         "packageVersion": "0.6.2",
         "path": "dsh-desktop/assets/plugins/dsh-raw-html",
-        "treeSha256": "a6581295c14ac1d451d5e39dcf81fe6de7d903b504e1880f8332f5227eeecbff"
+        "treeSha256": "57ebbc9a88d85722b9db488bad11987bd3e423041a039b72e3c9e77fd6f4e517"
       },
       "manifestEntrySha256": "b7268aafc7cbc1bd891886fb67258f44dbfa069de5d30461db70fb83f99aa489",
       "patchFiles": [],
@@ -472,7 +474,7 @@
       "source": {
         "kind": "internal",
         "name": "dsh-raw-html",
-        "sha256": "a6581295c14ac1d451d5e39dcf81fe6de7d903b504e1880f8332f5227eeecbff",
+        "sha256": "57ebbc9a88d85722b9db488bad11987bd3e423041a039b72e3c9e77fd6f4e517",
         "version": "0.6.2"
       },
       "sourceCommit": null
@@ -484,12 +486,12 @@
           "lib/index.mjs"
         ],
         "excludedPaths": [],
-        "fileCount": 6,
+        "fileCount": 7,
         "license": "MIT",
         "packageName": "dsh-session-manager",
         "packageVersion": "0.1.0",
         "path": "dsh-desktop/assets/plugins/dsh-session-manager",
-        "treeSha256": "54a22859692224148e038500004bc12657902a17d34fbd692029680dcd3c375a"
+        "treeSha256": "e070a87d4be32169bef38d056a2b0be3bcff6d74212226f9402e111769c5abf8"
       },
       "manifestEntrySha256": "159f7030608135c99cc557b8702fa1acfc7cc0efbdc338cac29c8c08c512028a",
       "patchFiles": [],
@@ -500,7 +502,7 @@
       "source": {
         "kind": "npm",
         "name": "dsh-session-manager",
-        "sha256": "54a22859692224148e038500004bc12657902a17d34fbd692029680dcd3c375a",
+        "sha256": "e070a87d4be32169bef38d056a2b0be3bcff6d74212226f9402e111769c5abf8",
         "version": "0.1.0"
       },
       "sourceCommit": null
@@ -512,12 +514,12 @@
           "lib/index.js"
         ],
         "excludedPaths": [],
-        "fileCount": 5,
+        "fileCount": 6,
         "license": "MIT",
         "packageName": "dsh-undo-savepoint",
         "packageVersion": "0.3.4",
         "path": "dsh-desktop/assets/plugins/dsh-undo-savepoint",
-        "treeSha256": "8b233d6cfb0c9c4ab65260ca172f8ccb3081cf42aaf6103f00cb027ea8f4f5c6"
+        "treeSha256": "6c191fb2bde9f5328f971c01b78936ae7a6bf29198de8c9c624e3171f40b77b4"
       },
       "manifestEntrySha256": "fb27830ee4d0a5a85bc3aca64601ce5cc4a99ea2bd3cf26b5b2b1fd3c2f18bb0",
       "patchFiles": [],
@@ -528,7 +530,7 @@
       "source": {
         "kind": "github",
         "repository": "https://github.com/lire1131/dsh-undo-savepoint",
-        "sha256": "8b233d6cfb0c9c4ab65260ca172f8ccb3081cf42aaf6103f00cb027ea8f4f5c6",
+        "sha256": "6c191fb2bde9f5328f971c01b78936ae7a6bf29198de8c9c624e3171f40b77b4",
         "version": "0.3.4"
       },
       "sourceCommit": null
@@ -540,12 +542,12 @@
           "lib/index.js"
         ],
         "excludedPaths": [],
-        "fileCount": 9,
+        "fileCount": 10,
         "license": "BSD-3-Clause",
         "packageName": "dsh-webui-prompt-optimizer",
         "packageVersion": "0.1.0",
         "path": "dsh-desktop/assets/plugins/dsh-webui-prompt-optimizer",
-        "treeSha256": "a58b8279ff6ff7b32ad2d89729d4084de8c909dcb6f690377407f79fd41ff6af"
+        "treeSha256": "cf12e3071d3bbb0242992ab3eebe11561737399f268859d190ea20691f872ba7"
       },
       "manifestEntrySha256": "1af877483b9750a6c24e69c3030548384d1de1fda8bcc40d594aab3e3adda5cd",
       "patchFiles": [],
@@ -555,7 +557,7 @@
       "runtimeUpdate": "disabled",
       "source": {
         "kind": "unknown",
-        "sha256": "a58b8279ff6ff7b32ad2d89729d4084de8c909dcb6f690377407f79fd41ff6af",
+        "sha256": "cf12e3071d3bbb0242992ab3eebe11561737399f268859d190ea20691f872ba7",
         "version": "0.1.0"
       },
       "sourceCommit": null
@@ -567,12 +569,12 @@
           "lib/index.js"
         ],
         "excludedPaths": [],
-        "fileCount": 13,
+        "fileCount": 14,
         "license": "MIT",
         "packageName": "dsh-whale-widget",
         "packageVersion": "0.2.10",
         "path": "dsh-desktop/assets/plugins/dsh-whale-widget",
-        "treeSha256": "e69c25e1fef9d02cf6d1f8f544443e0ceda419c16eb7f5b51e820097a939da3d"
+        "treeSha256": "b73fec3fafbb677533ff5fe16b21184d7cd0cc182ce573a6a6c3f9ee4b36256b"
       },
       "manifestEntrySha256": "451468aeb99443ea5b5c0d3a301c414b78187cdb59ec6eef52f17f5aec4dfa9b",
       "patchFiles": [],
@@ -583,7 +585,7 @@
       "source": {
         "kind": "github",
         "repository": "git+https://github.com/MeteorNOX/DeepSeek-Balance-Whale-Widget.git",
-        "sha256": "e69c25e1fef9d02cf6d1f8f544443e0ceda419c16eb7f5b51e820097a939da3d",
+        "sha256": "b73fec3fafbb677533ff5fe16b21184d7cd0cc182ce573a6a6c3f9ee4b36256b",
         "version": "0.2.10"
       },
       "sourceCommit": null
@@ -595,12 +597,12 @@
           "index.js"
         ],
         "excludedPaths": [],
-        "fileCount": 2,
+        "fileCount": 3,
         "license": "MIT",
         "packageName": "dsh-eac-core-bridge",
         "packageVersion": "1.0.0",
         "path": "dsh-desktop/assets/plugins/dsh-eac-core-bridge",
-        "treeSha256": "ca7b989cdd66f762b341faae9ebffe8dd742bb29463cb23b70495d14b1f3c145"
+        "treeSha256": "27e9bddb89c004157da64db9e7e3eeba72347d208984b7890da717c834af0184"
       },
       "manifestEntrySha256": "a452230bc4b70284d1a20cc9068c30ef7de2e73338e2eb36327d9fc3fd4e2ec0",
       "patchFiles": [],
@@ -610,7 +612,7 @@
       "runtimeUpdate": "disabled",
       "source": {
         "kind": "unknown",
-        "sha256": "ca7b989cdd66f762b341faae9ebffe8dd742bb29463cb23b70495d14b1f3c145",
+        "sha256": "27e9bddb89c004157da64db9e7e3eeba72347d208984b7890da717c834af0184",
         "version": "1.0.0"
       },
       "sourceCommit": null
@@ -622,12 +624,12 @@
           "lib/index.js"
         ],
         "excludedPaths": [],
-        "fileCount": 3,
+        "fileCount": 4,
         "license": "MIT",
         "packageName": "dsh-eac-locale-compat",
         "packageVersion": "1.0.0",
         "path": "dsh-desktop/assets/plugins/dsh-eac-locale-compat",
-        "treeSha256": "09d14a469de595afdd31636acade7bea4b8b4e93368b9d35e6ed00ea2dee27b8"
+        "treeSha256": "03d62843a0f36c5c496ff93f9511ae200b67bb08e7f9432f21513cfb2bef9f20"
       },
       "manifestEntrySha256": "fa77e5647c14df2d6739113c05cc0f74f0df223ebd6b0f1803a4e0a42677f600",
       "patchFiles": [],
@@ -637,7 +639,7 @@
       "runtimeUpdate": "disabled",
       "source": {
         "kind": "unknown",
-        "sha256": "09d14a469de595afdd31636acade7bea4b8b4e93368b9d35e6ed00ea2dee27b8",
+        "sha256": "03d62843a0f36c5c496ff93f9511ae200b67bb08e7f9432f21513cfb2bef9f20",
         "version": "1.0.0"
       },
       "sourceCommit": null
@@ -649,12 +651,12 @@
           "lib/index.js"
         ],
         "excludedPaths": [],
-        "fileCount": 4,
+        "fileCount": 5,
         "license": "MIT",
         "packageName": "@deepseek-ai/dsh-easy-setup",
         "packageVersion": "0.1.0",
         "path": "dsh-desktop/assets/plugins/dsh-easy-setup",
-        "treeSha256": "459d8a980525a074738859f0d5fedffc89e285ff704bda752017ad212a67b41d"
+        "treeSha256": "9608b6214c31b748ecbda92016ca86f04eb58dcf6fd1b15153170016c3ad128f"
       },
       "manifestEntrySha256": "aef538c02636206d5325e02e48e0f1946aad38ac29a6246fea181a54a25a2614",
       "patchFiles": [],
@@ -665,7 +667,7 @@
       "source": {
         "kind": "internal",
         "name": "@deepseek-ai/dsh-easy-setup",
-        "sha256": "459d8a980525a074738859f0d5fedffc89e285ff704bda752017ad212a67b41d",
+        "sha256": "9608b6214c31b748ecbda92016ca86f04eb58dcf6fd1b15153170016c3ad128f",
         "version": "0.1.0"
       },
       "sourceCommit": null
@@ -677,12 +679,12 @@
           "lib/index.js"
         ],
         "excludedPaths": [],
-        "fileCount": 2,
+        "fileCount": 3,
         "license": "MIT",
         "packageName": "@deepseek-ai/dsh-file-changes",
         "packageVersion": "0.1.0",
         "path": "dsh-desktop/assets/plugins/dsh-file-changes",
-        "treeSha256": "f4eeb8cd0260a32383ddb1f0f3a2234117cd15108dee3e247cf684c82b4bd907"
+        "treeSha256": "9a6ba31c271aa4f316a55155e245b6adf23730f11254094f983128d9938e079e"
       },
       "manifestEntrySha256": "44ac80cfe38428ccfd15ef965a1e9732d132f373f8afa472e0c932fe82da7007",
       "patchFiles": [],
@@ -693,7 +695,7 @@
       "source": {
         "kind": "internal",
         "name": "@deepseek-ai/dsh-file-changes",
-        "sha256": "f4eeb8cd0260a32383ddb1f0f3a2234117cd15108dee3e247cf684c82b4bd907",
+        "sha256": "9a6ba31c271aa4f316a55155e245b6adf23730f11254094f983128d9938e079e",
         "version": "0.1.0"
       },
       "sourceCommit": null
@@ -705,12 +707,12 @@
           "lib/index.js"
         ],
         "excludedPaths": [],
-        "fileCount": 5,
+        "fileCount": 6,
         "license": "MIT",
         "packageName": "dsh-file-drop-eac",
         "packageVersion": "0.1.2",
         "path": "dsh-desktop/assets/plugins/dsh-file-drop-eac",
-        "treeSha256": "b91ab4607aefc3a82360d8253a48da0d33ffc52d598211c937a9e479e574cacb"
+        "treeSha256": "571bbc2477f686c42412c59bbe542923d4e8134e8a99009061ecb9643994daa9"
       },
       "manifestEntrySha256": "01e903ea850238a86e666391d59cacd6d1e5b9c7c89e373383b3b3401dc60623",
       "patchFiles": [],
@@ -721,7 +723,7 @@
       "source": {
         "kind": "internal",
         "name": "dsh-file-drop-eac",
-        "sha256": "b91ab4607aefc3a82360d8253a48da0d33ffc52d598211c937a9e479e574cacb",
+        "sha256": "571bbc2477f686c42412c59bbe542923d4e8134e8a99009061ecb9643994daa9",
         "version": "0.1.2"
       },
       "sourceCommit": null
@@ -733,12 +735,12 @@
           "lib/index.js"
         ],
         "excludedPaths": [],
-        "fileCount": 3,
+        "fileCount": 4,
         "license": "MIT",
         "packageName": "@deepseek-ai/dsh-float-window",
         "packageVersion": "0.1.0",
         "path": "dsh-desktop/assets/plugins/dsh-float-window",
-        "treeSha256": "1809d62da2357333e19d3f2cbb6680e4800a6364c68d4307b07bdc4b5a7a0ec4"
+        "treeSha256": "d77b57891044c417c05ce03dda7d7f9404e214b209458a5af569befb83c4a265"
       },
       "manifestEntrySha256": "fb408988af2b6955b37c306c6a661347dc274f0853730637d2dd23e510912cd4",
       "patchFiles": [],
@@ -749,7 +751,7 @@
       "source": {
         "kind": "internal",
         "name": "@deepseek-ai/dsh-float-window",
-        "sha256": "1809d62da2357333e19d3f2cbb6680e4800a6364c68d4307b07bdc4b5a7a0ec4",
+        "sha256": "d77b57891044c417c05ce03dda7d7f9404e214b209458a5af569befb83c4a265",
         "version": "0.1.0"
       },
       "sourceCommit": null
@@ -761,12 +763,12 @@
           "lib/index.js"
         ],
         "excludedPaths": [],
-        "fileCount": 3,
+        "fileCount": 4,
         "license": "MIT",
         "packageName": "dsh-font-custom",
         "packageVersion": "0.1.0",
         "path": "dsh-desktop/assets/plugins/dsh-font-custom",
-        "treeSha256": "012d73a83d8c8161e9d150a043af2a19847a7b3bb4b9e7bc051c8897d76ee203"
+        "treeSha256": "de5856e29f298796a88ffbaca1c4cdb24f2ccb1c5b4055ec10453f606145c218"
       },
       "manifestEntrySha256": "19ab9bdc0a920c7756ebe4776ea824f6d160f88eaea4a94ccadf37bc951ef406",
       "patchFiles": [],
@@ -776,7 +778,7 @@
       "runtimeUpdate": "disabled",
       "source": {
         "kind": "unknown",
-        "sha256": "012d73a83d8c8161e9d150a043af2a19847a7b3bb4b9e7bc051c8897d76ee203",
+        "sha256": "de5856e29f298796a88ffbaca1c4cdb24f2ccb1c5b4055ec10453f606145c218",
         "version": "0.1.0"
       },
       "sourceCommit": null
@@ -788,12 +790,12 @@
           "lib/index.js"
         ],
         "excludedPaths": [],
-        "fileCount": 4,
+        "fileCount": 5,
         "license": "MIT",
         "packageName": "dsh-image-paste",
         "packageVersion": "0.1.0",
         "path": "dsh-desktop/assets/plugins/dsh-image-paste",
-        "treeSha256": "81866f676b95edafa6c21a040218488e7140d5977b57c37b89a37598fe0e20d2"
+        "treeSha256": "bc2eb982dc44f63e388ca2fc1d23719e75a59750eb7fcf8da3405afd129bbdbf"
       },
       "manifestEntrySha256": "9595a976228b7adc199b86872be31db559960b5ecec535c7ca8f057bdc28c132",
       "patchFiles": [],
@@ -803,7 +805,7 @@
       "runtimeUpdate": "disabled",
       "source": {
         "kind": "unknown",
-        "sha256": "81866f676b95edafa6c21a040218488e7140d5977b57c37b89a37598fe0e20d2",
+        "sha256": "bc2eb982dc44f63e388ca2fc1d23719e75a59750eb7fcf8da3405afd129bbdbf",
         "version": "0.1.0"
       },
       "sourceCommit": null
@@ -815,12 +817,12 @@
           "lib/index.js"
         ],
         "excludedPaths": [],
-        "fileCount": 11,
+        "fileCount": 12,
         "license": "MIT",
         "packageName": "meow-smooth",
         "packageVersion": "0.5.0",
         "path": "dsh-desktop/assets/plugins/dsh-meow-smooth",
-        "treeSha256": "e92b3142749f078ae5f576609dba511f5d9120482db2066cb56c3792fa8d5448"
+        "treeSha256": "ed46ac697dda9029943ca5c899e294c780f276520faa7063fe95e966e51595e1"
       },
       "manifestEntrySha256": "ace12c07d39f5a07a4ac68873c75ab4b815a20ffa6c451cb3dc93e864c4f5cad",
       "patchFiles": [],
@@ -831,7 +833,7 @@
       "source": {
         "kind": "github",
         "repository": "git+https://github.com/Phant0Meow/dsh-meow-smooth.git",
-        "sha256": "e92b3142749f078ae5f576609dba511f5d9120482db2066cb56c3792fa8d5448",
+        "sha256": "ed46ac697dda9029943ca5c899e294c780f276520faa7063fe95e966e51595e1",
         "version": "0.5.0"
       },
       "sourceCommit": null
@@ -843,12 +845,12 @@
           "lib/host.js"
         ],
         "excludedPaths": [],
-        "fileCount": 6,
+        "fileCount": 7,
         "license": "MIT",
         "packageName": "dsh-message-rewind",
         "packageVersion": "0.1.0",
         "path": "dsh-desktop/assets/plugins/dsh-message-rewind",
-        "treeSha256": "d80b8559180830d83010b5bf25fe043eb44449cde7e2244b84a0d91a727f2006"
+        "treeSha256": "0c4b6e7a482fdbae91dea3d3e4e1d9855a2937aec03d60a3b406b995d98860a7"
       },
       "manifestEntrySha256": "2936e79880dbcfc3d6a6a5702ef39aed870f6c1a054fa5991134782ccd2c0415",
       "patchFiles": [],
@@ -858,7 +860,7 @@
       "runtimeUpdate": "disabled",
       "source": {
         "kind": "unknown",
-        "sha256": "d80b8559180830d83010b5bf25fe043eb44449cde7e2244b84a0d91a727f2006",
+        "sha256": "0c4b6e7a482fdbae91dea3d3e4e1d9855a2937aec03d60a3b406b995d98860a7",
         "version": "0.1.0"
       },
       "sourceCommit": null
@@ -870,12 +872,12 @@
           "lib/index.js"
         ],
         "excludedPaths": [],
-        "fileCount": 7,
+        "fileCount": 8,
         "license": "MIT",
         "packageName": "dsh-web-mobile-fix",
         "packageVersion": "1.0.1",
         "path": "dsh-desktop/assets/plugins/dsh-web-mobile-fix",
-        "treeSha256": "32340c069ac863f0e59d3e789fac2b4e0f4812498080ce24d251f6e6f94645ee"
+        "treeSha256": "6779f258493c562c8fcb244eb618b176aa045001c0fc895a0acf2e107acfc550"
       },
       "manifestEntrySha256": "38d8f2e7daad4f811bade02c37a6e833e6d6e6562c0c730b3df49edbe3edff44",
       "patchFiles": [],
@@ -887,7 +889,7 @@
         "kind": "npm",
         "name": "dsh-web-mobile-fix",
         "repository": "git+https://github.com/AcidGr/dsh-web-mobile-fix.git",
-        "sha256": "32340c069ac863f0e59d3e789fac2b4e0f4812498080ce24d251f6e6f94645ee",
+        "sha256": "6779f258493c562c8fcb244eb618b176aa045001c0fc895a0acf2e107acfc550",
         "version": "1.0.1"
       },
       "sourceCommit": null
@@ -899,12 +901,12 @@
           "src/index.js"
         ],
         "excludedPaths": [],
-        "fileCount": 7,
+        "fileCount": 8,
         "license": "MIT",
         "packageName": "dsh-offpeak",
         "packageVersion": "9.9.9",
         "path": "dsh-desktop/assets/plugins/dsh-offpeak",
-        "treeSha256": "f32383017d77af3af033a2330c6801c2e6634d36d2d3f72136cba4ee77aa9401"
+        "treeSha256": "85f37acc541f277cce337f70fab7255f4f76f44b47ff3c5eb86c34b34863e672"
       },
       "manifestEntrySha256": "5a9b031066eeb3e0e9920a1dda973abd42e7d3e99d9ed2884e5be2af594510c0",
       "patchFiles": [],
@@ -916,7 +918,7 @@
         "kind": "npm",
         "name": "dsh-offpeak",
         "repository": "git+https://github.com/christophersmith2737-commits/OffPeak.git",
-        "sha256": "f32383017d77af3af033a2330c6801c2e6634d36d2d3f72136cba4ee77aa9401",
+        "sha256": "85f37acc541f277cce337f70fab7255f4f76f44b47ff3c5eb86c34b34863e672",
         "version": "9.9.9"
       },
       "sourceCommit": null
@@ -928,12 +930,12 @@
           "lib/index.js"
         ],
         "excludedPaths": [],
-        "fileCount": 8,
+        "fileCount": 9,
         "license": "MIT",
         "packageName": "@deepseek-ai/dsh-openclaw-bridge",
         "packageVersion": "0.7.0",
         "path": "dsh-desktop/assets/plugins/dsh-openclaw-bridge",
-        "treeSha256": "1f20d90e1151db7f4e6516d199a480698476115387af7e017f13ae8a8c961764"
+        "treeSha256": "4df6e96039960845ccb017cd89faeda73c9c49d29ab2c669b864ca4c33e9b724"
       },
       "manifestEntrySha256": "c235ac0dcc3f48854b818b37ec928f26acaf7d13ba8c08f8f092a6910e69071e",
       "patchFiles": [],
@@ -944,7 +946,7 @@
       "source": {
         "kind": "internal",
         "name": "@deepseek-ai/dsh-openclaw-bridge",
-        "sha256": "1f20d90e1151db7f4e6516d199a480698476115387af7e017f13ae8a8c961764",
+        "sha256": "4df6e96039960845ccb017cd89faeda73c9c49d29ab2c669b864ca4c33e9b724",
         "version": "0.7.0"
       },
       "sourceCommit": null
@@ -961,9 +963,9 @@
         "fileCount": 36,
         "license": "MIT",
         "packageName": "picturereader",
-        "packageVersion": "3.3.1",
+        "packageVersion": "3.3.3",
         "path": "dsh-desktop/assets/plugins/picturereader",
-        "treeSha256": "feb54fc85893eca24aa53da7e100896ce857995c8e7d446f9e663591892a01af"
+        "treeSha256": "9341a945a64312ffa339345f7ad7249c2fae2ee688baa709957578a46c3cec9d"
       },
       "manifestEntrySha256": "d3c2dccb3b4758e064fc95e76e59b3697463d0d47c83216f35aa22e4c67e253a",
       "patchFiles": [],
@@ -975,8 +977,8 @@
         "kind": "npm",
         "name": "picturereader",
         "repository": "https://github.com/jing-hy/picturereader.git",
-        "sha256": "feb54fc85893eca24aa53da7e100896ce857995c8e7d446f9e663591892a01af",
-        "version": "3.3.1"
+        "sha256": "9341a945a64312ffa339345f7ad7249c2fae2ee688baa709957578a46c3cec9d",
+        "version": "3.3.3"
       },
       "sourceCommit": null
     },
@@ -987,12 +989,12 @@
           "lib/index.js"
         ],
         "excludedPaths": [],
-        "fileCount": 3,
+        "fileCount": 4,
         "license": "MIT",
         "packageName": "@deepseek-ai/dsh-plugin-manager",
         "packageVersion": "0.1.0",
         "path": "dsh-desktop/assets/plugins/dsh-plugin-manager",
-        "treeSha256": "50186f22dd48fe88fa045827cfac5f61848519c20813253c8bfe135a23caea4d"
+        "treeSha256": "cc1e2be2eac7635d42c2933217e43846cdb70e470fc492e9fcb470e5aa6615df"
       },
       "manifestEntrySha256": "b23a25f33cbc1ef7c02589e9762f3406ce2db92f1318eb8d182df252ed35ace0",
       "patchFiles": [],
@@ -1003,7 +1005,7 @@
       "source": {
         "kind": "internal",
         "name": "@deepseek-ai/dsh-plugin-manager",
-        "sha256": "50186f22dd48fe88fa045827cfac5f61848519c20813253c8bfe135a23caea4d",
+        "sha256": "cc1e2be2eac7635d42c2933217e43846cdb70e470fc492e9fcb470e5aa6615df",
         "version": "0.1.0"
       },
       "sourceCommit": null
@@ -1015,12 +1017,12 @@
           "lib/index.js"
         ],
         "excludedPaths": [],
-        "fileCount": 3,
+        "fileCount": 4,
         "license": "MIT",
         "packageName": "dsh-plugin-shield",
         "packageVersion": "0.1.0",
         "path": "dsh-desktop/assets/plugins/dsh-plugin-shield",
-        "treeSha256": "b8c84ec007e9c8117edb4a08f19c497130c89fd1bc3efbdf0469a566ecaf5b78"
+        "treeSha256": "13350e65a59104170663e721542aa01521de5aaa339921e2caba64f5246becda"
       },
       "manifestEntrySha256": "8392421dbfdf36b55f3dfcda336bb4e1cf77bff4afbc39941f7276712e5c5f49",
       "patchFiles": [],
@@ -1030,7 +1032,7 @@
       "runtimeUpdate": "disabled",
       "source": {
         "kind": "unknown",
-        "sha256": "b8c84ec007e9c8117edb4a08f19c497130c89fd1bc3efbdf0469a566ecaf5b78",
+        "sha256": "13350e65a59104170663e721542aa01521de5aaa339921e2caba64f5246becda",
         "version": "0.1.0"
       },
       "sourceCommit": null
@@ -1042,12 +1044,12 @@
           "lib/index.js"
         ],
         "excludedPaths": [],
-        "fileCount": 3,
+        "fileCount": 4,
         "license": "MIT",
         "packageName": "dsh-plugin-wizard",
         "packageVersion": "0.1.0",
         "path": "dsh-desktop/assets/plugins/dsh-plugin-wizard",
-        "treeSha256": "097b75e8749c4b77f9466938286248ef6d0b2dc16815622458040180fb86f6c6"
+        "treeSha256": "5b1e5ea52a6d9ea116be768662260341f8b255246bd80176c7573db47faec7b6"
       },
       "manifestEntrySha256": "dee87795f561f230c6cc713ccfd28c8e3f71dc2431e41b8af53e190647d52200",
       "patchFiles": [],
@@ -1057,7 +1059,7 @@
       "runtimeUpdate": "disabled",
       "source": {
         "kind": "unknown",
-        "sha256": "097b75e8749c4b77f9466938286248ef6d0b2dc16815622458040180fb86f6c6",
+        "sha256": "5b1e5ea52a6d9ea116be768662260341f8b255246bd80176c7573db47faec7b6",
         "version": "0.1.0"
       },
       "sourceCommit": null
@@ -1069,12 +1071,12 @@
           "lib/index.js"
         ],
         "excludedPaths": [],
-        "fileCount": 4,
+        "fileCount": 5,
         "license": "MIT",
         "packageName": "@deepseek-ai/dsh-prompt-custom",
         "packageVersion": "0.1.0",
         "path": "dsh-desktop/assets/plugins/dsh-prompt-custom",
-        "treeSha256": "dd42ea016480f84bc6a06c0a58ca1b76533143485af9045cc4faa2d9d593420c"
+        "treeSha256": "8b47630fb42c3bce9d8d444a37004e1fdb5259ddf2bc96618540a944203aaddd"
       },
       "manifestEntrySha256": "80e9eb22c4fb2bc70bb11ad8c37b058d1d3ed5782c737c557f4fa16b0d8163a3",
       "patchFiles": [],
@@ -1085,7 +1087,7 @@
       "source": {
         "kind": "internal",
         "name": "@deepseek-ai/dsh-prompt-custom",
-        "sha256": "dd42ea016480f84bc6a06c0a58ca1b76533143485af9045cc4faa2d9d593420c",
+        "sha256": "8b47630fb42c3bce9d8d444a37004e1fdb5259ddf2bc96618540a944203aaddd",
         "version": "0.1.0"
       },
       "sourceCommit": null
@@ -1125,12 +1127,12 @@
           "lib/index.js"
         ],
         "excludedPaths": [],
-        "fileCount": 4,
+        "fileCount": 5,
         "license": "MIT",
         "packageName": "dsh-settings-groups",
         "packageVersion": "0.1.0",
         "path": "dsh-desktop/assets/plugins/dsh-settings-groups",
-        "treeSha256": "99206f9d476698e778da985c698a120ca18fba2f99d82b5ed25d58de10a825b3"
+        "treeSha256": "606544070d3843a6edb3656b77250dd405eeffcf3074ce4c16cef347f1d47f7d"
       },
       "manifestEntrySha256": "a2255801c11e5180489d8950ac373d1878d8bcca3bc66326e6d1e3183c0a85f2",
       "patchFiles": [],
@@ -1140,7 +1142,7 @@
       "runtimeUpdate": "disabled",
       "source": {
         "kind": "unknown",
-        "sha256": "99206f9d476698e778da985c698a120ca18fba2f99d82b5ed25d58de10a825b3",
+        "sha256": "606544070d3843a6edb3656b77250dd405eeffcf3074ce4c16cef347f1d47f7d",
         "version": "0.1.0"
       },
       "sourceCommit": null
@@ -1152,12 +1154,12 @@
           "lib/index.js"
         ],
         "excludedPaths": [],
-        "fileCount": 11,
+        "fileCount": 12,
         "license": "MIT",
         "packageName": "dsh-settings-scroll-fix",
         "packageVersion": "2.0.2",
         "path": "dsh-desktop/assets/plugins/dsh-settings-scroll-fix",
-        "treeSha256": "9c84ba35d6102bb45bd240092ba21373de87b85015a94775b21447a98518004a"
+        "treeSha256": "02425ba0e9bb6b425e466f3fb6ca4fd98160544ce731da49ae13710730f0db23"
       },
       "manifestEntrySha256": "9c94c889b1dad6c6bbd91c0b85bd35dc45aa27cf83431672df1ef7c0fd733607",
       "patchFiles": [],
@@ -1168,7 +1170,7 @@
       "source": {
         "kind": "internal",
         "name": "dsh-settings-scroll-fix",
-        "sha256": "9c84ba35d6102bb45bd240092ba21373de87b85015a94775b21447a98518004a",
+        "sha256": "02425ba0e9bb6b425e466f3fb6ca4fd98160544ce731da49ae13710730f0db23",
         "version": "2.0.2"
       },
       "sourceCommit": null
@@ -1180,12 +1182,12 @@
           "lib/index.js"
         ],
         "excludedPaths": [],
-        "fileCount": 7,
+        "fileCount": 8,
         "license": "MIT",
         "packageName": "@dsh-external/dsh-side-session",
         "packageVersion": "0.2.8",
         "path": "dsh-desktop/assets/plugins/dsh-side-session",
-        "treeSha256": "52a5d60b9ca1517d89a68e60f7bc7c9b4b1fb024987b2d9849403e3a9e4eea83"
+        "treeSha256": "381e63c9f59756c79d4f8a3704ebf84ae19c7ea8f338893219c421e2f4c1edd4"
       },
       "manifestEntrySha256": "4c42d0b56fa7c10112725b7ce2376da2c00d72de9c6c99f2cb39b08b496c0db9",
       "patchFiles": [],
@@ -1196,7 +1198,7 @@
       "source": {
         "kind": "internal",
         "name": "@dsh-external/dsh-side-session",
-        "sha256": "52a5d60b9ca1517d89a68e60f7bc7c9b4b1fb024987b2d9849403e3a9e4eea83",
+        "sha256": "381e63c9f59756c79d4f8a3704ebf84ae19c7ea8f338893219c421e2f4c1edd4",
         "version": "0.2.8"
       },
       "sourceCommit": null
@@ -1208,12 +1210,12 @@
           "lib/index.js"
         ],
         "excludedPaths": [],
-        "fileCount": 3,
+        "fileCount": 4,
         "license": "MIT",
         "packageName": "@deepseek-ai/dsh-skin-switch",
         "packageVersion": "0.1.0",
         "path": "dsh-desktop/assets/plugins/dsh-skin-switch",
-        "treeSha256": "b7aee7de42eec10a2e51922dc39ba56b72f3fca89f13eb5cf65a5a596e980e39"
+        "treeSha256": "8faab15f0fd40ad2c6a29c6db9f81e4f165217405c64216387e28214e0bd528b"
       },
       "manifestEntrySha256": "df6252df12ba08e3a9d164d2d030dfb156525887f5971f265607783632806b0f",
       "patchFiles": [],
@@ -1224,7 +1226,7 @@
       "source": {
         "kind": "internal",
         "name": "@deepseek-ai/dsh-skin-switch",
-        "sha256": "b7aee7de42eec10a2e51922dc39ba56b72f3fca89f13eb5cf65a5a596e980e39",
+        "sha256": "8faab15f0fd40ad2c6a29c6db9f81e4f165217405c64216387e28214e0bd528b",
         "version": "0.1.0"
       },
       "sourceCommit": null
@@ -1238,12 +1240,12 @@
         "excludedPaths": [
           "vendor"
         ],
-        "fileCount": 7,
+        "fileCount": 8,
         "license": "MIT",
         "packageName": "dsh-soul-md",
         "packageVersion": "0.2.8",
         "path": "dsh-desktop/assets/plugins/dsh-soul-md",
-        "treeSha256": "8ab2960dba0e888a5c94fb1f199c2b48d83ae377c17ffc267b5e13db00363bd2"
+        "treeSha256": "5174a5f66561753d39ce019cad69b91fe5bd50c53072c2a8be1499108c82980d"
       },
       "manifestEntrySha256": "133ef3c451783868b012902692842c6d02cde9193cae9a60d235de9622220898",
       "patchFiles": [],
@@ -1255,7 +1257,7 @@
         "kind": "npm",
         "name": "dsh-soul-md",
         "repository": "git+https://github.com/Scorp1o117/dsh-soul-md.git",
-        "sha256": "8ab2960dba0e888a5c94fb1f199c2b48d83ae377c17ffc267b5e13db00363bd2",
+        "sha256": "5174a5f66561753d39ce019cad69b91fe5bd50c53072c2a8be1499108c82980d",
         "version": "0.2.8"
       },
       "sourceCommit": null
@@ -1267,12 +1269,12 @@
           "lib/index.js"
         ],
         "excludedPaths": [],
-        "fileCount": 3,
+        "fileCount": 4,
         "license": "MIT",
         "packageName": "@deepseek-ai/dsh-terminal",
         "packageVersion": "0.1.0",
         "path": "dsh-desktop/assets/plugins/dsh-terminal",
-        "treeSha256": "e745a2c6ad212c9df86a2b3cb740a076c0cb720c1a8b21dc8dbedc46ccf07ca7"
+        "treeSha256": "84b51d39909bd219d165d98544d2a2418eb1a038f6aa3d05a148bbfb4789d5f4"
       },
       "manifestEntrySha256": "661493f26c5309ee758ef59106da3feb77ff053313b7a6b2d21d7cd65fc8424c",
       "patchFiles": [],
@@ -1283,8 +1285,36 @@
       "source": {
         "kind": "internal",
         "name": "@deepseek-ai/dsh-terminal",
-        "sha256": "e745a2c6ad212c9df86a2b3cb740a076c0cb720c1a8b21dc8dbedc46ccf07ca7",
+        "sha256": "84b51d39909bd219d165d98544d2a2418eb1a038f6aa3d05a148bbfb4789d5f4",
         "version": "0.1.0"
+      },
+      "sourceCommit": null
+    },
+    "think-zh-expand-eac": {
+      "compatibility": {},
+      "local": {
+        "entrypoints": [
+          "lib/index.js"
+        ],
+        "excludedPaths": [],
+        "fileCount": 17,
+        "license": "MIT",
+        "packageName": "dsh-think-zh-expand-eac",
+        "packageVersion": "1.0.0",
+        "path": "dsh-desktop/assets/plugins/dsh-think-zh-expand-eac",
+        "treeSha256": "79dc07645864e3e444fe14e00dbae58d3b54ab0b14e8606d0c866fbe64801acc"
+      },
+      "manifestEntrySha256": "9f764900e15db9a0d92654317a8318c5424fd845fe9816ca51391fefc7d141d4",
+      "patchFiles": [],
+      "patchSet": "none",
+      "patchSetSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "requested": "latest",
+      "runtimeUpdate": "enabled",
+      "source": {
+        "kind": "github",
+        "repository": "https://github.com/jing-hy/dsh-think-zh-expand-eac",
+        "sha256": "79dc07645864e3e444fe14e00dbae58d3b54ab0b14e8606d0c866fbe64801acc",
+        "version": "1.0.0"
       },
       "sourceCommit": null
     },
@@ -1300,7 +1330,7 @@
         "packageName": "@linxin666/dsh-client-ui-skin-blue-fantasy",
         "packageVersion": "0.1.11",
         "path": "dsh-desktop/assets/skins/blue-fantasy",
-        "treeSha256": "d7d9bcddb38a8643bed41f4ba529ec9dc1be2152a5a3b6686589fa1012de2b74"
+        "treeSha256": "869daf4db300e569b273000d5361eb37aca20a0c15cc241bc63decc0f1a32ae1"
       },
       "manifestEntrySha256": "f2e4722c5317b64eebe87de54829536658203f8354f048c375bcb2da4d85caff",
       "patchFiles": [],
@@ -1311,7 +1341,7 @@
       "source": {
         "kind": "github",
         "repository": "https://github.com/zhu1090093659/dsh-web-ui.git",
-        "sha256": "d7d9bcddb38a8643bed41f4ba529ec9dc1be2152a5a3b6686589fa1012de2b74",
+        "sha256": "869daf4db300e569b273000d5361eb37aca20a0c15cc241bc63decc0f1a32ae1",
         "version": "0.1.11"
       },
       "sourceCommit": null
@@ -1356,7 +1386,7 @@
         "packageName": "@dsh-external/dsh-client-ui-skin-maid-atelier",
         "packageVersion": "0.0.1",
         "path": "dsh-desktop/assets/skins/maid-atelier",
-        "treeSha256": "fc47009a4a974ad249538d951d8d154927d21099c7742106dfb5dbac9ce34ef9"
+        "treeSha256": "a14a49023c91f1948ef085972bccd0218fcf7ab2490eda8517422cf8d4d65a04"
       },
       "manifestEntrySha256": "0927121550e1bcc168e95f6505cae767bf23d043ecc6b12fb6eab03d5a2b6ae2",
       "patchFiles": [],
@@ -1367,7 +1397,7 @@
       "source": {
         "kind": "internal",
         "name": "@dsh-external/dsh-client-ui-skin-maid-atelier",
-        "sha256": "fc47009a4a974ad249538d951d8d154927d21099c7742106dfb5dbac9ce34ef9",
+        "sha256": "a14a49023c91f1948ef085972bccd0218fcf7ab2490eda8517422cf8d4d65a04",
         "version": "0.0.1"
       },
       "sourceCommit": null
@@ -1575,12 +1605,12 @@
           "lib/host.js"
         ],
         "excludedPaths": [],
-        "fileCount": 14,
+        "fileCount": 16,
         "license": "MIT",
         "packageName": "dsh-unified-market",
-        "packageVersion": "0.3.1",
+        "packageVersion": "0.4.0",
         "path": "dsh-desktop/assets/plugins/dsh-unified-market",
-        "treeSha256": "142de9bdf4837c899efd6d7244ab870311fc090b303f21f996a8d8cebe2518c0"
+        "treeSha256": "198d97d493dce5c4e21c3adf332eced5c2cdc89e5273f71c7154e87a1cd00c7d"
       },
       "manifestEntrySha256": "ae25457e39ddf76a4eb2c86feaaf021915433a007fa0ca034347d735f611c04d",
       "patchFiles": [],
@@ -1592,8 +1622,8 @@
         "kind": "npm",
         "name": "dsh-unified-market",
         "repository": "git+https://github.com/jing-hy/dsh-unified-market.git",
-        "sha256": "142de9bdf4837c899efd6d7244ab870311fc090b303f21f996a8d8cebe2518c0",
-        "version": "0.3.1"
+        "sha256": "198d97d493dce5c4e21c3adf332eced5c2cdc89e5273f71c7154e87a1cd00c7d",
+        "version": "0.4.0"
       },
       "sourceCommit": null
     },
@@ -1604,12 +1634,12 @@
           "lib/index.js"
         ],
         "excludedPaths": [],
-        "fileCount": 3,
+        "fileCount": 4,
         "license": "MIT",
         "packageName": "dsh-viewport-lock",
         "packageVersion": "1.0.1",
         "path": "dsh-desktop/assets/plugins/dsh-viewport-lock",
-        "treeSha256": "3a89a466215c9b0b7725a22f9903b84808a7a36ee9a3eb3717bdae65a18e510c"
+        "treeSha256": "8a3941542aa9d4eb95a5c9630096289e80baa655b78d09902efb353eb4b5e703"
       },
       "manifestEntrySha256": "e6e96d7072aceedcdaada60aa3a8fad6b33513f18bf36131e16956070e7ccb8b",
       "patchFiles": [],
@@ -1620,7 +1650,7 @@
       "source": {
         "kind": "internal",
         "name": "dsh-viewport-lock",
-        "sha256": "3a89a466215c9b0b7725a22f9903b84808a7a36ee9a3eb3717bdae65a18e510c",
+        "sha256": "8a3941542aa9d4eb95a5c9630096289e80baa655b78d09902efb353eb4b5e703",
         "version": "1.0.1"
       },
       "sourceCommit": null
