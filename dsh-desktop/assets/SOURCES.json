@@ -1193,13 +1193,13 @@
       "name": "picturereader",
       "type": "plugin",
       "origin": "upstream",
-      "version": "3.3.2",
+      "version": "3.3.3",
       "path": "dsh-desktop/assets/plugins/picturereader",
       "registryStatus": "注册表默认启用",
       "audit": {
         "verdict": "catalog-hit",
         "compare": "same-version-modified",
-        "note": "同步 picturereader 3.3.2：补齐文本模型将 image block 预降级为 attachment sha256 提示时的本地附件恢复；仍保留 EAC 内核 settings namespace 适配说明与内嵌运行依赖分类。",
+        "note": "同步 picturereader 3.3.3：适配内核 0.1.3 的 settings 命名空间 API 变更（dsh-settings 移除 settingsNamespace() 导出，改为 sctx.settings.register(NS, ...)，register 内部完成命名空间校验）；此前 3.3.2 补齐文本模型将 image block 预降级为 attachment sha256 提示时的本地附件恢复；仍保留 EAC 内核 settings namespace 适配说明与内嵌运行依赖分类。",
         "basis": "package.repository明确声明",
         "conflict": null
       },

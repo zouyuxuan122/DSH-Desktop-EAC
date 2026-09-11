@@ -3,7 +3,7 @@
   "manifestVersion": "0.15",
   "id": "io.github.jing-hy.picturereader",
   "name": "picturereader",
-  "version": "3.3.2",
+  "version": "3.3.3",
   "facets": {
     "host": {
       "entry": "src/index.js",
