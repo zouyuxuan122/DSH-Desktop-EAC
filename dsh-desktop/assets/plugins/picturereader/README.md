@@ -1,6 +1,6 @@
 # picturereader
 
-> **v3.3.2** — 给纯文本模型（DeepSeek / text-only）的全能「看图 / 读文档 / 修图」能力。
+> **v3.3.3** — 给纯文本模型（DeepSeek / text-only）的全能「看图 / 读文档 / 修图」能力。
 > 融合 **视觉孪生 adapter**（把任意文本模型原位包装成「支持图片」→ DSH 原生缩略图 + 图片块自动分析）、**三模式路由**、**本地像素级工具链**（scan / OCR×4 引擎 / crop / palette / compare / batch）、**文档转图片**（pdf / word / excel / ppt）、**本地修图工具 `image_edit`**（Pillow/OpenCV 纯 CPU：缩放 / 旋转 / 滤镜 / 合成 / 水印 / 去背景 / 超分等）与**可选外部 VLM 桥**。一个插件全包。
 >
 > **v3.3.0 新增**：**macOS 原生 Vision OCR 引擎**（`engine="macos"`，`scripts/setup-macos.mjs` 一键编译，PR #4 合入）；OCR 引擎选项按平台条件显示（macos 仅 macOS、windows 仅 Windows，paddle/rapid 跨平台始终显示）；修复 PaddleOCR 新环境首次调用三个缺陷（stdout 污染 / w/h→width/height / 缓存路径写死，issue #2）；设置卡 UI 重做（settings-panel 设计语言）；调试日志门控（llm/stream 桥不再刷屏）；peerDependencies 兼容 DSH 0.1.1-rc.2（issue #3）。
@@ -21,7 +21,9 @@ picturereader 现在解决三件事：
 2. **通过「视觉孪生 adapter」让纯文本模型在 DSH 里获得原生缩略图体验**：勾选模型即生成「(视觉)」变体，粘贴图片显示原生缩略图、图片块进会话、并被自动分析成文本路径 + 本地证据再交给模型。即使上游先降级为 `attachment sha256` 文本，图片桥也会仅从本机附件对象库恢复经过文件头校验的图片并注入本地工具路径；模型拿到的永远是纯文本，不会触发 `UNSUPPORTED_CONTENT`。
 3. **本地直接修图 / 批量处理图片**：`image_edit` 提供缩放、旋转、滤镜、合成、水印、去背景、拼接、透视校正等纯 CPU 动作，图片不出本机。
 
-> **版本兼容性**：本版本专门兼容 **dsh 0.1.1-rc.2** 及 **dsheac 5.1.0**，已针对这两个版本进行适配测试与优化，确保稳定运行。同时兼容 DeepSeek Harness EAC 4.2.0 与 `@deepseek-ai/dsh-client-ui-workspace` rc.7。`peerDependencies` 采用 `^0.1.0-rc.6 || ^0.1.1-rc.2` 联合区间，覆盖两条 0.1.x 发布线。
+> **版本兼容性**：本版本专门兼容 **dsh 0.1.3-alpha.1 / dsheac 5.4.0**，同时向后兼容 **dsh 0.1.1-rc.2** 与 **dsheac 5.1.0**，以及 DeepSeek Harness EAC 4.2.0 与 `@deepseek-ai/dsh-client-ui-workspace` rc.7。`peerDependencies` 采用 `^0.1.0-rc.6 || ^0.1.1-rc.2 || ^0.1.3-alpha.1` 联合区间，覆盖三条 0.1.x 发布线。
+>
+> ⚠️ **升级到 dsh 0.1.3 必须使用 v3.3.2 之后的版本**：内核 0.1.3 起 `@deepseek-ai/dsh-settings` 不再导出 `settingsNamespace()` 品牌函数（命名空间校验收进 `register()` 内部）。ESM 静态导入不存在的符号会让模块**整体加载失败**，进而拖垮整棵插件树、触发 EAC 的 guard 安全模式（表现为「一对话就报错」+ 插件大范围消失）。v3.3.3 已适配。
 
 > 🚀 **后续将作为 DeepSeek Harness EAC 的内置视觉插件**：本插件计划替换内置的 `dsh-tool-vision`，随 DSH EAC 桌面版直接捆绑发布，开箱即用。作为独立包发布的目的，是让非 EAC / 旧版用户也能通过 `dsh plugin add picturereader` 或 Git/npm 安装获得同等「看图 / 读文档」能力。
 
@@ -407,13 +409,20 @@ await main()
 
 ## 版本更新日志
 
-### v3.3.2（本次）
+### v3.3.3（本次）
+
+- **适配 dsh 0.1.3-alpha.1 / dsheac 5.4.0 的 settings 命名空间 API 变更（关键修复）**：内核 0.1.3 起 `@deepseek-ai/dsh-settings` 只导出 `SettingsConflictError` / `SettingsProvider` / `redactSecrets`，`settingsNamespace()` 品牌函数被移除（命名空间校验收进 `register()` 内部，见内核 `parseSettingsNamespace`）。原先 `import { settingsNamespace } from '@deepseek-ai/dsh-settings'` 在 ESM 静态解析阶段即失败，导致插件模块加载失败、整棵插件树崩溃 —— 在 EAC 上表现为更新后「一对话就报错」并触发 guard 安全模式（插件行被大范围剥离）。现改为把裸 `NS` 直接交给 `sctx.settings.register(NS, Config, { base: config })`，`register()` 自行完成命名空间校验，返回的 scope 仍具备 `get / watch / update / replace`，行为不变。
+- **`peerDependencies` 补上 0.1.3 线**：`^0.1.0-rc.6 || ^0.1.1-rc.2 || ^0.1.3-alpha.1`（`@deepseek-ai/dsh-settings` 与 `@deepseek-ai/dsh-llm`），避免新环境安装时被旧的版本区间误导。
+- 逐项复核其余 `@deepseek-ai/*` 导入：`contentHasImage`（`dsh-llm`）与 `schemastery` 默认导出在 0.1.3 上均仍存在，无需改动。
+- 兼容性保持不变：0.1.1-rc.2 / dsheac 5.1.0 及更早内核下行为与 v3.3.2 一致。
+
+### v3.3.2
 
 - **修复文本模型附件降级链路**：当模型入口将图片改写为 `[image omitted ...; attachment sha256:…]` 时，图片桥会在本地附件对象库中按 SHA 前缀查找唯一对象，验证 PNG/JPEG/GIF/BMP/WebP 文件头后导出并注入 `image_scan` / `image_ocr` 引导；找不到、前缀歧义或非图片对象时保持原文本，不猜测路径。
 - 修复全局 SHA 匹配正则的状态残留，避免同轮多次检测后遗漏附件。
 - 新增 SHA 降级恢复与无效 SHA 保持原文本的回归用例；`npm test` 全量 **148 通过 / 0 失败**。
 
-### v3.3.1（本次）
+### v3.3.1
 
 - 元数据修正：npm `description` 中 OCR 引擎数量更正为 ×4（windows / macos / paddle / rapid）。
 
