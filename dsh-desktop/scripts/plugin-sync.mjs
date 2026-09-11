@@ -1,17 +1,17 @@
 #!/usr/bin/env node
 
 /*
- * Offline manifest/lock tooling for the bundled plugin tree.
- *
- * This file deliberately has no package dependencies.  Network resolution,
- * mirroring, patch rebasing, staging and runtime overlay writes belong to later
- * layers; this command only validates local inputs and produces deterministic
- * reports/metadata.
+ * Manifest/lock validation and auditable plugin synchronization for the bundled
+ * plugin tree.  Source acquisition is isolated from candidate validation and
+ * promotion; every promotion updates the plugin tree, manifest, registry, and
+ * lock as one recoverable local transaction.
  */
 
 import {
+  copyFileSync,
   existsSync,
   lstatSync,
+  mkdtempSync,
   mkdirSync,
   readFileSync,
   readdirSync,
@@ -21,6 +21,9 @@ import {
   writeFileSync,
 } from 'node:fs';
 import { createHash, randomBytes } from 'node:crypto';
+import { spawnSync } from 'node:child_process';
+import { gunzipSync } from 'node:zlib';
+import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -82,12 +85,13 @@ function relativePosix(from, to) {
 function isSafeRelative(value) {
   if (typeof value !== 'string' || value.length === 0 || path.isAbsolute(value)) return false;
   const normalized = normalizeSlashes(value);
+  const segments = normalized.split('/');
   return normalized !== '..'
     && !normalized.startsWith('../')
     && !normalized.startsWith('/')
     && !/^[A-Za-z]:\//.test(normalized)
     && !normalized.startsWith('//')
-    && !normalized.includes('/../')
+    && !segments.some((segment) => segment === '..')
     && !normalized.includes('\0');
 }
 
@@ -270,6 +274,640 @@ function patchSetFiles(root, patches = []) {
   return [...new Map(resolved.map((file) => [file.relativePath, file])).values()]
     .sort((a, b) => byteCompare(a.relativePath, b.relativePath))
     .map((file) => file.relativePath);
+}
+
+function safePathWithin(root, relative, label = 'path') {
+  if (!isSafeRelative(relative)) fail(`unsafe ${label}: ${relative}`);
+  const absoluteRoot = path.resolve(root);
+  const absolute = path.resolve(absoluteRoot, relative);
+  if (absolute !== absoluteRoot && !absolute.startsWith(`${absoluteRoot}${path.sep}`)) {
+    fail(`unsafe ${label}: ${relative}`);
+  }
+  return absolute;
+}
+
+function normalizeRelativePath(value) {
+  const normalized = normalizeSlashes(value).replace(/^\.\//, '');
+  return normalized.endsWith('/') ? normalized.slice(0, -1) : normalized;
+}
+
+function pathMatchesPattern(pattern, value) {
+  const normalizedPattern = normalizeRelativePath(pattern);
+  const normalizedValue = normalizeRelativePath(value);
+  if (normalizedPattern === normalizedValue) return true;
+  if (!normalizedPattern.includes('*') && !normalizedPattern.includes('?')) {
+    return normalizedValue.startsWith(`${normalizedPattern}/`);
+  }
+  return globToRegExp(normalizedPattern).test(normalizedValue);
+}
+
+function patchPathBelongsToEntry(entryId, declaredPath) {
+  if (typeof declaredPath !== 'string') return false;
+  const normalized = normalizeRelativePath(declaredPath);
+  const prefix = `.sync/patches/${entryId}/`;
+  return normalized.startsWith(prefix) && normalized.length > prefix.length;
+}
+
+function sourceTreeForbiddenPaths(directory) {
+  const forbidden = [];
+  const root = path.resolve(directory);
+
+  function visit(current, relativeDirectory) {
+    for (const entry of sortedDirEntries(current)) {
+      const relativePath = relativeDirectory ? `${relativeDirectory}/${entry.name}` : entry.name;
+      const absolutePath = path.join(current, entry.name);
+      if (entry.name === '.git') continue;
+      if (FORBIDDEN_NAMES.has(entry.name)) {
+        forbidden.push(normalizeSlashes(relativePath));
+        continue;
+      }
+      if (entry.isDirectory()) visit(absolutePath, relativePath);
+      else if (entry.isSymbolicLink()) forbidden.push(normalizeSlashes(relativePath));
+    }
+  }
+
+  if (!existsSync(root) || !lstatSync(root).isDirectory()) {
+    fail(`source tree is not a directory: ${directory}`, 'source');
+  }
+  visit(root, '');
+  return forbidden.sort(byteCompare);
+}
+
+function copyTreeContents(source, destination) {
+  mkdirSync(destination, { recursive: true });
+  for (const entry of sortedDirEntries(source)) {
+    if (entry.name === '.git') continue;
+    if (FORBIDDEN_NAMES.has(entry.name)) {
+      fail(`source contains forbidden ${entry.name}: ${entry.name}`, 'source');
+    }
+    const sourcePath = path.join(source, entry.name);
+    const destinationPath = path.join(destination, entry.name);
+    if (entry.isDirectory()) {
+      copyTreeContents(sourcePath, destinationPath);
+    } else if (entry.isFile()) {
+      mkdirSync(path.dirname(destinationPath), { recursive: true });
+      copyFileSync(sourcePath, destinationPath);
+    } else {
+      fail(`source contains unsupported symbolic link or filesystem entry: ${entry.name}`, 'source');
+    }
+  }
+}
+
+function copyRelativeFile(sourceRoot, destinationRoot, relativePath) {
+  const source = safePathWithin(sourceRoot, relativePath, 'preserved path');
+  const destination = safePathWithin(destinationRoot, relativePath, 'preserved path');
+  if (!existsSync(source)) return;
+  const sourceStat = lstatSync(source);
+  if (sourceStat.isDirectory()) {
+    copyTreeContents(source, destination);
+    return;
+  }
+  if (!sourceStat.isFile()) {
+    fail(`preserved path must be a file or directory: ${relativePath}`, 'source');
+  }
+  mkdirSync(path.dirname(destination), { recursive: true });
+  copyFileSync(source, destination);
+}
+
+function copyPreservedPaths(sourceRoot, destinationRoot, preservePaths) {
+  for (const preserve of preservePaths) {
+    if (!isSafeRelative(preserve)
+      || normalizeSlashes(preserve).split('/').some((part) => FORBIDDEN_NAMES.has(part))) {
+      fail(`unsafe preservePaths entry: ${preserve}`, 'validation');
+    }
+    const normalized = normalizeRelativePath(preserve);
+    if (!normalized.includes('*') && !normalized.includes('?')) {
+      copyRelativeFile(sourceRoot, destinationRoot, normalized);
+      continue;
+    }
+    for (const file of allFilesUnder(sourceRoot)) {
+      if (pathMatchesPattern(normalized, file.relativePath)) {
+        copyRelativeFile(sourceRoot, destinationRoot, file.relativePath);
+      }
+    }
+  }
+}
+
+function fileMap(directory) {
+  return new Map(collectTreeFiles(directory).files.map((file) => [file.relativePath, file]));
+}
+
+function treeDiff(before, after) {
+  const beforeFiles = fileMap(before);
+  const afterFiles = fileMap(after);
+  const added = [];
+  const removed = [];
+  const changed = [];
+  for (const [relativePath, file] of afterFiles) {
+    if (!beforeFiles.has(relativePath)) {
+      added.push(relativePath);
+      continue;
+    }
+    const oldFile = beforeFiles.get(relativePath);
+    const oldBytes = oldFile.type === 'symlink'
+      ? `symlink:${oldFile.target}`
+      : readFileSync(oldFile.absolutePath);
+    const newBytes = file.type === 'symlink'
+      ? `symlink:${file.target}`
+      : readFileSync(file.absolutePath);
+    if (byteCompare(oldBytes, newBytes) !== 0) changed.push(relativePath);
+  }
+  for (const relativePath of beforeFiles.keys()) {
+    if (!afterFiles.has(relativePath)) removed.push(relativePath);
+  }
+  return {
+    added: added.sort(byteCompare),
+    removed: removed.sort(byteCompare),
+    changed: changed.sort(byteCompare),
+  };
+}
+
+function packageRepository(packageJson) {
+  const repository = packageJson?.repository;
+  if (typeof repository === 'string') return repository;
+  if (isObject(repository) && typeof repository.url === 'string') return repository.url;
+  if (typeof packageJson?.homepage === 'string' && packageJson.homepage.includes('github.com/')) {
+    return packageJson.homepage;
+  }
+  return null;
+}
+
+function normalizeRepository(value) {
+  if (typeof value !== 'string' || !value.trim()) return null;
+  let source = value.trim().replace(/^git\+/, '');
+  if (source.startsWith('git@github.com:')) {
+    source = `https://github.com/${source.slice('git@github.com:'.length)}`;
+  }
+  source = source.replace(/\.git$/, '').replace(/\/$/, '');
+  try {
+    const parsed = new URL(source);
+    if (parsed.hostname.toLowerCase() !== 'github.com') return source.toLowerCase();
+    return `https://github.com/${parsed.pathname.replace(/^\//, '').toLowerCase()}`;
+  } catch {
+    return source.toLowerCase();
+  }
+}
+
+function githubRepositoryParts(value) {
+  const normalized = normalizeRepository(value);
+  if (!normalized) return null;
+  const match = /^https:\/\/github\.com\/([^/]+)\/([^/]+)$/i.exec(normalized);
+  return match ? { owner: match[1], name: match[2], repository: normalized } : null;
+}
+
+function packageEntrypointTargets(packageJson) {
+  const targets = [];
+  if (typeof packageJson?.main === 'string') targets.push(packageJson.main);
+  targets.push(...packageExportTargets(packageJson?.exports));
+  return targets;
+}
+
+const LIFECYCLE_SCRIPTS = new Set([
+  'prepublish',
+  'prepare',
+  'prepublishOnly',
+  'prepack',
+  'postpack',
+  'preprepare',
+  'postprepare',
+  'preinstall',
+  'install',
+  'postinstall',
+  'preuninstall',
+  'uninstall',
+  'postuninstall',
+  'preversion',
+  'version',
+  'postversion',
+  'dependencies',
+  'publish',
+  'postpublish',
+]);
+
+function packageWiring(packageJson) {
+  return {
+    dsh: packageJson?.dsh ?? null,
+  };
+}
+
+function candidatePackageErrors(entry, candidateRoot, currentRoot, mode, expectedVersion, sourceReference) {
+  const errors = [];
+  const packageFile = path.join(candidateRoot, 'package.json');
+  if (!existsSync(packageFile)) return { errors: [`sync ${entry.id}: source package.json is missing`] };
+  let packageJson;
+  try {
+    packageJson = readJson(packageFile, `sync ${entry.id} package.json`);
+  } catch (error) {
+    return { errors: [error.message] };
+  }
+  if (!isObject(packageJson)) {
+    return { errors: [`sync ${entry.id}: source package.json must contain an object`] };
+  }
+  if (packageJson.name !== entry.packageName) {
+    errors.push(`sync ${entry.id}: package name ${String(packageJson.name)} does not match ${entry.packageName}`);
+  }
+  if (typeof packageJson.version !== 'string' || !packageJson.version) {
+    errors.push(`sync ${entry.id}: source package version is missing`);
+  } else if (expectedVersion && packageJson.version !== expectedVersion) {
+    errors.push(`sync ${entry.id}: exact version ${expectedVersion} does not match source package ${packageJson.version}`);
+  }
+  if (entry.license?.expected !== packageLicense(packageJson)) {
+    errors.push(`sync ${entry.id}: license ${packageLicense(packageJson)} does not match ${entry.license?.expected}`);
+  }
+  const lifecycle = isObject(packageJson.scripts)
+    ? Object.keys(packageJson.scripts).filter((name) => LIFECYCLE_SCRIPTS.has(name))
+    : [];
+  if (lifecycle.length > 0) {
+    errors.push(`sync ${entry.id}: lifecycle scripts are forbidden: ${lifecycle.join(', ')}`);
+  }
+
+  for (const entrypoint of Array.isArray(entry.validation?.entrypoints)
+    ? entry.validation.entrypoints
+    : []) {
+    if (!isSafeRelative(entrypoint)) {
+      errors.push(`sync ${entry.id}: entrypoint is unsafe ${entrypoint}`);
+      continue;
+    }
+    const target = safePathWithin(candidateRoot, entrypoint, 'entrypoint');
+    if (!existsSync(target) || !lstatSync(target).isFile()) {
+      errors.push(`sync ${entry.id}: entrypoint is missing ${entrypoint}`);
+    }
+  }
+  if (typeof packageJson.main === 'string') {
+    const relativeTarget = packageJson.main.startsWith('./')
+      ? packageJson.main.slice(2)
+      : packageJson.main;
+    if (!isSafeRelative(relativeTarget)) {
+      errors.push(`sync ${entry.id}: package entrypoint is unsafe ${packageJson.main}`);
+    } else {
+      const absoluteTarget = safePathWithin(candidateRoot, relativeTarget, 'entrypoint');
+      if (!relativeTarget.includes('*')
+        && (!existsSync(absoluteTarget) || !lstatSync(absoluteTarget).isFile())) {
+        errors.push(`sync ${entry.id}: package entrypoint is missing ${packageJson.main}`);
+      }
+    }
+  }
+  for (const target of packageExportTargets(packageJson.exports)) {
+    if (typeof target !== 'string' || !target.startsWith('./')) continue;
+    const relativeTarget = target.slice(2);
+    if (!isSafeRelative(relativeTarget)) {
+      errors.push(`sync ${entry.id}: package entrypoint is unsafe ${target}`);
+      continue;
+    }
+    const absoluteTarget = safePathWithin(candidateRoot, relativeTarget, 'entrypoint');
+    if (!relativeTarget.includes('*')
+      && (!existsSync(absoluteTarget) || !lstatSync(absoluteTarget).isFile())) {
+      errors.push(`sync ${entry.id}: package entrypoint is missing ${target}`);
+    }
+  }
+
+  if (entry.source?.kind === 'npm' && entry.source.name !== packageJson.name) {
+    errors.push(`sync ${entry.id}: source package name ${String(packageJson.name)} does not match ${entry.source.name}`);
+  }
+  const expectedRepository = normalizeRepository(entry.source?.repository);
+  const actualRepository = normalizeRepository(packageRepository(packageJson));
+  if (expectedRepository && expectedRepository !== actualRepository) {
+    const expectedParts = githubRepositoryParts(entry.source.repository);
+    const actualParts = githubRepositoryParts(packageRepository(packageJson));
+    const expectedLabel = expectedParts
+      ? `${expectedParts.owner}/${expectedParts.name}`
+      : String(entry.source.repository);
+    const actualLabel = actualParts
+      ? `${actualParts.owner}/${actualParts.name}`
+      : String(packageRepository(packageJson));
+    errors.push(`sync ${entry.id}: source owner/name ${actualLabel} does not match ${expectedLabel}`);
+  }
+  if (expectedRepository && sourceReference?.repository
+    && normalizeRepository(sourceReference.repository) !== expectedRepository) {
+    errors.push(`sync ${entry.id}: source owner/name does not match manifest repository`);
+  }
+
+  if (mode === 'patch-rebase' && currentRoot) {
+    const currentPackageFile = path.join(currentRoot, 'package.json');
+    if (existsSync(currentPackageFile)) {
+      let currentPackage;
+      try {
+        currentPackage = readJson(currentPackageFile, `sync ${entry.id} current package.json`);
+      } catch (error) {
+        errors.push(error.message);
+      }
+      if (currentPackage) {
+        if (stableJson(packageWiring(currentPackage)) !== stableJson(packageWiring(packageJson))) {
+          errors.push(`sync ${entry.id}: dsh wiring changed outside the explicit patch-set`);
+        }
+        if (stableJson(packageEntrypointTargets(currentPackage))
+          !== stableJson(packageEntrypointTargets(packageJson))) {
+          errors.push(`sync ${entry.id}: package entrypoint changed during patch-rebase`);
+        }
+      }
+    }
+  }
+  return { errors, packageJson };
+}
+
+function parseTarString(buffer, offset, length) {
+  return buffer.subarray(offset, offset + length).toString('utf8').replace(/\0.*$/, '').trim();
+}
+
+function parseTarSize(buffer) {
+  const raw = parseTarString(buffer, 124, 12).replace(/\0/g, '').trim();
+  if (!raw) return 0;
+  const size = Number.parseInt(raw, 8);
+  if (!Number.isSafeInteger(size) || size < 0) fail(`invalid tar entry size: ${raw}`, 'source');
+  return size;
+}
+
+function parsePaxAttributes(buffer) {
+  const attributes = {};
+  let offset = 0;
+  while (offset < buffer.length) {
+    const newline = buffer.indexOf(0x0a, offset);
+    if (newline < 0) fail('invalid pax header', 'source');
+    const record = buffer.subarray(offset, newline).toString('utf8');
+    const separator = record.indexOf(' ');
+    const length = Number.parseInt(record.slice(0, separator), 10);
+    if (!Number.isSafeInteger(length) || length <= 0 || offset + length > buffer.length) {
+      fail('invalid pax record length', 'source');
+    }
+    const value = buffer.subarray(offset, offset + length).toString('utf8').replace(/\n$/, '');
+    const equals = value.indexOf('=');
+    if (equals > 0) attributes[value.slice(value.indexOf(' ') + 1, equals)] = value.slice(equals + 1);
+    offset += length;
+  }
+  return attributes;
+}
+
+function extractTarArchive(bytes, destination) {
+  mkdirSync(destination, { recursive: true });
+  let offset = 0;
+  let zeroBlocks = 0;
+  let pendingPax = {};
+  let longName = null;
+  while (offset + 512 <= bytes.length) {
+    const header = bytes.subarray(offset, offset + 512);
+    offset += 512;
+    if (header.every((byte) => byte === 0)) {
+      zeroBlocks += 1;
+      if (zeroBlocks >= 2) break;
+      continue;
+    }
+    zeroBlocks = 0;
+    const type = String.fromCharCode(header[156] || 0);
+    const size = parseTarSize(header);
+    const payload = bytes.subarray(offset, offset + size);
+    if (payload.length !== size) fail('truncated tar archive', 'source');
+    offset += Math.ceil(size / 512) * 512;
+    if (type === 'x' || type === 'g') {
+      pendingPax = type === 'x' ? parsePaxAttributes(payload) : pendingPax;
+      continue;
+    }
+    if (type === 'L') {
+      longName = payload.toString('utf8').replace(/\0.*$/, '').replace(/\n$/, '');
+      continue;
+    }
+    if (type === 'K' || type === '1' || type === '2' || type === '3' || type === '4' || type === '6') {
+      fail(`unsupported tar link or device entry: ${parseTarString(header, 0, 100)}`, 'source');
+    }
+    const prefix = parseTarString(header, 345, 155);
+    const name = pendingPax.path || longName || (prefix ? `${prefix}/${parseTarString(header, 0, 100)}` : parseTarString(header, 0, 100));
+    pendingPax = {};
+    longName = null;
+    const relative = normalizeRelativePath(name);
+    if (!isSafeRelative(relative) || relative.startsWith('../') || relative.includes('/../')) {
+      fail(`unsafe tar path: ${name}`, 'source');
+    }
+    if (relative.split('/').some((part) => FORBIDDEN_NAMES.has(part))) {
+      fail(`tar archive contains forbidden path: ${relative}`, 'source');
+    }
+    const target = safePathWithin(destination, relative, 'tar path');
+    if (type === '5' || relative.endsWith('/')) {
+      mkdirSync(target, { recursive: true });
+    } else if (type === '0' || type === '\0' || type === '') {
+      mkdirSync(path.dirname(target), { recursive: true });
+      writeFileSync(target, payload);
+    } else {
+      fail(`unsupported tar entry type ${type || '0'}: ${relative}`, 'source');
+    }
+  }
+}
+
+function locatePackageRoot(extractedRoot) {
+  if (existsSync(path.join(extractedRoot, 'package.json'))) return extractedRoot;
+  const directories = sortedDirEntries(extractedRoot).filter((entry) => entry.isDirectory());
+  const candidates = directories.filter((entry) => existsSync(path.join(extractedRoot, entry.name, 'package.json')));
+  if (candidates.length === 1) return path.join(extractedRoot, candidates[0].name);
+  const packageFiles = allFilesUnder(extractedRoot)
+    .filter((file) => path.basename(file.relativePath) === 'package.json');
+  if (packageFiles.length === 1) return path.dirname(packageFiles[0].absolutePath);
+  fail(`source archive must contain exactly one package.json (found ${packageFiles.length})`, 'source');
+}
+
+function archiveIntegrity(bytes, expectedSha256, expectedIntegrity) {
+  const archiveSha256 = sha256Bytes(bytes);
+  const digests = {
+    sha256: createHash('sha256').update(bytes).digest('base64'),
+    sha384: createHash('sha384').update(bytes).digest('base64'),
+    sha512: createHash('sha512').update(bytes).digest('base64'),
+  };
+  const integrity = expectedIntegrity || `sha512-${digests.sha512}`;
+  if (expectedSha256 && archiveSha256 !== expectedSha256) {
+    fail(`archive SHA-256 mismatch: expected ${expectedSha256}, received ${archiveSha256}`, 'integrity');
+  }
+  if (expectedIntegrity) {
+    const match = /^(sha256|sha384|sha512)-([A-Za-z0-9+/]+=*)$/.exec(expectedIntegrity);
+    if (!match || match[2] !== digests[match[1]]) {
+      fail(`archive integrity mismatch: expected ${expectedIntegrity}, received ${integrity}`, 'integrity');
+    }
+  }
+  return { archiveSha256, integrity };
+}
+
+async function fetchBytes(url, headers = {}) {
+  if (url.startsWith('file://')) {
+    try {
+      return readFileSync(new URL(url));
+    } catch (error) {
+      fail(`source download failed for ${url}: ${error instanceof Error ? error.message : String(error)}`, 'network');
+    }
+  }
+  if (typeof fetch !== 'function') fail('network source requires Node fetch support', 'network');
+  let response;
+  try {
+    response = await fetch(url, {
+      headers: { 'user-agent': 'dsh-plugin-sync/1', ...headers },
+      signal: typeof AbortSignal?.timeout === 'function' ? AbortSignal.timeout(120000) : undefined,
+    });
+  } catch (error) {
+    fail(`source download failed for ${url}: ${error instanceof Error ? error.message : String(error)}`, 'network');
+  }
+  if (!response.ok) fail(`source download failed for ${url}: HTTP ${response.status}`, 'network');
+  try {
+    return Buffer.from(await response.arrayBuffer());
+  } catch (error) {
+    fail(`source download failed for ${url}: ${error instanceof Error ? error.message : String(error)}`, 'network');
+  }
+}
+
+async function fetchJson(url) {
+  const bytes = await fetchBytes(url, { accept: 'application/json' });
+  try {
+    return JSON.parse(bytes.toString('utf8'));
+  } catch (error) {
+    fail(`source metadata is not valid JSON: ${error instanceof Error ? error.message : String(error)}`, 'network');
+  }
+}
+
+function npmPackagePath(name) {
+  return name.startsWith('@')
+    ? name.split('/').map((part) => encodeURIComponent(part)).join('/')
+    : encodeURIComponent(name);
+}
+
+function requestedResolution(entry, flags) {
+  const explicitVersion = flags.get('version');
+  const explicitCommit = flags.get('commit') || flags.get('source-commit');
+  const modeFlag = flags.get('mode');
+  const mode = explicitVersion || explicitCommit ? 'exact' : (modeFlag || entry.request?.mode);
+  if (mode !== 'latest' && mode !== 'exact') fail(`unsupported sync mode: ${mode}`, 'usage');
+  const version = explicitVersion || (mode === 'exact' ? entry.request?.version : undefined);
+  const commit = explicitCommit || (mode === 'exact' ? entry.request?.commit : undefined);
+  if (mode === 'exact' && !version && !commit) {
+    fail('exact sync requires --version or an exact manifest version/commit', 'usage');
+  }
+  return {
+    mode,
+    version: typeof version === 'string' && version ? version : null,
+    commit: typeof commit === 'string' && commit ? commit : null,
+    requested: version || commit || (mode === 'latest' ? 'latest' : null),
+  };
+}
+
+async function resolveNetworkSource(entry, resolution, flags) {
+  const explicitUrl = flags.get('source-url') || flags.get('url');
+  if (explicitUrl) {
+    const url = String(explicitUrl);
+    const bytes = await fetchBytes(url);
+    const local = url.startsWith('file://');
+    return {
+      bytes,
+      ...(local ? {} : { tarball: url }),
+      ...archiveIntegrity(bytes, flags.get('sha256'), flags.get('integrity')),
+      networkAccessed: !local,
+    };
+  }
+  if (entry.source?.kind === 'npm') {
+    const registry = String(flags.get('registry') || process.env.NPM_CONFIG_REGISTRY || 'https://registry.npmjs.org').replace(/\/$/, '');
+    const metadata = await fetchJson(`${registry}/${npmPackagePath(entry.source.name)}`);
+    const version = resolution.version || metadata?.['dist-tags']?.latest;
+    if (!version || !metadata?.versions?.[version]) {
+      fail(`npm source has no exact version ${version || '<latest>'}`, 'network');
+    }
+    const dist = metadata.versions[version].dist;
+    if (!dist?.tarball) fail(`npm source ${entry.source.name}@${version} has no tarball URL`, 'network');
+    const bytes = await fetchBytes(dist.tarball);
+    return {
+      bytes,
+      tarball: dist.tarball,
+      integrity: dist.integrity || archiveIntegrity(bytes).integrity,
+      ...archiveIntegrity(bytes, flags.get('sha256'), flags.get('integrity') || dist.integrity),
+      resolvedVersion: version,
+      networkAccessed: true,
+    };
+  }
+  if (entry.source?.kind === 'github') {
+    const parts = githubRepositoryParts(entry.source.repository);
+    if (!parts) fail(`GitHub source repository is invalid: ${entry.source.repository}`, 'network');
+    let archiveUrl;
+    let resolvedCommit = resolution.commit;
+    let resolvedVersion = resolution.version;
+    if (resolvedCommit) {
+      archiveUrl = `https://github.com/${parts.owner}/${parts.name}/archive/${encodeURIComponent(resolvedCommit)}.tar.gz`;
+    } else if (resolvedVersion) {
+      archiveUrl = `https://github.com/${parts.owner}/${parts.name}/archive/refs/tags/v${encodeURIComponent(resolvedVersion)}.tar.gz`;
+    } else {
+      const release = await fetchJson(`https://api.github.com/repos/${parts.owner}/${parts.name}/releases/latest`);
+      const tag = release?.tag_name;
+      archiveUrl = release?.tarball_url;
+      resolvedVersion = typeof tag === 'string' ? tag.replace(/^v/, '') : null;
+      resolvedCommit = null;
+      if (!archiveUrl) fail(`GitHub source has no release archive for ${parts.owner}/${parts.name}`, 'network');
+    }
+    const bytes = await fetchBytes(archiveUrl, { accept: 'application/octet-stream' });
+    return {
+      bytes,
+      tarball: archiveUrl,
+      resolvedVersion,
+      resolvedCommit,
+      ...archiveIntegrity(bytes, flags.get('sha256'), flags.get('integrity')),
+      networkAccessed: true,
+    };
+  }
+  fail(`source kind ${entry.source?.kind} cannot be downloaded`, 'unsupported');
+}
+
+async function prepareSource(entry, resolution, flags) {
+  const sourceDirFlag = flags.get('source-dir') || flags.get('source');
+  if (sourceDirFlag) {
+    const sourceRoot = path.resolve(String(sourceDirFlag));
+    const forbidden = sourceTreeForbiddenPaths(sourceRoot);
+    if (forbidden.length > 0) {
+      fail(`source contains forbidden paths: ${forbidden.join(', ')}`, 'source');
+    }
+    return { sourceRoot, networkAccessed: false, artifact: {} };
+  }
+  const archiveFlag = flags.get('archive') || flags.get('artifact');
+  if (archiveFlag) {
+    let bytes;
+    try {
+      bytes = readFileSync(path.resolve(String(archiveFlag)));
+    } catch (error) {
+      fail(`source archive cannot be read: ${error instanceof Error ? error.message : String(error)}`, 'source');
+    }
+    const integrity = archiveIntegrity(bytes, flags.get('sha256'), flags.get('integrity'));
+    const extractedRoot = mkdtempSync(path.join(tmpdir(), 'dsh-plugin-source-'));
+    try {
+      const archiveBytes = bytes[0] === 0x1f && bytes[1] === 0x8b ? gunzipSync(bytes) : bytes;
+      extractTarArchive(archiveBytes, extractedRoot);
+      const sourceRoot = locatePackageRoot(extractedRoot);
+      const forbidden = sourceTreeForbiddenPaths(sourceRoot);
+      if (forbidden.length > 0) {
+        fail(`source contains forbidden paths: ${forbidden.join(', ')}`, 'source');
+      }
+      return { sourceRoot, networkAccessed: false, artifact: { ...integrity }, cleanup: extractedRoot };
+    } catch (error) {
+      try { rmSync(extractedRoot, { recursive: true, force: true }); } catch { /* best effort */ }
+      throw error;
+    }
+  }
+  if (flags.get('dry-run')) return null;
+  const downloaded = await resolveNetworkSource(entry, resolution, flags);
+  const extractedRoot = mkdtempSync(path.join(tmpdir(), 'dsh-plugin-source-'));
+  try {
+    const archiveBytes = downloaded.bytes[0] === 0x1f && downloaded.bytes[1] === 0x8b
+      ? gunzipSync(downloaded.bytes)
+      : downloaded.bytes;
+    extractTarArchive(archiveBytes, extractedRoot);
+    const sourceRoot = locatePackageRoot(extractedRoot);
+    const forbidden = sourceTreeForbiddenPaths(sourceRoot);
+    if (forbidden.length > 0) {
+      fail(`source contains forbidden paths: ${forbidden.join(', ')}`, 'source');
+    }
+    return {
+      sourceRoot,
+      networkAccessed: downloaded.networkAccessed !== false,
+      artifact: {
+        archiveSha256: downloaded.archiveSha256,
+        integrity: downloaded.integrity,
+        tarball: downloaded.tarball,
+        sourceCommit: downloaded.resolvedCommit || resolution.commit || null,
+        resolvedVersion: downloaded.resolvedVersion || resolution.version || null,
+      },
+      cleanup: extractedRoot,
+    };
+  } catch (error) {
+    try { rmSync(extractedRoot, { recursive: true, force: true }); } catch { /* best effort */ }
+    throw error;
+  }
 }
 
 /**
@@ -717,6 +1355,9 @@ function validateManifestInternal(project) {
         if (segments.some((segment) => FORBIDDEN_NAMES.has(segment))) {
           pushError(errors, `${pointer}: ${field} may not target forbidden path ${declared}`);
         }
+        if (field === 'patches' && !patchPathBelongsToEntry(entry.id, declared)) {
+          pushError(errors, `${pointer}: patches must stay under .sync/patches/${entry.id}/`);
+        }
       }
     }
   }
@@ -831,7 +1472,16 @@ export function generateRegistry(root = DEFAULT_ROOT, { check = false } = {}) {
   return { file, changed: current !== expected, checked: false };
 }
 
-function resolvedSource(entry, packageJson, treeHash) {
+function lockedRequest(entry, packageJson) {
+  if (entry.request?.version) return entry.request.version;
+  if (entry.request?.commit) return entry.request.commit;
+  if (entry.request?.mode === 'latest' && typeof packageJson?.version === 'string' && packageJson.version) {
+    return packageJson.version;
+  }
+  return null;
+}
+
+function resolvedSource(entry, packageJson, treeHash, artifact = {}) {
   const source = { kind: entry.source.kind };
   if (entry.source.name) source.name = entry.source.name;
   if (entry.source.repository) source.repository = entry.source.repository;
@@ -841,6 +1491,11 @@ function resolvedSource(entry, packageJson, treeHash) {
   // future network resolver may replace it with a tarball/archive digest, but
   // it must not pretend that a network artifact was fetched here.
   source.sha256 = treeHash;
+  if (artifact.archiveSha256) source.archiveSha256 = artifact.archiveSha256;
+  if (artifact.integrity) source.integrity = artifact.integrity;
+  if (artifact.tarball) source.tarball = artifact.tarball;
+  if (artifact.resolvedVersion) source.version = artifact.resolvedVersion;
+  if (artifact.sourceCommit) source.commit = artifact.sourceCommit;
   return source;
 }
 
@@ -854,9 +1509,8 @@ export function buildLock(root = DEFAULT_ROOT) {
     const snapshot = treeSnapshot(directory);
     const patches = Array.isArray(entry.sync?.patches) ? entry.sync.patches : [];
     const patchHash = patchSetSha256(project.paths.root, patches);
-    const requested = entry.request.mode === 'latest'
-      ? 'latest'
-      : (entry.request.version || entry.request.commit);
+    const requested = lockedRequest(entry, pkg);
+    if (!requested) fail(`${entry.id}: exact lock resolution requires a version or commit`, 'validation');
     lockEntries[entry.id] = {
       requested,
       source: resolvedSource(entry, pkg, snapshot.treeSha256),
@@ -949,8 +1603,29 @@ function validateLockInternal(project, manifestResult, lock) {
     if (item.local.fileCount !== snapshot.files.length) errors.push(`${pointer}: file count mismatch`);
     if (stableJson(item.local.excludedPaths || []) !== stableJson(snapshot.excludedPaths)) errors.push(`${pointer}: excluded forbidden paths changed`);
     const expectedSource = resolvedSource(entry, pkg, snapshot.treeSha256);
-    if (stableJson(item.source) !== stableJson(expectedSource)) {
-      errors.push(`${pointer}: source identity/resolution differs from manifest or local package`);
+    if (!isObject(item.source)) {
+      errors.push(`${pointer}: source identity/resolution is missing`);
+    } else {
+      // A fetched artifact may add immutable archive evidence to the lock.
+      // Manifest-derived identity must still match exactly; optional evidence
+      // is checked for shape without being silently discarded.
+      for (const key of Object.keys(expectedSource)) {
+        if (stableJson(item.source[key]) !== stableJson(expectedSource[key])) {
+          errors.push(`${pointer}: source identity/resolution differs from manifest or local package`);
+          break;
+        }
+      }
+      if (item.source.archiveSha256 !== undefined && !HEX_256.test(item.source.archiveSha256)) {
+        errors.push(`${pointer}: archive SHA-256 is malformed`);
+      }
+      if (item.source.integrity !== undefined
+        && (typeof item.source.integrity !== 'string'
+          || !/^sha(?:256|384|512)-[A-Za-z0-9+/]+=*$/.test(item.source.integrity))) {
+        errors.push(`${pointer}: archive integrity is malformed`);
+      }
+      if (item.source.tarball !== undefined && typeof item.source.tarball !== 'string') {
+        errors.push(`${pointer}: tarball reference must be a string`);
+      }
     }
     if (item.sourceCommit !== (entry.request.commit || null)) {
       errors.push(`${pointer}: sourceCommit differs from manifest`);
@@ -959,10 +1634,10 @@ function validateLockInternal(project, manifestResult, lock) {
     if (stableJson(item.patchFiles || []) !== stableJson(patchSetFiles(project.paths.root, patches))) errors.push(`${pointer}: patch file list mismatch`);
     if (patches.length === 0 && item.patchSet !== 'none') errors.push(`${pointer}: empty patch set must be recorded as none`);
     if (patches.length > 0 && item.patchSet !== `sha256:${patchHash}`) errors.push(`${pointer}: patch-set identifier mismatch`);
-    const expectedRequested = entry.request.mode === 'latest'
-      ? 'latest'
-      : (entry.request.version || entry.request.commit);
+    const expectedRequested = lockedRequest(entry, pkg);
+    if (!expectedRequested) errors.push(`${pointer}: exact lock resolution is missing a version or commit`);
     if (item.requested !== expectedRequested) errors.push(`${pointer}: requested version/commit differs from manifest`);
+    if (item.requested === 'latest') errors.push(`${pointer}: formal lock must not contain latest`);
     if (item.runtimeUpdate !== (entry.runtimeUpdate.allowed ? 'enabled' : 'disabled')) errors.push(`${pointer}: runtime update policy differs from manifest`);
     if (item.manifestEntrySha256 !== sha256Text(stableJson(entry))) errors.push(`${pointer}: manifest entry digest mismatch`);
     if (entry.request.mode === 'latest' && item.source?.version !== pkg.version) errors.push(`${pointer}: latest resolution is not pinned to a local exact version`);
@@ -996,6 +1671,357 @@ export function validateLocked(root = DEFAULT_ROOT) {
   };
 }
 
+function sourceReferenceFor(prepared) {
+  const packageFile = path.join(prepared.sourceRoot, 'package.json');
+  const packageJson = readJson(packageFile, 'sync source package.json');
+  const repository = packageRepository(packageJson);
+  return repository ? { repository } : {};
+}
+
+function applyPatchSet(candidateRoot, root, entry) {
+  const patches = Array.isArray(entry.sync?.patches) ? entry.sync.patches : [];
+  if (entry.sync?.mode !== 'patch-rebase') {
+    if (patches.length > 0) fail(`sync ${entry.id}: patches require patch-rebase mode`, 'patch');
+    return;
+  }
+  if (patches.length === 0) return;
+
+  const patchFiles = patches.flatMap((declared) => resolvePatchMatches(root, declared));
+  const args = [
+    'apply',
+    '--check',
+    '--recount',
+    '--whitespace=nowarn',
+    ...patchFiles.map((patch) => patch.absolutePath),
+  ];
+  const check = spawnSync('git', args, { cwd: candidateRoot, encoding: 'utf8' });
+  if (check.error || check.status !== 0) {
+    const details = String(check.stderr || check.stdout || check.error?.message || '').trim();
+    fail(
+      `sync ${entry.id}: patch conflict or invalid patch-set${details ? `: ${details}` : ''}`,
+      'patch',
+    );
+  }
+
+  const applied = spawnSync(
+    'git',
+    ['apply', '--recount', '--whitespace=nowarn', ...patchFiles.map((patch) => patch.absolutePath)],
+    { cwd: candidateRoot, encoding: 'utf8' },
+  );
+  if (applied.error || applied.status !== 0) {
+    const details = String(applied.stderr || applied.stdout || applied.error?.message || '').trim();
+    fail(
+      `sync ${entry.id}: patch-set was not completely applied${details ? `: ${details}` : ''}`,
+      'patch',
+    );
+  }
+}
+
+function materializeCandidate(sourceRoot, destination, preservePaths, temporaryRoot) {
+  const candidateRoot = mkdtempSync(path.join(
+    path.resolve(temporaryRoot),
+    `${path.basename(path.resolve(destination))}.candidate-`,
+  ));
+  try {
+    copyTreeContents(sourceRoot, candidateRoot);
+    copyPreservedPaths(destination, candidateRoot, preservePaths);
+    return candidateRoot;
+  } catch (error) {
+    try { rmSync(candidateRoot, { recursive: true, force: true }); } catch { /* best effort */ }
+    throw error;
+  }
+}
+
+function assertCandidatePaths(entry, candidateRoot) {
+  const forbidden = sourceTreeForbiddenPaths(candidateRoot);
+  if (forbidden.length > 0) {
+    fail(`sync ${entry.id}: candidate contains forbidden paths: ${forbidden.join(', ')}`, 'source');
+  }
+}
+
+function assertPreservePaths(entry, currentRoot, candidateRoot) {
+  const currentSnapshot = treeSnapshot(currentRoot);
+  const candidateSnapshot = treeSnapshot(candidateRoot);
+  const preservePaths = Array.isArray(entry.sync?.preservePaths) ? entry.sync.preservePaths : [];
+  const unaccounted = [];
+  for (const currentPath of currentSnapshot.files) {
+    if (!candidateSnapshot.files.includes(currentPath)
+      && !preservePaths.some((pattern) => pathMatchesPattern(pattern, currentPath))) {
+      unaccounted.push(currentPath);
+    }
+  }
+  if (unaccounted.length > 0) {
+    fail(
+      `sync ${entry.id}: local extra files are not listed in preservePaths: ${unaccounted.join(', ')}`,
+      'preserve',
+    );
+  }
+}
+
+function promoteDirectory(candidateRoot, destination) {
+  const target = path.resolve(destination);
+  const token = `${process.pid}-${Date.now()}-${randomBytes(6).toString('hex')}`;
+  const staged = `${target}.new-${token}`;
+  const backup = `${target}.old-${token}`;
+  renameSync(candidateRoot, staged);
+  let movedOld = false;
+  try {
+    if (existsSync(target)) {
+      renameSync(target, backup);
+      movedOld = true;
+    }
+    renameSync(staged, target);
+    if (movedOld) rmSync(backup, { recursive: true, force: true });
+  } catch (error) {
+    try { if (existsSync(staged)) rmSync(staged, { recursive: true, force: true }); } catch { /* preserve diagnostics */ }
+    if (movedOld && !existsSync(target)) {
+      try { renameSync(backup, target); } catch { /* preserve diagnostics */ }
+    }
+    throw error;
+  }
+}
+
+function lockEntryForSync(root, entry, artifact = {}) {
+  const project = loadProject(root);
+  const directory = packageRoot(root, entry);
+  const packageJson = readJson(path.join(directory, 'package.json'), `${entry.id} package.json`);
+  const snapshot = treeSnapshot(directory);
+  const patches = Array.isArray(entry.sync?.patches) ? entry.sync.patches : [];
+  const patchHash = patchSetSha256(root, patches);
+  const source = resolvedSource(entry, packageJson, snapshot.treeSha256, artifact);
+  const lock = buildLock(root);
+  lock.plugins[entry.id] = {
+    requested: lockedRequest(entry, packageJson),
+    source,
+    local: {
+      path: entry.path,
+      packageName: packageJson.name,
+      packageVersion: packageJson.version,
+      license: packageLicense(packageJson),
+      entrypoints: entry.validation.entrypoints,
+      treeSha256: snapshot.treeSha256,
+      fileCount: snapshot.files.length,
+      excludedPaths: snapshot.excludedPaths,
+    },
+    sourceCommit: artifact.sourceCommit || entry.request.commit || null,
+    patchSet: patches.length > 0 ? `sha256:${patchHash}` : 'none',
+    patchSetSha256: patchHash,
+    patchFiles: patchSetFiles(root, patches),
+    compatibility: {},
+    runtimeUpdate: entry.runtimeUpdate.allowed ? 'enabled' : 'disabled',
+    manifestEntrySha256: sha256Text(stableJson(entry)),
+  };
+  return lock;
+}
+
+function updateManifestEntry(entry, resolution, artifact) {
+  const updated = { ...entry, request: { mode: 'exact' } };
+  const resolvedVersion = artifact.resolvedVersion || resolution.version;
+  if (resolvedVersion) updated.request.version = resolvedVersion;
+  if (resolution.commit) updated.request.commit = resolution.commit;
+  if (!updated.request.version && !updated.request.commit) {
+    fail(`sync ${entry.id}: exact resolution did not produce a version or commit`, 'validation');
+  }
+  return updated;
+}
+
+function replaceManifestEntry(manifest, updatedEntry) {
+  const output = structuredClone(manifest);
+  for (const inventory of INVENTORY_ROOTS) {
+    const items = Array.isArray(output[inventory.manifestKey]) ? output[inventory.manifestKey] : [];
+    const index = items.findIndex((item) => item.id === updatedEntry.id);
+    if (index >= 0) {
+      items[index] = updatedEntry;
+      return output;
+    }
+  }
+  fail(`sync ${updatedEntry.id}: manifest entry disappeared`, 'validation');
+}
+
+async function syncEntry(root, project, entry, flags) {
+  const resolution = requestedResolution(entry, flags);
+  const destination = packageRoot(root, entry);
+  const currentPackage = readJson(path.join(destination, 'package.json'), `${entry.id} package.json`);
+  const reportBase = {
+    id: entry.id,
+    syncMode: entry.sync?.mode,
+    mode: resolution.mode,
+    requested: resolution.requested,
+    currentVersion: currentPackage.version,
+  };
+
+  if (entry.sync?.mode === 'metadata-only') {
+    return {
+      ...reportBase,
+      action: 'manual-review',
+      wouldWrite: false,
+      reason: 'metadata-only entries are not source synchronized',
+      networkAccessed: false,
+    };
+  }
+  if (entry.sync?.mode === 'manual' || entry.class === 'manual' || entry.class === 'internal'
+    || entry.source?.kind === 'internal' || entry.source?.kind === 'unknown') {
+    return {
+      ...reportBase,
+      syncMode: entry.sync?.mode || 'manual',
+      action: 'manual-review',
+      wouldWrite: false,
+      reason: entry.source?.reason || 'manual/internal entry requires an explicit human PR',
+      networkAccessed: false,
+    };
+  }
+
+  const prepared = await prepareSource(entry, resolution, flags);
+  if (!prepared) {
+    return {
+      ...reportBase,
+      source: entry.source,
+      action: 'candidate-only',
+      wouldWrite: false,
+      networkAccessed: false,
+    };
+  }
+
+  const destinationForbidden = sourceTreeForbiddenPaths(destination);
+  if (destinationForbidden.length > 0) {
+    fail(
+      `sync ${entry.id}: destination contains forbidden paths: ${destinationForbidden.join(', ')}`,
+      'source',
+    );
+  }
+
+  let candidate;
+  try {
+    candidate = materializeCandidate(
+      prepared.sourceRoot,
+      destination,
+      entry.sync?.preservePaths || [],
+      project.paths.sync,
+    );
+  } catch (error) {
+    if (prepared.cleanup) {
+      try { rmSync(prepared.cleanup, { recursive: true, force: true }); } catch { /* best effort */ }
+    }
+    throw error;
+  }
+  const cleanup = () => {
+    try { rmSync(candidate, { recursive: true, force: true }); } catch { /* best effort */ }
+    if (prepared.cleanup) {
+      try { rmSync(prepared.cleanup, { recursive: true, force: true }); } catch { /* best effort */ }
+    }
+  };
+
+  try {
+    const expectedVersion = resolution.version || prepared.artifact.resolvedVersion || null;
+    const sourceReference = sourceReferenceFor(prepared);
+    const checked = candidatePackageErrors(
+      entry,
+      candidate,
+      destination,
+      entry.sync?.mode,
+      expectedVersion,
+      sourceReference,
+    );
+    if (checked.errors.length > 0) throw new ValidationFailure(checked.errors);
+    assertPreservePaths(entry, destination, candidate);
+    applyPatchSet(candidate, root, entry);
+    assertCandidatePaths(entry, candidate);
+    const postPatch = candidatePackageErrors(
+      entry,
+      candidate,
+      destination,
+      entry.sync?.mode,
+      expectedVersion,
+      sourceReference,
+    );
+    if (postPatch.errors.length > 0) throw new ValidationFailure(postPatch.errors);
+
+    const diff = treeDiff(destination, candidate);
+    const treeChanged = diff.added.length > 0 || diff.removed.length > 0 || diff.changed.length > 0;
+    if (entry.sync?.mode === 'patch-rebase'
+      && (!Array.isArray(entry.sync.patches) || entry.sync.patches.length === 0)
+      && treeChanged) {
+      fail(`sync ${entry.id}: patch-rebase requires an explicit patch-set for upstream changes`, 'patch');
+    }
+
+    const artifact = { ...prepared.artifact };
+    if (!artifact.resolvedVersion) artifact.resolvedVersion = postPatch.packageJson.version;
+    const updatedEntry = updateManifestEntry(entry, resolution, artifact);
+    const updatedManifest = replaceManifestEntry(project.manifest, updatedEntry);
+
+    if (flags.get('dry-run')) {
+      return {
+        ...reportBase,
+        resolvedVersion: artifact.resolvedVersion,
+        source: entry.source,
+        action: 'candidate-only',
+        wouldWrite: treeChanged || stableJson(project.manifest) !== stableJson(updatedManifest),
+        diff,
+        networkAccessed: prepared.networkAccessed,
+      };
+    }
+
+    const manifestTarget = project.paths.manifest;
+    const manifestText = prettyJson(updatedManifest);
+    const manifestUnchanged = stableJson(project.manifest) === stableJson(updatedManifest);
+    if (!treeChanged && manifestUnchanged && existsSync(project.paths.lock)) {
+      try {
+        validateLocked(root);
+        return {
+          ...reportBase,
+          resolvedVersion: artifact.resolvedVersion,
+          source: entry.source,
+          action: 'no-change',
+          wouldWrite: false,
+          diff,
+          networkAccessed: prepared.networkAccessed,
+        };
+      } catch (error) {
+        fail(`sync ${entry.id}: unchanged candidate lock check failed: ${error.message}`, 'validation');
+      }
+    }
+
+    const oldManifest = readFileSync(manifestTarget);
+    const oldLock = existsSync(project.paths.lock) ? readFileSync(project.paths.lock) : null;
+    const oldRegistry = existsSync(project.paths.registry) ? readFileSync(project.paths.registry) : null;
+    const oldTree = mkdtempSync(path.join(
+      project.paths.sync,
+      `${path.basename(path.resolve(destination))}.old-tree-`,
+    ));
+    copyTreeContents(destination, oldTree);
+    try {
+      promoteDirectory(candidate, destination);
+      writeFileAtomic(manifestTarget, manifestText);
+      generateRegistry(root);
+      const lock = lockEntryForSync(root, updatedEntry, artifact);
+      writeJsonAtomic(project.paths.lock, lock);
+      validateLocked(root);
+    } catch (error) {
+      try { promoteDirectory(oldTree, destination); } catch { /* preserve diagnostics */ }
+      writeFileAtomic(manifestTarget, oldManifest);
+      if (oldLock) writeFileAtomic(project.paths.lock, oldLock);
+      else rmSync(project.paths.lock, { force: true });
+      if (oldRegistry) writeFileAtomic(project.paths.registry, oldRegistry);
+      else rmSync(project.paths.registry, { force: true });
+      throw error;
+    } finally {
+      try { rmSync(oldTree, { recursive: true, force: true }); } catch { /* best effort */ }
+    }
+    project.manifest = updatedManifest;
+    return {
+      ...reportBase,
+      resolvedVersion: artifact.resolvedVersion,
+      source: entry.source,
+      action: 'applied',
+      wouldWrite: true,
+      diff,
+      networkAccessed: prepared.networkAccessed,
+    };
+  } finally {
+    cleanup();
+  }
+}
+
 function parseArgs(argv) {
   const flags = new Map();
   const positionals = [];
@@ -1017,36 +2043,28 @@ function printManifestReport(result) {
   console.log(`manifest valid: plugins=${result.counts.plugins} skins=${result.counts.skins} sdkPlugins=${result.counts.sdkPlugins}`);
 }
 
-function runSync(root, flags) {
-  if (!flags.get('dry-run')) fail('sync writes are not implemented in Task 2; use --dry-run', 'unsupported');
-  const result = validateManifest(root);
+export async function runSync(root, flags) {
+  const validated = validateManifest(root);
+  const project = loadProject(root);
   const requestedPlugin = flags.get('plugin');
   if (typeof requestedPlugin !== 'string' || !requestedPlugin) fail('sync requires --plugin <id|all>', 'usage');
   const selected = requestedPlugin === 'all'
-    ? result.entries
-    : result.entries.filter((entry) => entry.id === requestedPlugin);
+    ? validated.entries
+    : validated.entries.filter((entry) => entry.id === requestedPlugin);
   if (selected.length === 0) fail(`sync plugin is not in manifest: ${requestedPlugin}`, 'usage');
-  const mode = flags.get('mode');
-  if (mode !== undefined && mode !== 'latest' && mode !== 'exact') fail(`unsupported sync mode: ${mode}`, 'usage');
-  const version = flags.get('version');
-  if (version !== undefined && (typeof version !== 'string' || version.length === 0)) {
-    fail('--version must be an exact version string', 'usage');
+
+  const reports = [];
+  let networkAccessed = false;
+  for (const entry of selected.sort((a, b) => byteCompare(a.id, b.id))) {
+    const report = await syncEntry(root, project, entry, flags);
+    reports.push(report);
+    networkAccessed ||= Boolean(report.networkAccessed);
   }
-  if (mode === 'exact' && !version && selected.some((entry) => (
-    entry.request.mode !== 'exact' || (!entry.request.version && !entry.request.commit)
-  ))) {
-    fail('exact sync requires --version or an exact manifest version/commit', 'usage');
-  }
-  const candidates = selected.map((entry) => ({
-    id: entry.id,
-    mode: version ? 'exact' : (mode || entry.request.mode),
-    requested: version || (mode === 'exact' ? entry.request.version || entry.request.commit : entry.request.mode),
-    currentVersion: readJson(path.join(root, entry.path, 'package.json'), `${entry.id} package.json`).version,
-    source: entry.source,
-    action: 'candidate-only',
-    wouldWrite: false,
-  }));
-  console.log(JSON.stringify({ dryRun: true, networkAccessed: false, candidates }, null, 2));
+  return {
+    dryRun: Boolean(flags.get('dry-run')),
+    networkAccessed,
+    candidates: reports,
+  };
 }
 
 export async function main(argv = process.argv.slice(2)) {
@@ -1077,7 +2095,8 @@ export async function main(argv = process.argv.slice(2)) {
     return 0;
   }
   if (command === 'sync') {
-    runSync(root, flags);
+    const report = await runSync(root, flags);
+    if (report !== undefined) console.log(JSON.stringify(report, null, 2));
     return 0;
   }
   fail(`unknown command: ${command}`, 'usage');

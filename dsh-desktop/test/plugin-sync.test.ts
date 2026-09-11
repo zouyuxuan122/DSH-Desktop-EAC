@@ -12,6 +12,8 @@ import { tmpdir } from 'node:os';
 import { join, dirname } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { spawnSync } from 'node:child_process';
+import { gzipSync } from 'node:zlib';
+import { createHash } from 'node:crypto';
 import test from 'node:test';
 
 const desktopRoot = join(dirname(fileURLToPath(import.meta.url)), '..');
@@ -31,8 +33,8 @@ function run(args: string[], cwd = repoRoot) {
   });
 }
 
-function fixture() {
-  const root = mkdtempSync(join(tmpdir(), 'dsh-plugin-sync-test-'));
+function fixture(location = tmpdir()) {
+  const root = mkdtempSync(join(location, 'dsh-plugin-sync-test-'));
   const pluginRoot = join(root, 'dsh-desktop', 'assets', 'plugins', 'demo-plugin');
   mkdirSync(join(pluginRoot, 'lib'), { recursive: true });
   mkdirSync(join(root, 'dsh-desktop', 'assets', 'skins'), { recursive: true });
@@ -77,6 +79,76 @@ function fixture() {
   writeFileSync(join(root, '.sync', 'policies.json'), JSON.stringify(policies, null, 2) + '\n');
   writeFileSync(join(root, '.sync', 'plugins.json'), JSON.stringify(manifest, null, 2) + '\n');
   return { root, pluginRoot, manifest, cleanup: () => rmSync(root, { recursive: true, force: true }) };
+}
+
+function sourceFixture(t: ReturnType<typeof fixture>, options: {
+  name?: string;
+  version?: string;
+  license?: string;
+  repository?: string;
+  entrypoint?: boolean;
+  lifecycle?: boolean;
+  lifecycleScript?: string;
+} = {}) {
+  const sourceRoot = join(t.root, 'source-package');
+  mkdirSync(join(sourceRoot, 'lib'), { recursive: true });
+  const packageJson: Record<string, unknown> = {
+    name: options.name || 'demo-plugin',
+    version: options.version || '1.2.4',
+    license: options.license || 'MIT',
+    main: 'lib/index.js',
+    repository: options.repository || 'https://github.com/example/demo-plugin',
+  };
+  if (options.lifecycle) packageJson.scripts = { postinstall: 'touch should-not-run' };
+  if (options.lifecycleScript) packageJson.scripts = { [options.lifecycleScript]: 'touch should-not-run' };
+  writeFileSync(join(sourceRoot, 'package.json'), JSON.stringify(packageJson, null, 2) + '\n');
+  if (options.entrypoint !== false) {
+    writeFileSync(join(sourceRoot, 'lib', 'index.js'), 'export default { source: true };\n');
+  }
+  return sourceRoot;
+}
+
+function configureEntry(t: ReturnType<typeof fixture>, changes: (entry: any) => void) {
+  const manifestPath = join(t.root, '.sync', 'plugins.json');
+  const manifest = JSON.parse(readFileSync(manifestPath, 'utf8'));
+  changes(manifest.plugins[0]);
+  writeFileSync(manifestPath, JSON.stringify(manifest, null, 2) + '\n');
+}
+
+function writePatch(t: ReturnType<typeof fixture>, body: string) {
+  const patchPath = join(t.root, '.sync', 'patches', 'demo', 'change.patch');
+  mkdirSync(dirname(patchPath), { recursive: true });
+  writeFileSync(patchPath, body);
+  configureEntry(t, (entry) => {
+    entry.class = 'patched';
+    entry.sync.mode = 'patch-rebase';
+    entry.sync.patches = ['.sync/patches/demo/change.patch'];
+  });
+  return patchPath;
+}
+
+function tarArchive(files: Array<[string, Buffer]>) {
+  const chunks: Buffer[] = [];
+  for (const [name, content] of files) {
+    const header = Buffer.alloc(512);
+    header.write(name, 0, 100, 'utf8');
+    header.write('0000644\0', 100, 8, 'ascii');
+    header.write('0000000\0', 108, 8, 'ascii');
+    header.write('0000000\0', 116, 8, 'ascii');
+    header.write(`${content.length.toString(8).padStart(11, '0')}\0`, 124, 12, 'ascii');
+    header.write('00000000000\0', 136, 12, 'ascii');
+    header[156] = 0x30;
+    header.write('ustar\0', 257, 6, 'ascii');
+    header.write('00', 263, 2, 'ascii');
+    header.fill(0x20, 148, 156);
+    const checksum = header.reduce((sum, byte) => sum + byte, 0);
+    header.write(`${checksum.toString(8).padStart(6, '0')}\0 `, 148, 8, 'ascii');
+    chunks.push(header, content);
+    const padding = (512 - (content.length % 512)) % 512;
+    if (padding > 0) chunks.push(Buffer.alloc(padding));
+  }
+  chunks.push(Buffer.alloc(1024));
+  return gzipSync(Buffer.concat(chunks));
 }
 
 test('validate-manifest accepts the checked-in inventory without network access', () => {
@@ -337,4 +409,525 @@ test('sync --dry-run gives --version precedence over a latest mode flag', () => 
   const report = JSON.parse(result.stdout);
   assert.equal(report.candidates[0].mode, 'exact');
   assert.equal(report.candidates[0].requested, '0.1.3');
+});
+
+test('mirror dry-run validates a local source and reports a reviewable diff without writing', () => {
+  const t = fixture();
+  try {
+    const source = sourceFixture(t);
+    const before = readFileSync(join(t.pluginRoot, 'lib', 'index.js'));
+    const result = run([
+      'sync', '--plugin', 'demo', '--source-dir', source, '--dry-run', '--root', t.root,
+    ]);
+    assert.equal(result.status, 0, result.stderr || result.stdout);
+    const report = JSON.parse(result.stdout);
+    assert.equal(report.dryRun, true);
+    assert.equal(report.networkAccessed, false);
+    assert.equal(report.candidates[0].syncMode, 'mirror');
+    assert.equal(report.candidates[0].wouldWrite, true);
+    assert.equal(report.candidates[0].resolvedVersion, '1.2.4');
+    assert.deepEqual(readFileSync(join(t.pluginRoot, 'lib', 'index.js')), before);
+    assert.equal(existsSync(join(t.root, '.sync', 'plugins.lock.json')), false);
+  } finally {
+    t.cleanup();
+  }
+});
+
+test('sync reports an unchanged exact source without rewriting the tree or lock', () => {
+  const t = fixture();
+  try {
+    configureEntry(t, (entry) => { entry.request = { mode: 'exact', version: '1.2.3' }; });
+    assert.equal(run(['generate-registry', '--root', t.root]).status, 0);
+    assert.equal(run(['generate-lock', '--root', t.root]).status, 0);
+    assert.equal(run(['validate', '--locked', '--root', t.root]).status, 0);
+    const manifestBefore = readFileSync(join(t.root, '.sync', 'plugins.json'));
+    const lockBefore = readFileSync(join(t.root, '.sync', 'plugins.lock.json'));
+    const treeBefore = readFileSync(join(t.pluginRoot, 'lib', 'index.js'));
+    const result = run(['sync', '--plugin', 'demo', '--source-dir', t.pluginRoot, '--root', t.root]);
+    assert.equal(result.status, 0, result.stderr || result.stdout);
+    const report = JSON.parse(result.stdout);
+    assert.equal(report.candidates[0].action, 'no-change', result.stdout);
+    assert.equal(report.candidates[0].wouldWrite, false);
+    assert.deepEqual(readFileSync(join(t.root, '.sync', 'plugins.json')), manifestBefore);
+    assert.deepEqual(readFileSync(join(t.root, '.sync', 'plugins.lock.json')), lockBefore);
+    assert.deepEqual(readFileSync(join(t.pluginRoot, 'lib', 'index.js')), treeBefore);
+  } finally {
+    t.cleanup();
+  }
+});
+
+test('mirror rejects unpreserved local files and preserves the target tree', () => {
+  const t = fixture();
+  try {
+    const source = sourceFixture(t);
+    const localOnly = join(t.pluginRoot, 'local-only.txt');
+    writeFileSync(localOnly, 'must-not-disappear\n');
+    const before = readFileSync(join(t.pluginRoot, 'lib', 'index.js'));
+    const result = run(['sync', '--plugin', 'demo', '--source-dir', source, '--root', t.root]);
+    assert.equal(result.status, 1);
+    assert.match(result.stderr, /preservePaths|local-only\.txt|extra/i);
+    assert.deepEqual(readFileSync(join(t.pluginRoot, 'lib', 'index.js')), before);
+    assert.equal(readFileSync(localOnly, 'utf8'), 'must-not-disappear\n');
+  } finally {
+    t.cleanup();
+  }
+});
+
+test('mirror rejects traversal-shaped preserve paths instead of treating them as the plugin root', () => {
+  const t = fixture();
+  try {
+    const source = sourceFixture(t);
+    configureEntry(t, (entry) => { entry.sync.preservePaths = ['local/..']; });
+    const result = run(['sync', '--plugin', 'demo', '--source-dir', source, '--dry-run', '--root', t.root]);
+    assert.equal(result.status, 1, result.stdout || result.stderr);
+    assert.match(result.stderr, /preservePaths|unsafe|\.\./i);
+  } finally {
+    t.cleanup();
+  }
+});
+
+test('mirror allows explicitly preserved paths and updates the exact manifest/lock atomically', () => {
+  const t = fixture();
+  try {
+    const source = sourceFixture(t);
+    const localOnly = join(t.pluginRoot, 'local-only.txt');
+    writeFileSync(localOnly, 'keep me\n');
+    configureEntry(t, (entry) => { entry.sync.preservePaths = ['local-only.txt']; });
+    const result = run(['sync', '--plugin', 'demo', '--source-dir', source, '--root', t.root]);
+    assert.equal(result.status, 0, result.stderr || result.stdout);
+    assert.equal(readFileSync(localOnly, 'utf8'), 'keep me\n');
+    assert.equal(JSON.parse(readFileSync(join(t.pluginRoot, 'package.json'), 'utf8')).version, '1.2.4');
+    const manifest = JSON.parse(readFileSync(join(t.root, '.sync', 'plugins.json'), 'utf8'));
+    assert.deepEqual(manifest.plugins[0].request, { mode: 'exact', version: '1.2.4' });
+    assert.equal(JSON.parse(readFileSync(join(t.root, '.sync', 'plugins.lock.json'), 'utf8')).plugins.demo.local.packageVersion, '1.2.4');
+    assert.equal(run(['validate', '--locked', '--root', t.root]).status, 0);
+  } finally {
+    t.cleanup();
+  }
+});
+
+test('mirror refuses forbidden paths already present in the destination tree', () => {
+  const t = fixture();
+  try {
+    const source = sourceFixture(t);
+    const forbidden = join(t.pluginRoot, 'node_modules', 'local-only.txt');
+    mkdirSync(dirname(forbidden), { recursive: true });
+    writeFileSync(forbidden, 'must-not-be-removed\n');
+    const before = readFileSync(join(t.pluginRoot, 'lib', 'index.js'));
+    const result = run(['sync', '--plugin', 'demo', '--source-dir', source, '--root', t.root]);
+    assert.equal(result.status, 1, result.stdout || result.stderr);
+    assert.match(result.stderr, /node_modules|forbidden/i);
+    assert.deepEqual(readFileSync(join(t.pluginRoot, 'lib', 'index.js')), before);
+    assert.equal(readFileSync(forbidden, 'utf8'), 'must-not-be-removed\n');
+  } finally {
+    t.cleanup();
+  }
+});
+
+test('mirror extracts an archive, verifies integrity, and records the artifact digest', () => {
+  const t = fixture();
+  try {
+    configureEntry(t, (entry) => {
+      entry.source.repository = 'https://github.com/example/demo-plugin';
+    });
+    const archive = tarArchive([
+      ['package/package.json', Buffer.from(JSON.stringify({
+        name: 'demo-plugin',
+        version: '1.2.4',
+        license: 'MIT',
+        main: 'lib/index.js',
+        repository: 'https://github.com/example/demo-plugin',
+      }, null, 2) + '\n')],
+      ['package/lib/index.js', Buffer.from('export default { archived: true };\n')],
+    ]);
+    const archivePath = join(t.root, 'demo-plugin-1.2.4.tgz');
+    writeFileSync(archivePath, archive);
+    const integrity = `sha256-${createHash('sha256').update(archive).digest('base64')}`;
+    const result = run([
+      'sync', '--plugin', 'demo', '--archive', archivePath, '--sha256', sync.sha256Bytes(archive),
+      '--integrity', integrity, '--root', t.root,
+    ]);
+    assert.equal(result.status, 0, result.stderr || result.stdout);
+    assert.equal(readFileSync(join(t.pluginRoot, 'lib', 'index.js'), 'utf8'), 'export default { archived: true };\n');
+    const lock = JSON.parse(readFileSync(join(t.root, '.sync', 'plugins.lock.json'), 'utf8'));
+    assert.equal(lock.plugins.demo.source.archiveSha256, sync.sha256Bytes(archive));
+    assert.equal(lock.plugins.demo.source.integrity, integrity);
+    assert.equal(lock.plugins.demo.source.version, '1.2.4');
+    assert.equal(run(['validate', '--locked', '--root', t.root]).status, 0);
+  } finally {
+    t.cleanup();
+  }
+});
+
+test('source-url file fixtures do not claim network access or persist a local path in the lock', () => {
+  const t = fixture();
+  try {
+    const archive = tarArchive([
+      ['package/package.json', Buffer.from(JSON.stringify({
+        name: 'demo-plugin', version: '1.2.4', license: 'MIT', main: 'lib/index.js',
+        repository: 'https://github.com/example/demo-plugin',
+      }) + '\n')],
+      ['package/lib/index.js', Buffer.from('export default { localUrl: true };\n')],
+    ]);
+    const archivePath = join(t.root, 'demo-plugin-local-url.tgz');
+    writeFileSync(archivePath, archive);
+    const result = run([
+      'sync', '--plugin', 'demo', '--source-url', pathToFileURL(archivePath).href, '--root', t.root,
+    ]);
+    assert.equal(result.status, 0, result.stderr || result.stdout);
+    const report = JSON.parse(result.stdout);
+    assert.equal(report.networkAccessed, false);
+    const lock = JSON.parse(readFileSync(join(t.root, '.sync', 'plugins.lock.json'), 'utf8'));
+    assert.equal(lock.plugins.demo.source.tarball, undefined);
+    assert.equal(JSON.stringify(lock).includes(archivePath), false);
+  } finally {
+    t.cleanup();
+  }
+});
+
+test('mirror rejects an archive integrity mismatch without changing the tree or lock', () => {
+  const t = fixture();
+  try {
+    const archive = tarArchive([
+      ['package/package.json', Buffer.from(JSON.stringify({
+        name: 'demo-plugin', version: '1.2.4', license: 'MIT', main: 'lib/index.js',
+        repository: 'https://github.com/example/demo-plugin',
+      }) + '\n')],
+      ['package/lib/index.js', Buffer.from('export default {};\n')],
+    ]);
+    const archivePath = join(t.root, 'demo-plugin-invalid.tgz');
+    writeFileSync(archivePath, archive);
+    const before = readFileSync(join(t.pluginRoot, 'lib', 'index.js'));
+    const result = run([
+      'sync', '--plugin', 'demo', '--archive', archivePath, '--sha256', '0'.repeat(64), '--root', t.root,
+    ]);
+    assert.equal(result.status, 1, result.stdout || result.stderr);
+    assert.match(result.stderr, /archive.*SHA-256|integrity/i);
+    assert.deepEqual(readFileSync(join(t.pluginRoot, 'lib', 'index.js')), before);
+    assert.equal(existsSync(join(t.root, '.sync', 'plugins.lock.json')), false);
+  } finally {
+    t.cleanup();
+  }
+});
+
+test('exact commit sync preserves the immutable source commit in manifest and lock', () => {
+  const t = fixture();
+  try {
+    const source = sourceFixture(t);
+    const commit = '0123456789abcdef0123456789abcdef01234567';
+    configureEntry(t, (entry) => {
+      entry.request = { mode: 'exact', commit };
+    });
+    const result = run(['sync', '--plugin', 'demo', '--source-dir', source, '--commit', commit, '--root', t.root]);
+    assert.equal(result.status, 0, result.stderr || result.stdout);
+    const manifest = JSON.parse(readFileSync(join(t.root, '.sync', 'plugins.json'), 'utf8'));
+    assert.deepEqual(manifest.plugins[0].request, { mode: 'exact', version: '1.2.4', commit });
+    const lock = JSON.parse(readFileSync(join(t.root, '.sync', 'plugins.lock.json'), 'utf8'));
+    assert.equal(lock.plugins.demo.source.commit, commit);
+    assert.equal(lock.plugins.demo.sourceCommit, commit);
+    assert.equal(run(['validate', '--locked', '--root', t.root]).status, 0);
+  } finally {
+    t.cleanup();
+  }
+});
+
+test('patch-rebase applies an explicit patch-set and records the final exact lock', () => {
+  const t = fixture();
+  try {
+    const source = sourceFixture(t);
+    writePatch(t, [
+      'diff --git a/lib/index.js b/lib/index.js',
+      '--- a/lib/index.js',
+      '+++ b/lib/index.js',
+      '@@ -1 +1 @@',
+      '-export default { source: true };',
+      '+export default { patched: true };',
+      '',
+    ].join('\n'));
+    const result = run(['sync', '--plugin', 'demo', '--source-dir', source, '--root', t.root]);
+    assert.equal(result.status, 0, result.stderr || result.stdout);
+    assert.equal(readFileSync(join(t.pluginRoot, 'lib', 'index.js'), 'utf8'), 'export default { patched: true };\n');
+    const lock = JSON.parse(readFileSync(join(t.root, '.sync', 'plugins.lock.json'), 'utf8'));
+    assert.deepEqual(lock.plugins.demo.patchFiles, ['.sync/patches/demo/change.patch']);
+    assert.match(lock.plugins.demo.patchSet, /^sha256:[0-9a-f]{64}$/);
+  } finally {
+    t.cleanup();
+  }
+});
+
+test('patch-rebase rejects package entrypoint changes outside the patch-set', () => {
+  const t = fixture();
+  try {
+    const source = sourceFixture(t);
+    const sourcePackagePath = join(source, 'package.json');
+    const sourcePackage = JSON.parse(readFileSync(sourcePackagePath, 'utf8'));
+    sourcePackage.main = 'lib/other.js';
+    writeFileSync(sourcePackagePath, JSON.stringify(sourcePackage, null, 2) + '\n');
+    writeFileSync(join(source, 'lib', 'other.js'), 'export default { other: true };\n');
+    writePatch(t, [
+      'diff --git a/lib/index.js b/lib/index.js',
+      '--- a/lib/index.js',
+      '+++ b/lib/index.js',
+      '@@ -1 +1 @@',
+      '-export default { source: true };',
+      '+export default { patched: true };',
+      '',
+    ].join('\n'));
+    const result = run(['sync', '--plugin', 'demo', '--source-dir', source, '--root', t.root]);
+    assert.equal(result.status, 1, result.stdout || result.stderr);
+    assert.match(result.stderr, /entrypoint/i);
+    assert.deepEqual(readFileSync(join(t.pluginRoot, 'lib', 'index.js')), Buffer.from('export default {};\n'));
+    assert.equal(existsSync(join(t.root, '.sync', 'plugins.lock.json')), false);
+  } finally {
+    t.cleanup();
+  }
+});
+
+test('patch-rebase rejects a conflicting patch-set without changing the tree or lock', () => {
+  const t = fixture();
+  try {
+    const source = sourceFixture(t);
+    writePatch(t, [
+      'diff --git a/lib/index.js b/lib/index.js',
+      '--- a/lib/index.js',
+      '+++ b/lib/index.js',
+      '@@ -1 +1 @@',
+      '-export default { not_the_upstream_source: true };',
+      '+export default { patched: true };',
+      '',
+    ].join('\n'));
+    const before = readFileSync(join(t.pluginRoot, 'lib', 'index.js'));
+    const result = run(['sync', '--plugin', 'demo', '--source-dir', source, '--root', t.root]);
+    assert.equal(result.status, 1, result.stdout || result.stderr);
+    assert.match(result.stderr, /conflict|patch/i);
+    assert.deepEqual(readFileSync(join(t.pluginRoot, 'lib', 'index.js')), before);
+    assert.equal(existsSync(join(t.root, '.sync', 'plugins.lock.json')), false);
+  } finally {
+    t.cleanup();
+  }
+});
+
+test('patch-rebase rejects dsh wiring changes outside the patch-set', () => {
+  const t = fixture();
+  try {
+    const source = sourceFixture(t);
+    const sourcePackagePath = join(source, 'package.json');
+    const sourcePackage = JSON.parse(readFileSync(sourcePackagePath, 'utf8'));
+    sourcePackage.dsh = { client: { inject: ['changed-wiring'] } };
+    writeFileSync(sourcePackagePath, JSON.stringify(sourcePackage, null, 2) + '\n');
+    const currentPackagePath = join(t.pluginRoot, 'package.json');
+    const currentPackage = JSON.parse(readFileSync(currentPackagePath, 'utf8'));
+    currentPackage.dsh = { client: { inject: ['original-wiring'] } };
+    writeFileSync(currentPackagePath, JSON.stringify(currentPackage, null, 2) + '\n');
+    configureEntry(t, (entry) => {
+      entry.class = 'patched';
+      entry.sync.mode = 'patch-rebase';
+    });
+    const result = run(['sync', '--plugin', 'demo', '--source-dir', source, '--root', t.root]);
+    assert.equal(result.status, 1, result.stdout || result.stderr);
+    assert.match(result.stderr, /dsh wiring/i);
+    assert.equal(existsSync(join(t.root, '.sync', 'plugins.lock.json')), false);
+  } finally {
+    t.cleanup();
+  }
+});
+
+test('patch-rebase rejects upstream changes when no explicit patch-set describes the local delta', () => {
+  const t = fixture();
+  try {
+    const source = sourceFixture(t);
+    configureEntry(t, (entry) => {
+      entry.class = 'patched';
+      entry.sync.mode = 'patch-rebase';
+    });
+    const before = readFileSync(join(t.pluginRoot, 'lib', 'index.js'));
+    const result = run(['sync', '--plugin', 'demo', '--source-dir', source, '--root', t.root]);
+    assert.equal(result.status, 1, result.stdout || result.stderr);
+    assert.match(result.stderr, /patch-set|patch.*required|explicit patch/i);
+    assert.deepEqual(readFileSync(join(t.pluginRoot, 'lib', 'index.js')), before);
+    assert.equal(existsSync(join(t.root, '.sync', 'plugins.lock.json')), false);
+  } finally {
+    t.cleanup();
+  }
+});
+
+test('patch-rebase rejects a patch-set that introduces node_modules', () => {
+  const t = fixture();
+  try {
+    const source = sourceFixture(t);
+    writePatch(t, [
+      'diff --git a/node_modules/blocked/index.js b/node_modules/blocked/index.js',
+      'new file mode 100644',
+      '--- /dev/null',
+      '+++ b/node_modules/blocked/index.js',
+      '@@ -0,0 +1 @@',
+      '+blocked',
+      '',
+    ].join('\n'));
+    const before = readFileSync(join(t.pluginRoot, 'lib', 'index.js'));
+    const result = run(['sync', '--plugin', 'demo', '--source-dir', source, '--root', t.root]);
+    assert.equal(result.status, 1, result.stdout || result.stderr);
+    assert.match(result.stderr, /node_modules|forbidden/i);
+    assert.deepEqual(readFileSync(join(t.pluginRoot, 'lib', 'index.js')), before);
+    assert.equal(existsSync(join(t.root, '.sync', 'plugins.lock.json')), false);
+  } finally {
+    t.cleanup();
+  }
+});
+
+test('patch-rebase only accepts patch files from the plugin-specific patch-set directory', () => {
+  const t = fixture();
+  try {
+    const source = sourceFixture(t);
+    const patchPath = join(t.root, '.sync', 'patches', 'other-plugin', 'change.patch');
+    mkdirSync(dirname(patchPath), { recursive: true });
+    writeFileSync(patchPath, [
+      'diff --git a/lib/index.js b/lib/index.js',
+      '--- a/lib/index.js',
+      '+++ b/lib/index.js',
+      '@@ -1 +1 @@',
+      '-export default { source: true };',
+      '+export default { patched: true };',
+      '',
+    ].join('\n'));
+    configureEntry(t, (entry) => {
+      entry.class = 'patched';
+      entry.sync.mode = 'patch-rebase';
+      entry.sync.patches = ['.sync/patches/other-plugin/change.patch'];
+    });
+    const result = run(['sync', '--plugin', 'demo', '--source-dir', source, '--root', t.root]);
+    assert.equal(result.status, 1, result.stdout || result.stderr);
+    assert.match(result.stderr, /patches.*under|patch.*directory|patch.*path|plugin-specific|unsafe/i);
+    assert.equal(existsSync(join(t.root, '.sync', 'plugins.lock.json')), false);
+  } finally {
+    t.cleanup();
+  }
+});
+
+test('manual and internal entries only emit reports and never download or overwrite', () => {
+  for (const mode of ['manual', 'internal']) {
+    const t = fixture();
+    try {
+      configureEntry(t, (entry) => {
+        entry.class = mode;
+        entry.source = mode === 'internal'
+          ? { kind: 'internal', name: 'demo-plugin', reason: 'fixture-owned' }
+          : { kind: 'unknown', reason: 'fixture requires human review' };
+        entry.request = { mode: 'exact', version: '1.2.3' };
+        entry.sync.mode = 'manual';
+      });
+      const before = readFileSync(join(t.pluginRoot, 'package.json'));
+      const result = run(['sync', '--plugin', 'demo', '--root', t.root]);
+      assert.equal(result.status, 0, result.stderr || result.stdout);
+      const report = JSON.parse(result.stdout);
+      assert.equal(report.networkAccessed, false);
+      assert.equal(report.candidates[0].action, 'manual-review');
+      assert.equal(report.candidates[0].wouldWrite, false);
+      assert.deepEqual(readFileSync(join(t.pluginRoot, 'package.json')), before);
+      assert.equal(existsSync(join(t.root, '.sync', 'plugins.lock.json')), false);
+    } finally {
+      t.cleanup();
+    }
+  }
+});
+
+test('sync source validation rejects owner/name, license, lifecycle, and node_modules drift', () => {
+  const cases = [
+    { options: { name: 'wrong-name' }, message: /owner|name|package/i },
+    { options: { license: 'Apache-2.0' }, message: /license/i },
+    { options: { lifecycle: true }, message: /lifecycle|install/i },
+    { options: { lifecycleScript: 'prepack' }, message: /lifecycle|prepack/i },
+  ];
+  for (const item of cases) {
+    const t = fixture();
+    try {
+      const source = sourceFixture(t, item.options);
+      const result = run(['sync', '--plugin', 'demo', '--source-dir', source, '--dry-run', '--root', t.root]);
+      assert.equal(result.status, 1);
+      assert.match(result.stderr, item.message);
+    } finally {
+      t.cleanup();
+    }
+  }
+  const sourceIdentity = fixture();
+  try {
+    const source = sourceFixture(sourceIdentity, { repository: 'https://github.com/other-owner/demo-plugin' });
+    configureEntry(sourceIdentity, (entry) => {
+      entry.source.repository = 'https://github.com/example-owner/demo-plugin';
+    });
+    const result = run([
+      'sync', '--plugin', 'demo', '--source-dir', source, '--dry-run', '--root', sourceIdentity.root,
+    ]);
+    assert.equal(result.status, 1);
+    assert.match(result.stderr, /owner\/name|source.*match/i);
+  } finally {
+    sourceIdentity.cleanup();
+  }
+  const missingEntrypoint = fixture();
+  try {
+    const source = sourceFixture(missingEntrypoint, { entrypoint: false });
+    const result = run([
+      'sync', '--plugin', 'demo', '--source-dir', source, '--dry-run', '--root', missingEntrypoint.root,
+    ]);
+    assert.equal(result.status, 1);
+    assert.match(result.stderr, /entrypoint.*missing|entrypoint/i);
+  } finally {
+    missingEntrypoint.cleanup();
+  }
+  const missingPackageMain = fixture();
+  try {
+    const source = sourceFixture(missingPackageMain);
+    const sourcePackagePath = join(source, 'package.json');
+    const sourcePackage = JSON.parse(readFileSync(sourcePackagePath, 'utf8'));
+    sourcePackage.main = 'lib/missing.js';
+    writeFileSync(sourcePackagePath, JSON.stringify(sourcePackage, null, 2) + '\n');
+    const result = run([
+      'sync', '--plugin', 'demo', '--source-dir', source, '--dry-run', '--root', missingPackageMain.root,
+    ]);
+    assert.equal(result.status, 1);
+    assert.match(result.stderr, /entrypoint.*missing|entrypoint/i);
+  } finally {
+    missingPackageMain.cleanup();
+  }
+  const t = fixture();
+  try {
+    const source = sourceFixture(t);
+    mkdirSync(join(source, 'node_modules', 'bad'), { recursive: true });
+    writeFileSync(join(source, 'node_modules', 'bad', 'package.json'), '{}\n');
+    const result = run(['sync', '--plugin', 'demo', '--source-dir', source, '--dry-run', '--root', t.root]);
+    assert.equal(result.status, 1);
+    assert.match(result.stderr, /node_modules|forbidden/i);
+  } finally {
+    t.cleanup();
+  }
+});
+
+test('sync source validation rejects npm source name drift', () => {
+  const t = fixture();
+  try {
+    const source = sourceFixture(t);
+    configureEntry(t, (entry) => { entry.source.name = 'other-package'; });
+    const result = run([
+      'sync', '--plugin', 'demo', '--source-dir', source, '--dry-run', '--root', t.root,
+    ]);
+    assert.equal(result.status, 1, result.stdout || result.stderr);
+    assert.match(result.stderr, /source.*name|package.*name/i);
+  } finally {
+    t.cleanup();
+  }
+});
+
+test('sync reports source download failures without changing the tree or lock', () => {
+  const t = fixture();
+  try {
+    const missingArchive = pathToFileURL(join(t.root, 'does-not-exist.tgz')).href;
+    const before = readFileSync(join(t.pluginRoot, 'lib', 'index.js'));
+    const result = run(['sync', '--plugin', 'demo', '--source-url', missingArchive, '--root', t.root]);
+    assert.equal(result.status, 1, result.stdout || result.stderr);
+    assert.match(result.stderr, /source download failed|ENOENT/i);
+    assert.deepEqual(readFileSync(join(t.pluginRoot, 'lib', 'index.js')), before);
+    assert.equal(existsSync(join(t.root, '.sync', 'plugins.lock.json')), false);
+  } finally {
+    t.cleanup();
+  }
 });
