@@ -10,6 +10,7 @@
     "ci:install": "node scripts/npm-ci-with-kernel.mjs",
     "install:plugin-engines": "node scripts/install-plugin-engines.mjs",
     "ledger:check": "node scripts/plugin-ledger.mjs",
+    "plugin:kernel-compat": "node scripts/plugin-kernel-compat.mjs",
     "fetch-node": "npm run build && node scripts/fetch-node.js",
     "postinstall": "npm run build && node scripts/patch-deps.js || exit 0",
     "fetch-npm": "npm run build && node scripts/fetch-npm.js",

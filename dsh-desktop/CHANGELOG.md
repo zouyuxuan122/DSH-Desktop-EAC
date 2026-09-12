@@ -67,6 +67,40 @@ next2（功能包体系：.dshpack 打包分发插件+预设+技能，声明官�
   （SOURCES.json C114）与插件契约测试；已有 profile 的启停选择保持优先，
   模型缓存仍属用户数据、安装器不做清理。
   
+## 5.4.1（picturereader 3.3.3 内置修复 + 内置插件内核兼容门禁）· 2026-09-12
+
+### 修复：5.4.0 产物内置的 picturereader 3.3.2 与内核 0.1.3 不兼容，会拖垮整棵插件树
+
+- 内核 0.1.3 起 `@deepseek-ai/dsh-settings` 不再导出 `settingsNamespace()` 品牌函数
+  （命名空间校验收进 `register()` 内部），而 3.3.2 仍在 `src/index.js` 顶层
+  `import { settingsNamespace } from '@deepseek-ai/dsh-settings'`。ESM 具名导入在**链接期**
+  解析，缺失导出会让该模块整体加载失败（`SyntaxError: The requested module
+  '@deepseek-ai/dsh-settings' does not provide an export named 'settingsNamespace'`）。
+- 失败冒泡到 `cordis:include` 层 → `dsh web` 以退出码 1 退出 → 保护中心记 `boot-failed`
+  事故 → 救援链/恢复中心进入安全模式（`safeModePatch` 只留核心行），用户侧表现为
+  「一对话就报错」+ 插件大范围消失。
+- 内置插件升级至 **3.3.3**：改用 `sctx.settings.register(NS, Config, { base: config })`，
+  `register()` 内部完成命名空间校验（见 PR #353，2026-09-11 合入）。
+
+### 版本号 5.4.0 → 5.4.1：让修复产物可识别
+
+- 3.3.3 适配合入 main 的时间（2026-09-11 20:01）**晚于** 5.4.0 产物的描述符生成时间
+  （`distribution-descriptor.json` → `generatedAt: 2026-09-11T10:21:17Z`，pin
+  `pkg:github/jing-hy/picturereader@3.3.2`）。因此**同一个 5.4.0 版本号下同时存在
+  「带病 3.3.2」与「已修 3.3.3」两种内容**，从版本号无法分辨。bump 补丁号后，
+  带 3.3.2 的旧产物与修复产物可区分（`dsh-desktop/package.json`、
+  `dsh-desktop/package-lock.json`、`tauri-shell/tauri.conf.json` 同步更新）。
+
+### 新增：内置插件 ↔ 内核导出兼容门禁（防止同类事故再犯）
+
+- 新增 `scripts/plugin-kernel-compat.mjs`：零依赖静态比对 —— 把 `assets/plugins/**`
+  源码里对 `@deepseek-ai/*` 内核包的具名 `import { … } from` / `export { … } from`
+  与随包内核的真实导出集合对照，命中即报错退出（只读文件，绝不执行插件代码）。
+- 新增 `test/plugin-kernel-compat.test.ts`：① 对真实内置插件树 + 随包内核回归断言零命中；
+  ② 用合成夹具断言门禁本身能报出「导入不存在的导出」（防止门禁静默失效）。
+- CI（`.github/workflows/ci.yml` 的 Windows 与 Linux 两个 job）在依赖安装后各新增一步
+  运行该门禁：同类问题在 CI 阶段拦截，不再等到用户机器上以安全模式剥插件行收场。
+
 ## 5.4.0（picturereader 3.3.2 内置更新）· 2026-09-06
 
 - 内置 `picturereader` 升级至 3.3.2：图片在纯文本模型入口被预先改写为 `attachment sha256` 提示时，桥接层会仅从本地附件对象库定位唯一对象、校验文件头并导出为受支持图片，随后注入 `image_scan` / `image_ocr` 本地分析路径；缺失、歧义或非图片对象保持原提示。

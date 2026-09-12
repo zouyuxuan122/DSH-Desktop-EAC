@@ -30,7 +30,7 @@
 > ### 📦 v5.4 起：唯一的桌面发行版，安装时选「完整版 / 精简版」
 >
 > 同一个安装包、同一套 5.x 内核：**完整版**带全部内置插件；**精简版**只默认停用外围插件（桌宠 / 手机桥 / 多智能体等），设置里可随时一键启用，无需重装。
-> 原 **Lite（Electron 精简版）退役**、**AIO 整合版收编为精简版形态**、**EAC-IDE 进入维护模式**——数据统一 `~/.dsh`。迁移说明见 [docs/SINGLE-EDITION-MIGRATION.md](dsh-desktop/docs/SINGLE-EDITION-MIGRATION.md)。
+> 原 **Lite（Electron 精简版）退役**、**AIO 整合版收编为精简版形态**、**EAC-IDE 进入维护模式**——数据统一 `~/.dsh`。迁移说明见 [docs/SINGLE-EDITION-MIGRATION.md](dsh-desktop/docs/SINGLE-EDITION-MIGRATION.md)。你可以用任意Harness软件让其以此规则迁移。
 
 ---
 

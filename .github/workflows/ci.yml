@@ -108,6 +108,9 @@ jobs:
 
       - name: 安装引擎型内置插件依赖（dsh-stt 按平台拉取 sherpa-onnx）
         run: npm run install:plugin-engines
+        
+      - name: 内置插件内核兼容门禁（静态导入内核不存在的导出会拖垮整棵插件树）
+        run: node scripts/plugin-kernel-compat.mjs
 
       - name: 类型检查（tsc --noEmit 零错误）
         run: npm run typecheck
@@ -176,6 +179,9 @@ jobs:
 
       - name: 安装引擎型内置插件依赖（dsh-stt 按平台拉取 sherpa-onnx）
         run: npm run install:plugin-engines
+        
+      - name: 内置插件内核兼容门禁（静态导入内核不存在的导出会拖垮整棵插件树）
+        run: node scripts/plugin-kernel-compat.mjs
 
       - name: 类型检查与全量测试
         run: npm run typecheck && npm test
