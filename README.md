@@ -1,22 +1,28 @@
 <div align="center">
 
-[中文](README.md) | [English](README.en.md)
-
 <h1>DSH-Desktop-EAC — 揽尽万象</h1>
 
-***EAC = Embracing All Creation（揽尽万象）***
+**_EAC = Embracing All Creation（揽尽万象）_**
 
-![Stars](https://img.shields.io/github/stars/zouyuxuan122/Deepseek-Harness-EAC?style=for-the-badge&label=%E2%AD%90Star&color=08C&link=https://github.com/zouyuxuan122/Deepseek-Harness-EAC) ![MIT License](https://img.shields.io/badge/license-MIT-2EA44F?style=for-the-badge&link=https://github.com/zouyuxuan122/Deepseek-Harness-EAC/blob/main/LICENSE)
+[中文](README.md) | [English](README.en.md)
 
-![QQ](https://img.shields.io/badge/QQ-1083832019-blue?style=plastic&logo=qq&logoSize=auto&link=https://qm.qq.com/q/vqXxQQ3rmo) ![Discord](https://img.shields.io/badge/DISCORD-DSH--EAC-blue?style=plastic&logo=discord&logoSize=auto&link=https://discord.com/invite/kY48Ah8h)
+[![Stars](https://img.shields.io/github/stars/zouyuxuan122/Deepseek-Harness-EAC?style=for-the-badge&label=%E2%AD%90Star&color=08C&link=https://github.com/zouyuxuan122/Deepseek-Harness-EAC)](https://github.com/zouyuxuan122/Deepseek-Harness-EAC) [![MIT License](https://img.shields.io/badge/license-MIT-2EA44F?style=for-the-badge&link=https://github.com/zouyuxuan122/Deepseek-Harness-EAC/blob/main/LICENSE)](https://github.com/zouyuxuan122/Deepseek-Harness-EAC/blob/main/LICENSE)
+
+[![QQ](https://img.shields.io/badge/QQ-1083832019-blue?style=plastic&logo=qq&logoSize=auto&link=https://qm.qq.com/q/vqXxQQ3rmo)](https://qm.qq.com/q/vqXxQQ3rmo) [![Discord](https://img.shields.io/badge/DISCORD-DSH--EAC-blue?style=plastic&logo=discord&logoSize=auto&link=https://discord.com/invite/kY48Ah8h)](https://discord.com/invite/kY48Ah8h)
+
+</div>
 
 > [!IMPORTANT]
+>
 > 本项目正在进行重大重构，在重构期间不接受外部Issues和PR。详情请关注[任务看板](https://github.com/orgs/DSH-EAC/projects/1/views/1)
-> v5剩余的Bug将不再进行修复，我们会尽快推出v6全面替代v5的功能。
-> 敬请期待。
+>
+> v5剩余的Bug将不再进行修复，我们会尽快推出v6全面替代v5的功能, 敬请期待。
 
 > [!NOTE]
+>
 > 以下为v5版本的README
+
+<div align="center">
 
 **🚀 全新产品：[Deepseek Harness EAC IDE](https://github.com/zouyuxuan122/Deepseek-Harness-EAC-IDE) —— 内置 EAC 的独立 IDE · 开箱即用 · [前往下载 →](https://github.com/zouyuxuan122/Deepseek-Harness-EAC-IDE/releases)**
 

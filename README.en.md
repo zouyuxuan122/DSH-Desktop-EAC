@@ -1,22 +1,30 @@
 <div align="center">
 
-[中文](README.md) | [English](README.en.md)
-
 <h1>Deepseek Harness EAC — Embracing All Creation</h1>
 
 **_EAC = Embracing All Creation（揽尽万象）_**
 
-![Stars](https://img.shields.io/github/stars/zouyuxuan122/Deepseek-Harness-EAC?style=for-the-badge&label=%E2%AD%90Star&color=08C&link=https://github.com/zouyuxuan122/Deepseek-Harness-EAC) ![MIT License](https://img.shields.io/badge/license-MIT-2EA44F?style=for-the-badge&link=https://github.com/zouyuxuan122/Deepseek-Harness-EAC/blob/main/LICENSE)
+[中文](README.md) | [English](README.en.md)
 
-![QQ](https://img.shields.io/badge/QQ-1083832019-blue?style=plastic&logo=qq&logoSize=auto&link=https://qm.qq.com/q/vqXxQQ3rmo) ![Discord](https://img.shields.io/badge/DISCORD-DSH--EAC-blue?style=plastic&logo=discord&logoSize=auto&link=https://discord.com/invite/kY48Ah8h)
+[![Stars](https://img.shields.io/github/stars/zouyuxuan122/Deepseek-Harness-EAC?style=for-the-badge&label=%E2%AD%90Star&color=08C&link=https://github.com/zouyuxuan122/Deepseek-Harness-EAC)](https://github.com/zouyuxuan122/Deepseek-Harness-EAC) [![MIT License](https://img.shields.io/badge/license-MIT-2EA44F?style=for-the-badge&link=https://github.com/zouyuxuan122/Deepseek-Harness-EAC/blob/main/LICENSE)](https://github.com/zouyuxuan122/Deepseek-Harness-EAC/blob/main/LICENSE)
+
+[![QQ](https://img.shields.io/badge/QQ-1083832019-blue?style=plastic&logo=qq&logoSize=auto&link=https://qm.qq.com/q/vqXxQQ3rmo)](https://qm.qq.com/q/vqXxQQ3rmo) [![Discord](https://img.shields.io/badge/DISCORD-DSH--EAC-blue?style=plastic&logo=discord&logoSize=auto&link=https://discord.com/invite/kY48Ah8h)](https://discord.com/invite/kY48Ah8h)
+
+</div>
 
 > [!IMPORTANT]
+>
 > This project is undergoing a major refactor. During the refactor, we will not be accepting external Issues or PRs.
+>
 > The remaining bugs in v5 will no longer be fixed. We will release v6 as soon as possible to fully replace v5's functionality.
+>
 > Please stay tuned.
 
 > [!NOTE]
+>
 > The following is the README for v5.
+
+<div align="center">
 
 **🚀 New Product: [Deepseek Harness EAC IDE](https://github.com/zouyuxuan122/Deepseek-Harness-EAC-IDE) —— Independent IDE with built-in EAC · Out of the Box · [Download →](https://github.com/zouyuxuan122/Deepseek-Harness-EAC-IDE/releases)**
 
