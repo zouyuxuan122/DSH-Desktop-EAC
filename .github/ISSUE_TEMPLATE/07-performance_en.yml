@@ -1,0 +1,59 @@
+name: 🚀 Performance Issue
+description: Report a performance regression, memory leak, or optimization opportunity
+title: "[Performance]: "
+labels: ["performance"]
+assignees: []
+body:
+    - type: markdown
+      attributes:
+          value: |
+              Please provide measurable performance data and a reproducible environment when possible.
+
+    - type: textarea
+      id: description
+      attributes:
+          label: Performance Issue Description
+          description: Describe what operation is slow, resource-heavy, or laggy.
+      validations:
+          required: true
+
+    - type: textarea
+      id: benchmark
+      attributes:
+          label: Benchmark / Measurements
+          description: Provide timing, memory, CPU, throughput, or other measurements.
+          render: shell
+      validations:
+          required: false
+
+    - type: textarea
+      id: reproduction
+      attributes:
+          label: Steps to Reproduce
+          description: How can this performance issue be reproduced?
+      validations:
+          required: true
+
+    - type: input
+      id: version
+      attributes:
+          label: Version
+          placeholder: "e.g. v1.2.3"
+      validations:
+          required: true
+
+    - type: textarea
+      id: environment
+      attributes:
+          label: Environment
+          description: Hardware, OS, runtime, dependency versions, etc.
+      validations:
+          required: true
+
+    - type: textarea
+      id: additional
+      attributes:
+          label: Additional Context
+          description: Profiling results, flame graphs, logs, etc.
+      validations:
+          required: false

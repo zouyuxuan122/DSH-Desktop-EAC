@@ -1,0 +1,98 @@
+name: 🐛 Bug 报告
+description: 报告一个可复现的问题，帮助我们修复
+title: "[Bug]: "
+labels: ["bug", "triage"]
+assignees: []
+body:
+    - type: markdown
+      attributes:
+          value: |
+              感谢你提交 Bug 报告！请尽量提供可复现的信息。
+
+    - type: checkboxes
+      id: prerequisites
+      attributes:
+          label: 前置检查
+          options:
+              - label: 我已经搜索过现有 Issue，确认没有重复报告
+                required: true
+              - label: 我使用的是最新版本，或已确认该问题在最新版本中仍存在
+                required: true
+
+    - type: textarea
+      id: description
+      attributes:
+          label: 问题描述
+          description: 清晰简洁地描述这个 Bug。
+          placeholder: 发生了什么？
+      validations:
+          required: true
+
+    - type: textarea
+      id: reproduction
+      attributes:
+          label: 复现步骤
+          description: 请提供最小可复现步骤。
+          placeholder: |
+              1. 打开 ...
+              2. 点击 ...
+              3. 看到错误 ...
+          render: markdown
+      validations:
+          required: true
+
+    - type: textarea
+      id: expected
+      attributes:
+          label: 期望行为
+          description: 你期望发生什么？
+      validations:
+          required: true
+
+    - type: textarea
+      id: actual
+      attributes:
+          label: 实际行为
+          description: 实际发生了什么？如有报错日志请粘贴。
+          render: shell
+      validations:
+          required: true
+
+    - type: input
+      id: version
+      attributes:
+          label: 版本
+          description: 你使用的项目版本 / commit hash
+          placeholder: "例如：v1.2.3 或 abc1234"
+      validations:
+          required: true
+
+    - type: dropdown
+      id: os
+      attributes:
+          label: 操作系统
+          options:
+              - Windows
+              - macOS
+              - Linux
+              - iOS
+              - Android
+              - 其他
+      validations:
+          required: true
+
+    - type: textarea
+      id: screenshots
+      attributes:
+          label: 截图 / 录屏
+          description: 如果适用，添加截图或录屏链接。
+      validations:
+          required: false
+
+    - type: textarea
+      id: additional
+      attributes:
+          label: 补充信息
+          description: 任何其他有助于定位问题的信息。
+      validations:
+          required: false

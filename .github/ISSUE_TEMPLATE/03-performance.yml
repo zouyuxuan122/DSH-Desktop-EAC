@@ -1,0 +1,59 @@
+name: 🚀 性能问题
+description: 报告性能下降、内存泄漏或优化建议
+title: "[Performance]: "
+labels: ["performance"]
+assignees: []
+body:
+    - type: markdown
+      attributes:
+          value: |
+              请尽量提供可量化的性能数据和复现环境。
+
+    - type: textarea
+      id: description
+      attributes:
+          label: 性能问题描述
+          description: 描述什么操作变慢、占用高或出现卡顿。
+      validations:
+          required: true
+
+    - type: textarea
+      id: benchmark
+      attributes:
+          label: 基准数据 / 测量结果
+          description: 提供耗时、内存、CPU、吞吐量等数据。
+          render: shell
+      validations:
+          required: false
+
+    - type: textarea
+      id: reproduction
+      attributes:
+          label: 复现步骤
+          description: 如何复现该性能问题？
+      validations:
+          required: true
+
+    - type: input
+      id: version
+      attributes:
+          label: 版本
+          placeholder: "例如：v1.2.3"
+      validations:
+          required: true
+
+    - type: textarea
+      id: environment
+      attributes:
+          label: 环境信息
+          description: 硬件、操作系统、运行时、依赖版本等。
+      validations:
+          required: true
+
+    - type: textarea
+      id: additional
+      attributes:
+          label: 补充信息
+          description: Profiling 结果、火焰图、日志等。
+      validations:
+          required: false

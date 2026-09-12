@@ -1,0 +1,98 @@
+name: 🐛 Bug Report
+description: Report a reproducible bug to help us improve
+title: "[Bug]: "
+labels: ["bug", "triage"]
+assignees: []
+body:
+    - type: markdown
+      attributes:
+          value: |
+              Thanks for taking the time to file a bug report. Please provide as much reproducible detail as possible.
+
+    - type: checkboxes
+      id: prerequisites
+      attributes:
+          label: Prerequisites
+          options:
+              - label: I have searched existing issues and confirmed this is not a duplicate.
+                required: true
+              - label: I am using the latest version, or I have confirmed the bug still exists on the latest version.
+                required: true
+
+    - type: textarea
+      id: description
+      attributes:
+          label: Description
+          description: A clear and concise description of the bug.
+          placeholder: What happened?
+      validations:
+          required: true
+
+    - type: textarea
+      id: reproduction
+      attributes:
+          label: Steps to Reproduce
+          description: Provide the minimal steps to reproduce the issue.
+          placeholder: |
+              1. Go to ...
+              2. Click ...
+              3. See error ...
+          render: markdown
+      validations:
+          required: true
+
+    - type: textarea
+      id: expected
+      attributes:
+          label: Expected Behavior
+          description: What did you expect to happen?
+      validations:
+          required: true
+
+    - type: textarea
+      id: actual
+      attributes:
+          label: Actual Behavior
+          description: What actually happened? Paste any error logs if available.
+          render: shell
+      validations:
+          required: true
+
+    - type: input
+      id: version
+      attributes:
+          label: Version
+          description: Project version or commit hash
+          placeholder: "e.g. v1.2.3 or abc1234"
+      validations:
+          required: true
+
+    - type: dropdown
+      id: os
+      attributes:
+          label: Operating System
+          options:
+              - Windows
+              - macOS
+              - Linux
+              - iOS
+              - Android
+              - Other
+      validations:
+          required: true
+
+    - type: textarea
+      id: screenshots
+      attributes:
+          label: Screenshots / Recordings
+          description: If applicable, add screenshots or recordings.
+      validations:
+          required: false
+
+    - type: textarea
+      id: additional
+      attributes:
+          label: Additional Context
+          description: Any other context that may help.
+      validations:
+          required: false

@@ -1,0 +1,57 @@
+name: 📚 文档改进
+description: 报告文档错误、缺失或提出改进建议
+title: "[Docs]: "
+labels: ["documentation"]
+assignees: []
+body:
+    - type: markdown
+      attributes:
+          value: |
+              感谢你帮助改进文档！请指出具体位置和问题。
+
+    - type: input
+      id: location
+      attributes:
+          label: 文档位置
+          description: 提供文档链接、文件路径或章节标题。
+          placeholder: "例如：README.md 的“安装”章节"
+      validations:
+          required: true
+
+    - type: textarea
+      id: problem
+      attributes:
+          label: 问题描述
+          description: 当前文档有什么问题？例如错误、过时、难以理解、缺失。
+      validations:
+          required: true
+
+    - type: textarea
+      id: suggestion
+      attributes:
+          label: 建议修改
+          description: 你希望如何修改？
+      validations:
+          required: false
+
+    - type: dropdown
+      id: type
+      attributes:
+          label: 问题类型
+          options:
+              - 内容错误
+              - 内容缺失
+              - 表述不清
+              - 示例代码错误
+              - 链接失效
+              - 其他
+      validations:
+          required: true
+
+    - type: checkboxes
+      id: contribution
+      attributes:
+          label: 贡献意愿
+          options:
+              - label: 我愿意提交 PR 修复此文档问题
+                required: false
