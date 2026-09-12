@@ -1,24 +1,29 @@
 <div align="center">
 
-<p><a href="README.md">中文</a> | <a href="README.en.md">English</a></p>
+[中文](README.md) | [English](README.en.md)
 
 <h1>DSH-Desktop-EAC — 揽尽万象</h1>
 
-<p><strong>EAC = Embracing All Creation（揽尽万象）</strong></p>
+***EAC = Embracing All Creation（揽尽万象）***
 
-<p>
-<a href="https://github.com/zouyuxuan122/Deepseek-Harness-EAC"><img src="https://img.shields.io/github/stars/zouyuxuan122/Deepseek-Harness-EAC?style=flat&label=%E2%AD%90&color=08C" alt="GitHub stars"></a>
-<a href="https://github.com/zouyuxuan122/Deepseek-Harness-EAC/releases"><img src="https://img.shields.io/badge/Windows-10%2F11-4493F8?style=flat" alt="Windows"></a>
-<a href="https://github.com/zouyuxuan122/Deepseek-Harness-EAC"><img src="https://img.shields.io/badge/Desktop-App-47848F?style=flat" alt="Desktop App"></a>
-<a href="https://github.com/zouyuxuan122/Deepseek-Harness-EAC/blob/main/LICENSE"><img src="https://img.shields.io/badge/license-MIT-2EA44F?style=flat" alt="MIT License"></a>
-</p>
+![Stars](https://img.shields.io/github/stars/zouyuxuan122/Deepseek-Harness-EAC?style=for-the-badge&label=%E2%AD%90Star&color=08C&link=https://github.com/zouyuxuan122/Deepseek-Harness-EAC) ![MIT License](https://img.shields.io/badge/license-MIT-2EA44F?style=for-the-badge&link=https://github.com/zouyuxuan122/Deepseek-Harness-EAC/blob/main/LICENSE)
 
-<p><strong>🚀 全新产品：<a href="https://github.com/zouyuxuan122/Deepseek-Harness-EAC-IDE">Deepseek Harness EAC IDE</a> —— 内置 EAC 的独立 IDE（VS Code 底座 · 鲸鱼品牌 · 开箱即用），<a href="https://github.com/zouyuxuan122/Deepseek-Harness-EAC-IDE/releases">前往下载 →</a></strong></p>
+![QQ](https://img.shields.io/badge/QQ-1083832019-blue?style=plastic&logo=qq&logoSize=auto&link=https://qm.qq.com/q/vqXxQQ3rmo) ![Discord](https://img.shields.io/badge/DISCORD-DSH--EAC-blue?style=plastic&logo=discord&logoSize=auto&link=https://discord.com/invite/kY48Ah8h)
 
-<p>把官方 <a href="https://github.com/deepseek-ai/deepseek-harness">deepseek-ai/deepseek-harness</a>（<code>@deepseek-ai/dsh</code>，一切皆插件的 agent harness）
-封装为<strong>开箱即用的 Windows 桌面客户端</strong>，并在其上拥抱社区万象：皮肤、插件、工具、记忆——你所能想到的，一键皆可装。</p>
+> [!IMPORTANT]
+> 本项目正在进行重大重构，在重构期间不接受外部Issues和PR。详情请关注[任务看板](https://github.com/orgs/DSH-EAC/projects/1/views/1)
+> v5剩余的Bug将不再进行修复，我们会尽快推出v6全面替代v5的功能。
+> 敬请期待。
 
-<p><a href="docs/screenshot-preview.jpg"><img src="docs/screenshot-preview.jpg" alt="DSH-Desktop-EAC 界面预览"></a></p>
+> [!NOTE]
+> 以下为v5版本的README
+
+**🚀 全新产品：[Deepseek Harness EAC IDE](https://github.com/zouyuxuan122/Deepseek-Harness-EAC-IDE) —— 内置 EAC 的独立 IDE · 开箱即用 · [前往下载 →](https://github.com/zouyuxuan122/Deepseek-Harness-EAC-IDE/releases)**
+
+封装了官方[deepseek-ai/deepseek-harness](https://github.com/deepseek-ai/deepseek-harness)，**开箱即用的桌面客户端**。
+在其之上拥抱社区万象：皮肤、插件、工具、记忆——**你所能想到的，一切皆可装**。
+
+![DSH-Desktop-EAC 界面预览](docs/screenshot-preview.jpg)
 
 </div>
 
@@ -52,20 +57,20 @@
 
 ## 为什么选择 EAC
 
-| 维度 | 官方 DeepSeek Harness 默认体验 | DSH-Desktop-EAC 增强 |
-| --- | --- | --- |
-| 安装与启动 | 需自行准备 Node.js，并通过 CLI 启动 | 内置 Node.js、npm CLI 和 dsh，提供安装版与便携版，双击即用 |
-| 桌面体验 | 主要在终端或浏览器中使用 | 原生桌面窗口、系统托盘、快捷方式维护、进程清理和任务通知 |
-| CLI 共存 | CLI 与 Web 通常使用同一插件环境 | 桌面端使用独立 `web-desktop` profile，与 CLI 共享会话和 API Key，插件互不干扰 |
-| 插件可靠性 | 主要通过包管理器安装并手动排查问题 | 安装和启动前自动快照，异常时支持体检、修复、重试、回滚和事故报告 |
-| 界面定制 | 默认使用官方界面 | 内置 10 款皮肤，支持字体、字号、颜色和移动端布局调整 |
-| 项目工具 | 依赖外部编辑器和终端 | 内置文件树、行级 diff、一键还原、持久终端及 HTML/本地端口预览 |
-| 上下文与人设 | 手动执行 `/compact`、编辑人设文件 | 自动压缩、人设卡管理和 `soul.md` 热重载 |
-| 模型与 MCP | 主要通过配置文件或 CLI 管理 | 可视化配置视觉模型和 MCP，并支持从 Claude Code、Codex 导入配置 |
-| 插件生态 | 通过 CLI 或包管理器安装插件 | 内置插件市场，可搜索并一键安装、卸载和管理插件 |
-| 会话效率 | 以常规会话流程为主 | 支持临时对话、对话节点导航和第三方模型思考强度调整 |
-| 消息接入 | 默认不包含 EAC 消息桥接 | 支持一键接入微信 ClawBot / OpenClaw |
-| 更新维护 | 通过包管理器或手动方式更新 | dsh agent 与桌面客户端分别自动检查更新，失败时保留或回退原版本 |
+| 维度         | 官方 DeepSeek Harness 默认体验      | DSH-Desktop-EAC 增强                                                          |
+| ------------ | ----------------------------------- | ----------------------------------------------------------------------------- |
+| 安装与启动   | 需自行准备 Node.js，并通过 CLI 启动 | 内置 Node.js、npm CLI 和 dsh，提供安装版与便携版，双击即用                    |
+| 桌面体验     | 主要在终端或浏览器中使用            | 原生桌面窗口、系统托盘、快捷方式维护、进程清理和任务通知                      |
+| CLI 共存     | CLI 与 Web 通常使用同一插件环境     | 桌面端使用独立 `web-desktop` profile，与 CLI 共享会话和 API Key，插件互不干扰 |
+| 插件可靠性   | 主要通过包管理器安装并手动排查问题  | 安装和启动前自动快照，异常时支持体检、修复、重试、回滚和事故报告              |
+| 界面定制     | 默认使用官方界面                    | 内置 10 款皮肤，支持字体、字号、颜色和移动端布局调整                          |
+| 项目工具     | 依赖外部编辑器和终端                | 内置文件树、行级 diff、一键还原、持久终端及 HTML/本地端口预览                 |
+| 上下文与人设 | 手动执行 `/compact`、编辑人设文件   | 自动压缩、人设卡管理和 `soul.md` 热重载                                       |
+| 模型与 MCP   | 主要通过配置文件或 CLI 管理         | 可视化配置视觉模型和 MCP，并支持从 Claude Code、Codex 导入配置                |
+| 插件生态     | 通过 CLI 或包管理器安装插件         | 内置插件市场，可搜索并一键安装、卸载和管理插件                                |
+| 会话效率     | 以常规会话流程为主                  | 支持临时对话、对话节点导航和第三方模型思考强度调整                            |
+| 消息接入     | 默认不包含 EAC 消息桥接             | 支持一键接入微信 ClawBot / OpenClaw                                           |
+| 更新维护     | 通过包管理器或手动方式更新          | dsh agent 与桌面客户端分别自动检查更新，失败时保留或回退原版本                |
 
 > EAC 不修改官方 dsh 内核，完整保留插件架构和官方能力；默认共享
 > `DSH_HOME` 中的会话与 API Key，同时隔离桌面端插件环境。
@@ -84,10 +89,10 @@
 
 > 当前发布线为 5.x（Tauri/Rust 壳）。5.2 起桌面版统一为 Tauri 壳；更早的 v4.4.1 Electron 版已退役（仅 Release 存档）。安装包直接从 Release 下载。
 
-| 文件 | 说明 | 大小 |
-| --- | --- | --- |
+| 文件                                                                                                                                        | 说明                                                                                                                                                    | 大小    |
+| ------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------- | ------- |
 | [安装版 Setup（v5.3.6）](https://github.com/zouyuxuan122/DSH-Desktop-EAC/releases/download/v5.3.6/Deepseek-Harness-EAC-5.3.6-Setup-x64.exe) | Tauri 壳安装版（NSIS），安装到系统并创建快捷方式；SHA256 校验文件随 [Release](https://github.com/zouyuxuan122/DSH-Desktop-EAC/releases/tag/v5.3.6) 提供 | ~191 MB |
-| [便携版（v5.3.6）](https://github.com/zouyuxuan122/DSH-Desktop-EAC/releases/download/v5.3.6/Deepseek-Harness-EAC-5.3.6-portable.zip) | 免安装压缩包，解压到任意目录即可运行；数据跟随程序目录，可直接迁移 | ~228 MB |
+| [便携版（v5.3.6）](https://github.com/zouyuxuan122/DSH-Desktop-EAC/releases/download/v5.3.6/Deepseek-Harness-EAC-5.3.6-portable.zip)        | 免安装压缩包，解压到任意目录即可运行；数据跟随程序目录，可直接迁移                                                                                      | ~228 MB |
 
 更多版本见 [Releases 页面](https://github.com/zouyuxuan122/DSH-Desktop-EAC/releases)。
 
@@ -95,11 +100,11 @@
 
 > **DSHEAC AIO** 是独立于 5.x 主线的 **All-in-One 精致个人终端**：一个安装包备齐 dsh 内核、插件市场与完整桌面体验，开箱即用；与正式版相互隔离（独立 app data 与 `dsh-home`，默认不读取 5.x / v4Lite / 旧 EAC 或 CLI 数据），可并存安装。当前版本 **AIO v1.2.0**（源码分支 `aio-v1`，随 [aio-v1.2.0 Release](https://github.com/zouyuxuan122/DSH-Desktop-EAC/releases/tag/aio-v1.2.0) 一同发布）。
 
-| 文件 | 说明 | 大小 |
-| --- | --- | --- |
-| [AIO 安装版（v1.2.0）](https://github.com/zouyuxuan122/DSH-Desktop-EAC/releases/download/aio-v1.2.0/DSHEAC-AIO-v1.2.0-Setup-x64.exe) | NSIS 安装版，安装到系统并创建快捷方式；EXE 为 `DSHEAC AIO.exe`，与正式版更新器互相隔离 | ~313 MB |
-| [AIO 便携版（v1.2.0）](https://github.com/zouyuxuan122/DSH-Desktop-EAC/releases/download/aio-v1.2.0/DSHEAC-AIO-v1.2.0-Portable-x64.zip) | 免安装解压即用，数据写入 EXE 同级 `.dsh-aio-data`，可直接迁移 | ~147 MB |
-| [校验清单 SHA256SUMS-AIO-v1.2.0.txt](https://github.com/zouyuxuan122/DSH-Desktop-EAC/releases/download/aio-v1.2.0/SHA256SUMS-AIO-v1.2.0.txt) | AIO 资产 SHA-256 校验 | — |
+| 文件                                                                                                                                         | 说明                                                                                   | 大小    |
+| -------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------- | ------- |
+| [AIO 安装版（v1.2.0）](https://github.com/zouyuxuan122/DSH-Desktop-EAC/releases/download/aio-v1.2.0/DSHEAC-AIO-v1.2.0-Setup-x64.exe)         | NSIS 安装版，安装到系统并创建快捷方式；EXE 为 `DSHEAC AIO.exe`，与正式版更新器互相隔离 | ~313 MB |
+| [AIO 便携版（v1.2.0）](https://github.com/zouyuxuan122/DSH-Desktop-EAC/releases/download/aio-v1.2.0/DSHEAC-AIO-v1.2.0-Portable-x64.zip)      | 免安装解压即用，数据写入 EXE 同级 `.dsh-aio-data`，可直接迁移                          | ~147 MB |
+| [校验清单 SHA256SUMS-AIO-v1.2.0.txt](https://github.com/zouyuxuan122/DSH-Desktop-EAC/releases/download/aio-v1.2.0/SHA256SUMS-AIO-v1.2.0.txt) | AIO 资产 SHA-256 校验                                                                  | —       |
 
 - 安装包尚未 Authenticode 签名，SmartScreen 可能提示未知发布者；运行前请先核对 SHA-256。
 - 客户端自更新不在 AIO 中提供，插件自动更新默认关闭；安装路径建议不超过 120 个字符。
@@ -107,6 +112,7 @@
 - **AIO 升级说明**：从旧版 AIO 覆盖安装时，仅继承旧版的会话与供应商配置，不继承旧版插件（内置插件随安装包更新）。
 
 > 💡 **升级说明（老用户必读）**：
+>
 > - 直接下载上方最新安装包覆盖安装即可；
 > - 插件、皮肤、会话与配置全部保留——数据在 `%APPDATA%\DSH-Desktop-EAC\`
 >   与 `~/.dsh`，升级过程不触碰。
@@ -115,11 +121,11 @@
 
 > macOS 桌面版与 Windows/Linux 同源同版本，随 [v5.1.0 Release](https://github.com/zouyuxuan122/Deepseek-Harness-EAC/releases/tag/v5.1.0) 一同发布。
 
-| 文件 | 说明 | 大小 |
-| --- | --- | --- |
-| [安装镜像 .dmg](https://github.com/zouyuxuan122/Deepseek-Harness-EAC/releases/download/v5.1.0/Deepseek.Harness.EAC_5.1.0_macos-arm64.dmg) | 双击挂载后拖入 Applications | ~136 MB |
-| [应用包 .app.zip](https://github.com/zouyuxuan122/Deepseek-Harness-EAC/releases/download/v5.1.0/Deepseek.Harness.EAC_5.1.0_macos-arm64.app.zip) | 解压后直接运行 | ~157 MB |
-| [校验和 SHA256SUMS-macos.txt](https://github.com/zouyuxuan122/Deepseek-Harness-EAC/releases/download/v5.1.0/SHA256SUMS-macos.txt) | macOS 资产 SHA256 | — |
+| 文件                                                                                                                                            | 说明                        | 大小    |
+| ----------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------- | ------- |
+| [安装镜像 .dmg](https://github.com/zouyuxuan122/Deepseek-Harness-EAC/releases/download/v5.1.0/Deepseek.Harness.EAC_5.1.0_macos-arm64.dmg)       | 双击挂载后拖入 Applications | ~136 MB |
+| [应用包 .app.zip](https://github.com/zouyuxuan122/Deepseek-Harness-EAC/releases/download/v5.1.0/Deepseek.Harness.EAC_5.1.0_macos-arm64.app.zip) | 解压后直接运行              | ~157 MB |
+| [校验和 SHA256SUMS-macos.txt](https://github.com/zouyuxuan122/Deepseek-Harness-EAC/releases/download/v5.1.0/SHA256SUMS-macos.txt)               | macOS 资产 SHA256           | —       |
 
 - 桌面配置目录：`~/Library/Application Support/deepseek-harness-eac/`；dsh 数据仍在 `~/.dsh`（与 CLI 共享，会话互通）。
 - 未签名、未公证（个人自用定位）：首次打开若被 Gatekeeper 拦截，右键 →「打开」。
@@ -129,12 +135,12 @@
 
 > Linux 桌面端由 CI（Ubuntu 22.04）持续构建与验证；自 v5.3.6 起 AppImage 与 .deb 已并入统一版本线（当前 v5.3.6），.rpm/.pacman 仍由独立版本线提供（最近维护版 v4.4.0）。
 
-| 文件 | 说明 |
-| --- | --- |
-| [.deb（Debian/Ubuntu，v5.3.6）](https://github.com/zouyuxuan122/DSH-Desktop-EAC/releases/download/v5.3.6/Deepseek.Harness.EAC_5.3.6_amd64.deb) | 安装后可从应用菜单启动 |
-| [AppImage（v5.3.6）](https://github.com/zouyuxuan122/DSH-Desktop-EAC/releases/download/v5.3.6/Deepseek.Harness.EAC_5.3.6_amd64.AppImage) | 免安装：`chmod +x` 后直接运行 |
-| [.rpm（Fedora/openSUSE）](https://github.com/zouyuxuan122/Deepseek-Harness-EAC/releases/download/v4.4.0-linux/Deepseek-Harness-EAC-4.4.0.x86_64.rpm) | — |
-| [.pacman（Arch）](https://github.com/zouyuxuan122/Deepseek-Harness-EAC/releases/download/v4.4.0-linux/Deepseek-Harness-EAC-4.4.0-x64.pacman) | — |
+| 文件                                                                                                                                                 | 说明                          |
+| ---------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------- |
+| [.deb（Debian/Ubuntu，v5.3.6）](https://github.com/zouyuxuan122/DSH-Desktop-EAC/releases/download/v5.3.6/Deepseek.Harness.EAC_5.3.6_amd64.deb)       | 安装后可从应用菜单启动        |
+| [AppImage（v5.3.6）](https://github.com/zouyuxuan122/DSH-Desktop-EAC/releases/download/v5.3.6/Deepseek.Harness.EAC_5.3.6_amd64.AppImage)             | 免安装：`chmod +x` 后直接运行 |
+| [.rpm（Fedora/openSUSE）](https://github.com/zouyuxuan122/Deepseek-Harness-EAC/releases/download/v4.4.0-linux/Deepseek-Harness-EAC-4.4.0.x86_64.rpm) | —                             |
+| [.pacman（Arch）](https://github.com/zouyuxuan122/Deepseek-Harness-EAC/releases/download/v4.4.0-linux/Deepseek-Harness-EAC-4.4.0-x64.pacman)         | —                             |
 
 - 依赖：Tauri 2 + webkit2gtk-4.1（debian 系安装 `libwebkit2gtk-4.1-dev` 等构建依赖见仓库 CI）；AppImage 自带运行时，构建基线 Ubuntu 22.04。
 - 桌面配置目录：`~/.config/deepseek-harness-eac`（XDG）；dsh 数据仍在 `~/.dsh`（与 CLI 共享）。
@@ -337,67 +343,67 @@ research/                     # 第三方微信/桥接协议调研资料
 
 ### 插件致谢
 
-| 插件名 | 插件说明 |
-| --- | --- |
-| Archify（提供者：tt-a1i，EAC 推荐目录） | 由代码仓库或系统描述生成经校验的可交互架构图、工作流图、时序图与数据流图，可导出独立 HTML/SVG/PNG |
-| computer-user（提供者：jing-hy） | 读屏 + 鼠标键盘自动化（Codex-style computer use；配 picturereader，纯文本模型可用） |
-| @nanmicoder/dsh-agent-teams（提供者：nanmicoder） | 多智能体团队协作：自然语言驱动的队长/成员/依赖任务与消息互通，Web GUI 树状监控 |
-| dsh-auto-compact | 自动压缩：接近上下文上限时自动发送 /compact |
-| @deepseek-ai/dsh-balance（提供者：deepseek-ai） | 账户余额、费用估算与价格设置 |
-| dsh-better-sidebar（提供者：omdsh-dev） | VSCode 风格右侧栏，支持资源管理器/编辑器/终端/Git/浏览器 |
-| dsh-change-review | AI 变更审核：自动复查文件改动 |
-| @deepseek-ai/dsh-client-file-changes（提供者：deepseek-ai） | 文件视图：会话文件更改追踪与一键还原 |
-| dsh-compact（提供者：zixin947） | 请求路径上下文压缩与溢出恢复 |
-| dsh-composer-dynamic-island（提供者：says693） | 将输入区按钮收纳为可配置、向上展开的紧凑灵动岛 |
-| @deepseek-ai/dsh-conversation-tweaks（提供者：deepseek-ai） | 隐藏长篇输出 + 会话右侧导航滑轨 |
-| dsh-dafeiyu（提供者：QCYTSN） | 大肥鱼桌面伴侣 |
-| dsh-deep-whale（提供者：Small-tailqwq） | 深海女仆工坊 maid-atelier 皮肤来源 |
-| dsh-dock-settings | Skills 与 MCP 设置管理 |
-| dsh-eac-core-bridge（EAC 配套） | 核心桥：把隔离 SDK 插件的工具/上下文贡献安全桥接进 dsh Agent（受信组件，扩展故障不阻塞核心回合） |
-| dsh-eac-locale-compat（EAC 配套） | 为未提供本地化词典的内置插件提供英文兼容层 |
-| @deepseek-ai/dsh-easy-setup（提供者：deepseek-ai） | 快速配置：视觉模型、soul.md、迁移 |
-| dsh-feature-toggles（EAC 配套） | 设置页「增强功能」分区：集中提供默认关闭插件（余额小鲸鱼、AgentTeams 等）的一键启停 |
-| @deepseek-ai/dsh-file-changes（提供者：deepseek-ai） | 会话文件更改投影 |
-| dsh-file-drop-eac（提供者：jing-hy） | 拖放文件/文件夹到对话 |
-| @deepseek-ai/dsh-float-window（提供者：deepseek-ai） | 会话弹出独立窗口 |
-| dsh-font-custom | 字体与文字/代码颜色自定义 |
-| dsh-image-paste | 剪贴板图片粘贴发送 |
-| dsh-meow-smooth（提供者：Phant0Meow） | 喵丝滑：输入框失焦折叠高度 + 窄屏选中会话自动收起侧边栏 |
-| dsh-message-rewind | 消息改写并从此处重新生成 |
-| @vlln/dsh-navbar（提供者：vlln） | 对话节点导航条：user 消息快速跳转 |
-| dsh-offpeak（提供者：christophersmith2737-commits） | DeepSeek 峰谷价格拦截提醒 |
-| @deepseek-ai/dsh-openclaw-bridge（提供者：deepseek-ai） | 微信 ClawBot / OpenClaw 桥接 |
-| dsh-pet（提供者：PC2005-cloud） | 页面悬浮桌宠 |
-| dsh-pet-settings | 桌宠设置分区 |
-| dsh-phone（EAC 配套） | 手机连接：LAN 扫码配对 + 完整 Web UI 反向代理 |
-| dsh-plugin-guard（提供者：lxzy-7） | 插件安装前快照、回滚与启动守护 |
-| dsh-plugin-healthcheck（提供者：chenw2759-wq） | 插件静态体检与风险检查 |
-| @deepseek-ai/dsh-plugin-manager（提供者：deepseek-ai） | 插件管理：列出/启停内置插件 |
-| dsh-plugin-shield | 插件保护：快照/回滚/体检 |
-| dsh-plugin-wizard | 插件选择向导 |
-| @deepseek-ai/dsh-prompt-custom（提供者：deepseek-ai） | 自定义内核提示词 |
-| dsh-raw-html（EAC 托管） | VCP 视觉通感：通过官方 conversation slot 隔离渲染 HTML，提供字体、美学与设计规范能力 |
-| dsh-session-manager（提供者：hkkz9522） | 会话删除与归档管理 |
-| dsh-settings-groups | 设置页高级选项折叠 |
-| dsh-settings-nav-custom | 设置页左侧边栏自定义 |
-| dsh-settings-scroll-fix（提供者：says693） | 设置面板鼠标滚轮与溢出滚动修复 |
-| @dsh-external/dsh-side-session（提供者：dsh-external） | 临时会话：不污染主会话的独立追问 |
-| @deepseek-ai/dsh-skin-switch（提供者：deepseek-ai） | 内置皮肤切换 |
-| dsh-soul-md（提供者：Scorp1o117） | soul.md 人设卡注入 |
-| dsh-stt（提供者：BAIKAI23333） | 本地离线语音识别：sherpa-onnx SenseVoice 麦克风说话回填输入框，唤醒词 + 「发送」语音指令（默认禁用，三平台，引擎构建时按平台安装） |
-| @deepseek-ai/dsh-terminal（提供者：deepseek-ai） | 会话内交互式命令行 |
-| @deepseek-ai/dsh-third-party-thinking（提供者：deepseek-ai） | 第三方模型思考强度控件 |
-| dsh-tool-vision（提供者：Scorp1o117） | OpenAI 兼容视觉模型图片分析 |
-| dsh-undo-savepoint（提供者：lire1131） | 配置快照与撤销/回滚 |
-| dsh-unified-market（提供者：jing-hy） | 统一插件市场：聚合三源 |
-| dsh-viewport-lock（EAC 配套） | 视口约束：滚动钳制、稳定居中与输入区透明动态裁切（桌面壳/浏览器/手机端通用） |
-| dsh-web-mobile-fix（提供者：AcidGr） | 移动端布局修复 |
-| dsh-web-plugin-manager（提供者：LX2000WASD） | 插件安装守卫与健康检查入口 |
-| dsh-web-ui（提供者：zhu1090093659） | 9 款内置 Web UI 皮肤来源 |
-| dsh-webui-market（提供者：Sanqi-normal） | 社区插件目录与一键安装/卸载 |
-| dsh-webui-prompt-optimizer（提取自 statem-li/dsh-webui） | 流式提示词优化 |
-| dsh-whale-widget（提供者：MeteorNOX） | 余额小鲸鱼挂件：今日已用、峰谷定价、随机台词与每轮消耗统计 |
-| picturereader（提供者：jing-hy） | 统一图片理解插件 |
+| 插件名                                                       | 插件说明                                                                                                                           |
+| ------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------- |
+| Archify（提供者：tt-a1i，EAC 推荐目录）                      | 由代码仓库或系统描述生成经校验的可交互架构图、工作流图、时序图与数据流图，可导出独立 HTML/SVG/PNG                                  |
+| computer-user（提供者：jing-hy）                             | 读屏 + 鼠标键盘自动化（Codex-style computer use；配 picturereader，纯文本模型可用）                                                |
+| @nanmicoder/dsh-agent-teams（提供者：nanmicoder）            | 多智能体团队协作：自然语言驱动的队长/成员/依赖任务与消息互通，Web GUI 树状监控                                                     |
+| dsh-auto-compact                                             | 自动压缩：接近上下文上限时自动发送 /compact                                                                                        |
+| @deepseek-ai/dsh-balance（提供者：deepseek-ai）              | 账户余额、费用估算与价格设置                                                                                                       |
+| dsh-better-sidebar（提供者：omdsh-dev）                      | VSCode 风格右侧栏，支持资源管理器/编辑器/终端/Git/浏览器                                                                           |
+| dsh-change-review                                            | AI 变更审核：自动复查文件改动                                                                                                      |
+| @deepseek-ai/dsh-client-file-changes（提供者：deepseek-ai）  | 文件视图：会话文件更改追踪与一键还原                                                                                               |
+| dsh-compact（提供者：zixin947）                              | 请求路径上下文压缩与溢出恢复                                                                                                       |
+| dsh-composer-dynamic-island（提供者：says693）               | 将输入区按钮收纳为可配置、向上展开的紧凑灵动岛                                                                                     |
+| @deepseek-ai/dsh-conversation-tweaks（提供者：deepseek-ai）  | 隐藏长篇输出 + 会话右侧导航滑轨                                                                                                    |
+| dsh-dafeiyu（提供者：QCYTSN）                                | 大肥鱼桌面伴侣                                                                                                                     |
+| dsh-deep-whale（提供者：Small-tailqwq）                      | 深海女仆工坊 maid-atelier 皮肤来源                                                                                                 |
+| dsh-dock-settings                                            | Skills 与 MCP 设置管理                                                                                                             |
+| dsh-eac-core-bridge（EAC 配套）                              | 核心桥：把隔离 SDK 插件的工具/上下文贡献安全桥接进 dsh Agent（受信组件，扩展故障不阻塞核心回合）                                   |
+| dsh-eac-locale-compat（EAC 配套）                            | 为未提供本地化词典的内置插件提供英文兼容层                                                                                         |
+| @deepseek-ai/dsh-easy-setup（提供者：deepseek-ai）           | 快速配置：视觉模型、soul.md、迁移                                                                                                  |
+| dsh-feature-toggles（EAC 配套）                              | 设置页「增强功能」分区：集中提供默认关闭插件（余额小鲸鱼、AgentTeams 等）的一键启停                                                |
+| @deepseek-ai/dsh-file-changes（提供者：deepseek-ai）         | 会话文件更改投影                                                                                                                   |
+| dsh-file-drop-eac（提供者：jing-hy）                         | 拖放文件/文件夹到对话                                                                                                              |
+| @deepseek-ai/dsh-float-window（提供者：deepseek-ai）         | 会话弹出独立窗口                                                                                                                   |
+| dsh-font-custom                                              | 字体与文字/代码颜色自定义                                                                                                          |
+| dsh-image-paste                                              | 剪贴板图片粘贴发送                                                                                                                 |
+| dsh-meow-smooth（提供者：Phant0Meow）                        | 喵丝滑：输入框失焦折叠高度 + 窄屏选中会话自动收起侧边栏                                                                            |
+| dsh-message-rewind                                           | 消息改写并从此处重新生成                                                                                                           |
+| @vlln/dsh-navbar（提供者：vlln）                             | 对话节点导航条：user 消息快速跳转                                                                                                  |
+| dsh-offpeak（提供者：christophersmith2737-commits）          | DeepSeek 峰谷价格拦截提醒                                                                                                          |
+| @deepseek-ai/dsh-openclaw-bridge（提供者：deepseek-ai）      | 微信 ClawBot / OpenClaw 桥接                                                                                                       |
+| dsh-pet（提供者：PC2005-cloud）                              | 页面悬浮桌宠                                                                                                                       |
+| dsh-pet-settings                                             | 桌宠设置分区                                                                                                                       |
+| dsh-phone（EAC 配套）                                        | 手机连接：LAN 扫码配对 + 完整 Web UI 反向代理                                                                                      |
+| dsh-plugin-guard（提供者：lxzy-7）                           | 插件安装前快照、回滚与启动守护                                                                                                     |
+| dsh-plugin-healthcheck（提供者：chenw2759-wq）               | 插件静态体检与风险检查                                                                                                             |
+| @deepseek-ai/dsh-plugin-manager（提供者：deepseek-ai）       | 插件管理：列出/启停内置插件                                                                                                        |
+| dsh-plugin-shield                                            | 插件保护：快照/回滚/体检                                                                                                           |
+| dsh-plugin-wizard                                            | 插件选择向导                                                                                                                       |
+| @deepseek-ai/dsh-prompt-custom（提供者：deepseek-ai）        | 自定义内核提示词                                                                                                                   |
+| dsh-raw-html（EAC 托管）                                     | VCP 视觉通感：通过官方 conversation slot 隔离渲染 HTML，提供字体、美学与设计规范能力                                               |
+| dsh-session-manager（提供者：hkkz9522）                      | 会话删除与归档管理                                                                                                                 |
+| dsh-settings-groups                                          | 设置页高级选项折叠                                                                                                                 |
+| dsh-settings-nav-custom                                      | 设置页左侧边栏自定义                                                                                                               |
+| dsh-settings-scroll-fix（提供者：says693）                   | 设置面板鼠标滚轮与溢出滚动修复                                                                                                     |
+| @dsh-external/dsh-side-session（提供者：dsh-external）       | 临时会话：不污染主会话的独立追问                                                                                                   |
+| @deepseek-ai/dsh-skin-switch（提供者：deepseek-ai）          | 内置皮肤切换                                                                                                                       |
+| dsh-soul-md（提供者：Scorp1o117）                            | soul.md 人设卡注入                                                                                                                 |
+| dsh-stt（提供者：BAIKAI23333）                               | 本地离线语音识别：sherpa-onnx SenseVoice 麦克风说话回填输入框，唤醒词 + 「发送」语音指令（默认禁用，三平台，引擎构建时按平台安装） |
+| @deepseek-ai/dsh-terminal（提供者：deepseek-ai）             | 会话内交互式命令行                                                                                                                 |
+| @deepseek-ai/dsh-third-party-thinking（提供者：deepseek-ai） | 第三方模型思考强度控件                                                                                                             |
+| dsh-tool-vision（提供者：Scorp1o117）                        | OpenAI 兼容视觉模型图片分析                                                                                                        |
+| dsh-undo-savepoint（提供者：lire1131）                       | 配置快照与撤销/回滚                                                                                                                |
+| dsh-unified-market（提供者：jing-hy）                        | 统一插件市场：聚合三源                                                                                                             |
+| dsh-viewport-lock（EAC 配套）                                | 视口约束：滚动钳制、稳定居中与输入区透明动态裁切（桌面壳/浏览器/手机端通用）                                                       |
+| dsh-web-mobile-fix（提供者：AcidGr）                         | 移动端布局修复                                                                                                                     |
+| dsh-web-plugin-manager（提供者：LX2000WASD）                 | 插件安装守卫与健康检查入口                                                                                                         |
+| dsh-web-ui（提供者：zhu1090093659）                          | 9 款内置 Web UI 皮肤来源                                                                                                           |
+| dsh-webui-market（提供者：Sanqi-normal）                     | 社区插件目录与一键安装/卸载                                                                                                        |
+| dsh-webui-prompt-optimizer（提取自 statem-li/dsh-webui）     | 流式提示词优化                                                                                                                     |
+| dsh-whale-widget（提供者：MeteorNOX）                        | 余额小鲸鱼挂件：今日已用、峰谷定价、随机台词与每轮消耗统计                                                                         |
+| picturereader（提供者：jing-hy）                             | 统一图片理解插件                                                                                                                   |
 
 感谢所有插件提供者对本项目与开源社区的奉献；由于插件数量众多，我们很抱歉，未能逐一统计到所有插件与其来源；如有插件的拥有者看到了自己所做的插件，欢迎您告知我们并添加到致谢名单中，也欢迎添加我们的交流群，以便一同交流、共同进步。
 
@@ -407,17 +413,17 @@ research/                     # 第三方微信/桥接协议调研资料
 
 其中 9 款来自社区 [dsh-web-ui](https://github.com/zhu1090093659/dsh-web-ui)（BSD-3-Clause），maid-atelier 来自 [dsh-deep-whale 深海女仆工坊](https://github.com/Small-tailqwq/dsh-deep-whale)（CC BY-NC-SA 4.0，禁止商用）。
 
-| 皮肤 | 出处 | 许可 |
-| --- | --- | --- |
-| xp（Windows XP 风格） | [dsh-web-ui](https://github.com/zhu1090093659/dsh-web-ui) | BSD-3-Clause |
-| qq98（QQ 经典 98 风格） | 同上 | BSD-3-Clause |
-| ths（同花顺风格） | 同上 | BSD-3-Clause |
-| blue-fantasy（蓝幻） | 同上 | BSD-3-Clause |
-| dragon-heir（龙裔） | 同上 | BSD-3-Clause |
-| minecraft（我的世界） | 同上 | BSD-3-Clause |
-| trading（交易风格） | 同上 | BSD-3-Clause |
-| whale-song（鲸歌） | 同上 | BSD-3-Clause |
-| miku（初音未来） | 同上 | BSD-3-Clause |
+| 皮肤                         | 出处                                                              | 许可                            |
+| ---------------------------- | ----------------------------------------------------------------- | ------------------------------- |
+| xp（Windows XP 风格）        | [dsh-web-ui](https://github.com/zhu1090093659/dsh-web-ui)         | BSD-3-Clause                    |
+| qq98（QQ 经典 98 风格）      | 同上                                                              | BSD-3-Clause                    |
+| ths（同花顺风格）            | 同上                                                              | BSD-3-Clause                    |
+| blue-fantasy（蓝幻）         | 同上                                                              | BSD-3-Clause                    |
+| dragon-heir（龙裔）          | 同上                                                              | BSD-3-Clause                    |
+| minecraft（我的世界）        | 同上                                                              | BSD-3-Clause                    |
+| trading（交易风格）          | 同上                                                              | BSD-3-Clause                    |
+| whale-song（鲸歌）           | 同上                                                              | BSD-3-Clause                    |
+| miku（初音未来）             | 同上                                                              | BSD-3-Clause                    |
 | maid-atelier（深海女仆工坊） | [dsh-deep-whale](https://github.com/Small-tailqwq/dsh-deep-whale) | **CC BY-NC-SA 4.0**（禁止商用） |
 
 ### 贡献者
@@ -451,4 +457,3 @@ research/                     # 第三方微信/桥接协议调研资料
 MIT。基于 [deepseek-ai/deepseek-harness](https://github.com/deepseek-ai/deepseek-harness)（MIT）。内置皮肤版权归原作者所有（见上方皮肤许可表）。
 
 <!-- 咕咕嘎嘎 -->
-
