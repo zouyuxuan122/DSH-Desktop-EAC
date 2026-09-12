@@ -1,0 +1,57 @@
+name: 📚 Documentation
+description: Report missing, incorrect, or unclear documentation
+title: "[Docs]: "
+labels: ["documentation"]
+assignees: []
+body:
+    - type: markdown
+      attributes:
+          value: |
+              Thanks for helping improve the documentation. Please point to the exact location if possible.
+
+    - type: input
+      id: location
+      attributes:
+          label: Documentation Location
+          description: Provide a link, file path, or section title.
+          placeholder: "e.g. README.md, Installation section"
+      validations:
+          required: true
+
+    - type: textarea
+      id: problem
+      attributes:
+          label: Problem
+          description: What is wrong or missing? For example, incorrect, outdated, unclear, or absent.
+      validations:
+          required: true
+
+    - type: textarea
+      id: suggestion
+      attributes:
+          label: Suggested Change
+          description: What would you like to see instead?
+      validations:
+          required: false
+
+    - type: dropdown
+      id: type
+      attributes:
+          label: Issue Type
+          options:
+              - Incorrect content
+              - Missing content
+              - Unclear wording
+              - Broken example
+              - Broken link
+              - Other
+      validations:
+          required: true
+
+    - type: checkboxes
+      id: contribution
+      attributes:
+          label: Contribution
+          options:
+              - label: I am willing to submit a PR to fix this documentation issue.
+                required: false

@@ -1,0 +1,71 @@
+name: ✨ 功能请求
+description: 提出一个新功能或改进建议
+title: "[Feature]: "
+labels: ["enhancement"]
+assignees: []
+body:
+    - type: markdown
+      attributes:
+          value: |
+              感谢你提出功能建议！请描述你的使用场景和期望。
+
+    - type: checkboxes
+      id: prerequisites
+      attributes:
+          label: 前置检查
+          options:
+              - label: 我已经搜索过现有 Issue，确认没有重复建议
+                required: true
+
+    - type: textarea
+      id: problem
+      attributes:
+          label: 这个功能要解决什么问题？
+          description: 描述你遇到的痛点或使用场景。
+          placeholder: "我经常需要 ...，但目前 ..."
+      validations:
+          required: true
+
+    - type: textarea
+      id: solution
+      attributes:
+          label: 你期望的解决方案
+          description: 描述你希望项目如何实现或改进。
+      validations:
+          required: true
+
+    - type: textarea
+      id: alternatives
+      attributes:
+          label: 替代方案
+          description: 你考虑过哪些替代方案？
+      validations:
+          required: false
+
+    - type: textarea
+      id: examples
+      attributes:
+          label: 示例 / 参考
+          description: 其他项目、API 设计、截图或伪代码。
+      validations:
+          required: false
+
+    - type: dropdown
+      id: priority
+      attributes:
+          label: 优先级
+          description: 你认为这个功能有多重要？
+          options:
+              - 低 - 有更好，没有也能用
+              - 中 - 能明显提升体验
+              - 高 - 阻塞我的使用
+      validations:
+          required: true
+
+    - type: checkboxes
+      id: contribution
+      attributes:
+          label: 贡献意愿
+          options:
+              - label: 我愿意提交 PR 实现这个功能
+                required: false

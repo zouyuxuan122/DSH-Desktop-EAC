@@ -1,0 +1,71 @@
+name: ✨ Feature Request
+description: Suggest a new feature or improvement
+title: "[Feature]: "
+labels: ["enhancement"]
+assignees: []
+body:
+    - type: markdown
+      attributes:
+          value: |
+              Thanks for suggesting a feature. Please describe your use case and expected outcome.
+
+    - type: checkboxes
+      id: prerequisites
+      attributes:
+          label: Prerequisites
+          options:
+              - label: I have searched existing issues and confirmed this is not a duplicate.
+                required: true
+
+    - type: textarea
+      id: problem
+      attributes:
+          label: Problem Statement
+          description: What problem does this feature solve?
+          placeholder: "I often need to ..., but currently ..."
+      validations:
+          required: true
+
+    - type: textarea
+      id: solution
+      attributes:
+          label: Proposed Solution
+          description: How would you like the project to implement or improve this?
+      validations:
+          required: true
+
+    - type: textarea
+      id: alternatives
+      attributes:
+          label: Alternatives Considered
+          description: What alternatives have you considered?
+      validations:
+          required: false
+
+    - type: textarea
+      id: examples
+      attributes:
+          label: Examples / References
+          description: Other projects, API designs, screenshots, or pseudo-code.
+      validations:
+          required: false
+
+    - type: dropdown
+      id: priority
+      attributes:
+          label: Priority
+          description: How important is this feature to you?
+          options:
+              - Low - Nice to have
+              - Medium - Would significantly improve my workflow
+              - High - Blocks my usage
+      validations:
+          required: true
+
+    - type: checkboxes
+      id: contribution
+      attributes:
+          label: Contribution
+          options:
+              - label: I am willing to submit a PR to implement this feature.
+                required: false

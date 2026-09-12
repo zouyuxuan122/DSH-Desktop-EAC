@@ -1,0 +1,14 @@
+blank_issues_enabled: false
+contact_links:
+    - name: 💬 提问与求助
+      url: https://github.com/DSH-EAC/DSH-Desktop-EAC/discussions
+      about: 请在讨论区提问与求助。
+    - name: 🔒 Report a Security Vulnerability
+      url: https://github.com/DSH-EAC/DSH-Desktop-EAC/security/advisories/new
+      about: 请通过此链接进行私密的安全报告。
+    - name: 💬 Questions & Help
+      url: https://github.com/OWNER/REPO/discussions
+      about: Please ask and answer questions in GitHub Discussions instead of opening an issue.
+    - name: 🔒 Report a Security Vulnerability
+      url: https://github.com/OWNER/REPO/security/advisories/new
+      about: Please report security vulnerabilities privately.
