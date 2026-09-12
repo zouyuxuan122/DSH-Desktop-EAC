@@ -1,0 +1,4 @@
+# dsh-stt — bundle patch: inserts the dsh-stt plugin row.
+- insert:
+    - id: dsh-stt
+      name: 'dsh-stt'

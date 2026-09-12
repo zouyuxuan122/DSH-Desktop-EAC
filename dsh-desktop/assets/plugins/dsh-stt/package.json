@@ -1,0 +1,58 @@
+{
+  "name": "@deepseek-ai/dsh-stt",
+  "version": "0.3.0",
+  "description": "语音识别（STT）插件：本地 sherpa-onnx SenseVoice 离线识别，点按切换麦克风待机 + 唤醒词激活 + 多轮语音交互（识别填框 / 说「发送」提交 / 深度审批响应）。仅识别，不做 TTS",
+  "type": "module",
+  "main": "src/index.js",
+  "scripts": {
+    "build": "node scripts/build.mjs",
+    "test": "node --test test.mjs"
+  },
+  "exports": {
+    ".": "./src/index.js",
+    "./client": "./client.js",
+    "./cordis.patch.yml": "./cordis.patch.yml",
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "src",
+    "client",
+    "client.js",
+    "cordis.patch.yml",
+    "README.md",
+    "LICENSE"
+  ],
+  "dependencies": {
+    "sherpa-onnx-node": "^1.13.6"
+  },
+  "devDependencies": {
+    "esbuild": "^0.25.0"
+  },
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    },
+    "client": {
+      "inject": ["slots", "locale", "settingsScope"],
+      "platform": "web"
+    }
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/BAIKAI23333/dsh-stt.git"
+  },
+  "license": "MIT",
+  "keywords": [
+    "dsh",
+    "dsh-plugin",
+    "deepseek-harness",
+    "stt",
+    "speech",
+    "voice",
+    "asr",
+    "wakeword",
+    "sherpa",
+    "sensevoice",
+    "whisper"
+  ]
+}

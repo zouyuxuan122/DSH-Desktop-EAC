@@ -334,6 +334,7 @@ research/                     # Third-party WeChat / bridge protocol research
 | @dsh-external/dsh-side-session (provider: dsh-external) | Temporary side conversations that do not affect the main conversation |
 | @deepseek-ai/dsh-skin-switch (provider: deepseek-ai) | Built-in skin switching |
 | dsh-soul-md (provider: Scorp1o117) | `soul.md` persona-card injection |
+| dsh-stt (provider: BAIKAI23333) | Offline local speech-to-text: sherpa-onnx SenseVoice fills the composer from microphone input with wake words and a "send" voice command (off by default; all platforms, engine installed per-platform at build time) |
 | @deepseek-ai/dsh-terminal (provider: deepseek-ai) | Interactive command line inside a conversation |
 | @deepseek-ai/dsh-third-party-thinking (provider: deepseek-ai) | Reasoning-effort controls for third-party models |
 | dsh-tool-vision (provider: Scorp1o117) | Image analysis through OpenAI-compatible vision models |

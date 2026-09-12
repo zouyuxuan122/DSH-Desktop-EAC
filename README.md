@@ -316,7 +316,7 @@ dsh-desktop/                  # Node/TS 后端 + 数据面（Tauri 壳的后端�
 ├── profile-module-heal.js    # profile 模块遮蔽自愈（真实目录 + pnpm 链接）
 ├── assets/                   # 恢复中心页、手机桥、单源 WS 客户端、图标、皮肤、配套插件
 │   ├── skins/                # 10 款内置 Web UI 皮肤
-│   ├── plugins/              # 47 个内置插件目录：桌面壳配套（dsh-balance / dsh-terminal /
+│   ├── plugins/              # 48 个内置插件目录：桌面壳配套（dsh-balance / dsh-terminal /
 │   │                         # dsh-phone / dsh-eac-core-bridge / dsh-viewport-lock …）
 │   │                         # 与内置社区插件（dsh-agent-teams / dsh-meow-smooth /
 │   │                         # dsh-whale-widget / dsh-webui-market / dsh-soul-md …）
@@ -384,6 +384,7 @@ research/                     # 第三方微信/桥接协议调研资料
 | @dsh-external/dsh-side-session（提供者：dsh-external） | 临时会话：不污染主会话的独立追问 |
 | @deepseek-ai/dsh-skin-switch（提供者：deepseek-ai） | 内置皮肤切换 |
 | dsh-soul-md（提供者：Scorp1o117） | soul.md 人设卡注入 |
+| dsh-stt（提供者：BAIKAI23333） | 本地离线语音识别：sherpa-onnx SenseVoice 麦克风说话回填输入框，唤醒词 + 「发送」语音指令（默认禁用，三平台，引擎构建时按平台安装） |
 | @deepseek-ai/dsh-terminal（提供者：deepseek-ai） | 会话内交互式命令行 |
 | @deepseek-ai/dsh-third-party-thinking（提供者：deepseek-ai） | 第三方模型思考强度控件 |
 | dsh-tool-vision（提供者：Scorp1o117） | OpenAI 兼容视觉模型图片分析 |

@@ -111,6 +111,9 @@ jobs:
       - name: 获取内置运行时（node.exe + npm CLI）
         run: npm run fetch-runtime
 
+      - name: 安装引擎型内置插件依赖（dsh-stt 按平台拉取 sherpa-onnx）
+        run: npm run install:plugin-engines
+
       - name: 将标签版本号写入 package.json
         run: npm version ${{ steps.tag.outputs.version }} --no-git-tag-version --allow-same-version
 
@@ -203,6 +206,9 @@ jobs:
         run: |
           npm run ci:install
           npm run fetch-runtime
+
+      - name: 安装引擎型内置插件依赖（dsh-stt 按平台拉取 sherpa-onnx）
+        run: npm run install:plugin-engines
 
       - name: 写入发布版本号
         run: npm version ${{ steps.tag.outputs.version }} --no-git-tag-version --allow-same-version

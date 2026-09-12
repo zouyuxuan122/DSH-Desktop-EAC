@@ -151,7 +151,7 @@ test('manifest covers every bundled plugin, skin, and SDK directory exactly once
     { kind: 'sdk-plugin', path: 'dsh-desktop/assets/sdk-plugins', manifestKey: 'sdkPlugins' },
   ]);
   const entries = allManifestEntries();
-  assert.equal(manifest.plugins.length, 48);
+  assert.equal(manifest.plugins.length, 49);
   assert.equal(manifest.skins.length, 10);
   assert.equal(manifest.sdkPlugins.length, 1);
   assert.equal(new Set(entries.map((entry) => entry.id)).size, entries.length, 'manifest ids must be unique');
@@ -164,7 +164,7 @@ test('manifest covers every bundled plugin, skin, and SDK directory exactly once
 
 test('manifest plugin rows map one-to-one to COMPANION_PLUGINS', () => {
   const registrations = companionRows();
-  assert.equal(registrations.length, 48);
+  assert.equal(registrations.length, 49);
   assert.equal(new Set(registrations.map((row) => row.id)).size, registrations.length, 'companion ids must be unique');
   assert.deepEqual(
     manifest.plugins.map((entry) => entry.id).sort(),

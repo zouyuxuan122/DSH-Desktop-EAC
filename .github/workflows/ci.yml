@@ -106,6 +106,9 @@ jobs:
       - name: 获取内置运行时（node.exe + npm CLI）
         run: npm run fetch-runtime
 
+      - name: 安装引擎型内置插件依赖（dsh-stt 按平台拉取 sherpa-onnx）
+        run: npm run install:plugin-engines
+        
       - name: 内置插件内核兼容门禁（静态导入内核不存在的导出会拖垮整棵插件树）
         run: node scripts/plugin-kernel-compat.mjs
 
@@ -174,6 +177,9 @@ jobs:
       - name: 安装依赖并获取 Linux runtime
         run: npm run ci:install && npm run fetch-runtime
 
+      - name: 安装引擎型内置插件依赖（dsh-stt 按平台拉取 sherpa-onnx）
+        run: npm run install:plugin-engines
+        
       - name: 内置插件内核兼容门禁（静态导入内核不存在的导出会拖垮整棵插件树）
         run: node scripts/plugin-kernel-compat.mjs
 

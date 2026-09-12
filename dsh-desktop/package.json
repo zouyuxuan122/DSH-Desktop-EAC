@@ -1,13 +1,14 @@
 {
   "name": "dsh-desktop",
   "productName": "Deepseek Harness EAC",
-  "version": "5.4.1",
+  "version": "5.5.0",
   "description": "DeepSeek Harness (dsh) 开箱即用的 Windows 桌面客户端：内置 dsh CLI 与 Node 运行时，一键启动 Web UI",
   "author": "DSH Desktop",
   "license": "MIT",
   "private": true,
   "scripts": {
     "ci:install": "node scripts/npm-ci-with-kernel.mjs",
+    "install:plugin-engines": "node scripts/install-plugin-engines.mjs",
     "ledger:check": "node scripts/plugin-ledger.mjs",
     "plugin:kernel-compat": "node scripts/plugin-kernel-compat.mjs",
     "fetch-node": "npm run build && node scripts/fetch-node.js",

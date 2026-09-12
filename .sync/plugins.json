@@ -1769,6 +1769,43 @@
         "reviewOnChange": true
       },
       "owner": "desktop-plugins"
+    },
+    {
+      "id": "dsh-stt",
+      "kind": "plugin",
+      "path": "dsh-desktop/assets/plugins/dsh-stt",
+      "packageName": "@deepseek-ai/dsh-stt",
+      "class": "follow-upstream",
+      "source": {
+        "kind": "github",
+        "repository": "https://github.com/BAIKAI23333/dsh-stt"
+      },
+      "request": {
+        "mode": "latest",
+        "range": "*",
+        "releaseAgeHours": 24
+      },
+      "sync": {
+        "mode": "mirror",
+        "patches": [],
+        "preservePaths": []
+      },
+      "runtimeUpdate": {
+        "allowed": false,
+        "defaultAction": "prompt"
+      },
+      "validation": {
+        "entrypoints": [
+          "src/index.js"
+        ],
+        "commands": []
+      },
+      "license": {
+        "expected": "MIT",
+        "reviewOnChange": true
+      },
+      "owner": "desktop-plugins",
+      "defaultDisabled": true
     }
   ],
   "skins": [

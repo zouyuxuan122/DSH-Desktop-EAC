@@ -31,6 +31,7 @@ export const LITE_DEFAULT_DISABLED: readonly string[] = [
   'dsh-phone',                   // 手机桥（LAN 配对 + 反向代理）
   'computer-user',               // 读屏 + 鼠标键盘自动化（高级玩法）
   'dsh-dafeiyu',                 // 大肥鱼桌宠（含 49MB PyInstaller helper）
+  'dsh-stt',                     // 本地离线语音识别（启用后下载 SenseVoice 模型 ~230MB）
   'dsh-pet-settings',            // 桌宠设置分区（桌宠默认停用时无对象可管）
   'composer-dynamic-island',     // 输入灵动岛（改变输入区形态）
   'side-session',                // 侧边临时会话

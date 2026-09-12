@@ -268,6 +268,17 @@ export const COMPANION_PLUGINS: CompanionPluginDef[] = [
   // 多轮并行出「均衡/精简/详尽」三候选择优迭代，可包装 /goal。
   // 纯客户端 + host 半边（loopback 路由），peer 依赖全部由 dsh 宿主提供。
   { id: 'dsh-webui-prompt-optimizer', name: 'dsh-webui-prompt-optimizer', dir: 'dsh-webui-prompt-optimizer' },
+  // 本地离线语音识别（dsh-stt 0.3.0，BAIKAI23333，MIT）：sherpa-onnx SenseVoice
+  // 本地推理 —— 输入区麦克风按钮说话，识别文本回填输入框，支持唤醒词激活
+  // 与「发送」语音指令提交。sherpa-onnx 原生引擎不随仓库分发，由 CI 在各
+  // 平台构建时 npm install 拉取对应原生包（install:plugin-engines，三平台
+  // 发行；引擎缺失时插件优雅降级 503 engine_missing，不拖垮插件树）。默认
+  // 禁用 —— 启用后首次使用自动下载 SenseVoice 模型（~230MB）到
+  // ~/.dsh/models/dsh-stt/（用户数据，安装器不清理），GitHub Release 主源
+  // 失败自动切 hf-mirror。5.3.0 曾因模型体积退役，现按用户要求恢复内置
+  // （已同步移出退役清单）；不登记 PLUGIN_UPDATE_SOURCES（manifest x-eac
+  // autoUpdate:false，EAC 托管版本）。
+  { id: 'dsh-stt', name: '@deepseek-ai/dsh-stt', dir: 'dsh-stt', disabled: true },
   // 思考增强（中文）：强制 agent 用中文思考与回复（system-prompt section），
   // 并把界面残留的硬编码英文（Thinking / Tool Call 等）中文化。
   // 这是上游 baosfeng/dsh-think-zh-expand 的 EAC 定制派生版
@@ -481,11 +492,6 @@ export const RETIRED_BUILTIN_PLUGINS = [
   // 按用户要求移除「普通/高级」分栏（nav-custom 是该分栏唯一写入者，
   // 见 test/settings-groups-standdown.test.ts 的单写者契约改判）。
   { id: 'settings-nav-custom', name: 'dsh-settings-nav-custom' },
-  // 5.3.0：按用户要求移除内置「语音转文字」插件（本地 sherpa-onnx ASR 模型
-  // ~1.1G 占空间，不再随包分发/安装）。老 profile 的 patch 行/包副本由退役
-  // 清理兜底；已下载的 ~/.dsh/models/dsh-stt/ 模型缓存属于用户数据，安装器
-  // 不再自动删除，只能由用户明确确认后单独清理。
-  { id: 'dsh-stt', name: '@deepseek-ai/dsh-stt' },
   // 旧 dsh-file-drop 会同时接管普通文件和图片拖放，与 EAC 特化版并存时
   // 会重复注入内容并让官方图片遮罩停留。由 file-drop-eac 完整取代。
   { id: 'file-drop', name: 'dsh-file-drop' },

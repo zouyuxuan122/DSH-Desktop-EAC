@@ -90,6 +90,9 @@ jobs:
       - name: 安装依赖 + 获取 darwin runtime（vendor node）
         run: npm run ci:install && npm run fetch-runtime
 
+      - name: 安装引擎型内置插件依赖（dsh-stt 按平台拉取 sherpa-onnx）
+        run: npm run install:plugin-engines
+
       - name: 类型检查（tsc --noEmit 零错误）
         run: npm run typecheck
 

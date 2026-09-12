@@ -1,0 +1,32 @@
+{
+  "$schema": "https://raw.githubusercontent.com/Yan-Zero/dsh-std/614dfa1ac168db79fcf4577cf0ebb34e2e3b944b/packages/manifest/schema/dsh-plugin-0.15.schema.json",
+  "manifestVersion": "0.15",
+  "id": "io.github.baikai23333.dsh-stt",
+  "name": "@deepseek-ai/dsh-stt",
+  "version": "0.3.0",
+  "facets": {
+    "host": {
+      "entry": "src/index.js",
+      "apiVersion": "v1alpha1"
+    }
+  },
+  "requires": {
+    "contracts": []
+  },
+  "permissions": [],
+  "contributes": {
+    "commands": []
+  },
+  "subscriptions": [],
+  "license": "MIT",
+  "source": {
+    "repository": "https://github.com/BAIKAI23333/dsh-stt"
+  },
+  "overrides": [],
+  "x-eac": {
+    "role": "identity-metadata",
+    "note": "EAC 独立分发插件（经市场/GitHub 安装，companion-sync 注册表加载，非 std adapter）；facets 留空 = 尚未参与 std 协商",
+    "maintenance": "eac-private",
+    "autoUpdate": false
+  }
+}

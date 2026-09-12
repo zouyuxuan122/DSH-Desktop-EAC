@@ -302,6 +302,21 @@ export const PLUGIN_SYNC_REGISTRY = {
       },
       "syncMode": "mirror"
     },
+    "dsh-stt": {
+      "class": "follow-upstream",
+      "kind": "plugin",
+      "packageName": "@deepseek-ai/dsh-stt",
+      "path": "dsh-desktop/assets/plugins/dsh-stt",
+      "runtimeUpdate": {
+        "allowed": false,
+        "defaultAction": "prompt"
+      },
+      "source": {
+        "kind": "github",
+        "repository": "https://github.com/BAIKAI23333/dsh-stt"
+      },
+      "syncMode": "mirror"
+    },
     "dsh-undo": {
       "class": "follow-upstream",
       "kind": "plugin",
